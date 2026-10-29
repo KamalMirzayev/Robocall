@@ -23,13 +23,13 @@ export default function AuthLayout({
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-900">
-        <div className="text-white">{t('authLayout.loading')}</div>
+        <div className="text-slate-400">{t('authLayout.loading')}</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 to-slate-800">
+    <div className="min-h-screen bg-slate-900">
       {children}
     </div>
   );

@@ -124,7 +124,7 @@ export default function AsteriskLogsPage() {
         <div className="flex items-center gap-2">
           <button
             onClick={() => fetchLogs()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm font-medium"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-[#fff] rounded text-sm font-medium"
           >
             {t('asteriskLogs.refreshNow')}
           </button>

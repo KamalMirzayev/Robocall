@@ -191,7 +191,7 @@ export default function InitiateCallForm({ onSuccess }: InitiateCallFormProps) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+        className="w-full px-6 py-3 bg-blue-600 text-[#fff] rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
       >
         {loading ? t('initiateCallForm.initiatingCall') : t('initiateCallForm.initiateCall')}
       </button>

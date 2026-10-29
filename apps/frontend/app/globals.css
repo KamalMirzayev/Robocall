@@ -2,14 +2,101 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Arzoom tokens as "R G B" channels so Tailwind opacity modifiers keep working.
+   Dark is the default; light follows the OS unless the user picked a theme. */
 :root {
-  --background: #0b1220;
-  --foreground: #e6edf7;
-  --card: #121b2e;
-  --muted: #96a3bb;
-  --border: #243149;
-  --primary: #3d8bff;
-  --ring: #77a9ff;
+  --c-bg: 8 11 22;
+  --c-surface: 15 20 38;
+  --c-field: 26 33 62;
+  --c-line-2: 45 55 88;
+  --c-ink: 236 239 248;
+  --c-ink-2: 196 203 226;
+  --c-muted: 140 149 180;
+  --c-blue: 143 165 255;
+  --c-blue-solid: 82 115 255;
+  --c-blue-strong: 63 95 242;
+  --c-blue-soft: 23 31 74;
+  --c-red: 240 138 128;
+  --c-red-solid: 232 50 60;
+  --c-red-strong: 200 34 44;
+  --c-red-soft: 52 19 30;
+  --c-ok: 111 207 151;
+  --c-ok-solid: 46 160 98;
+  --c-ok-strong: 34 128 77;
+  --c-ok-soft: 16 44 36;
+  --c-warn: 233 190 98;
+  --c-warn-solid: 214 150 30;
+  --c-warn-strong: 170 115 10;
+  --c-warn-soft: 48 38 18;
+  --c-violet: 184 160 255;
+  --c-violet-solid: 142 91 255;
+  --c-violet-strong: 118 70 230;
+  --c-violet-soft: 36 26 70;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    --c-bg: 243 245 251;
+    --c-surface: 255 255 255;
+    --c-field: 232 236 246;
+    --c-line-2: 203 210 230;
+    --c-ink: 14 20 48;
+    --c-ink-2: 52 61 99;
+    --c-muted: 90 99 134;
+    --c-blue: 63 95 242;
+    --c-blue-solid: 63 95 242;
+    --c-blue-strong: 46 76 214;
+    --c-blue-soft: 232 236 255;
+    --c-red: 178 58 48;
+    --c-red-solid: 215 31 41;
+    --c-red-strong: 180 22 31;
+    --c-red-soft: 249 225 222;
+    --c-ok: 28 122 70;
+    --c-ok-solid: 28 122 70;
+    --c-ok-strong: 20 98 55;
+    --c-ok-soft: 225 243 232;
+    --c-warn: 154 100 0;
+    --c-warn-solid: 196 130 10;
+    --c-warn-strong: 154 100 0;
+    --c-warn-soft: 251 240 214;
+    --c-violet: 104 60 210;
+    --c-violet-solid: 118 70 230;
+    --c-violet-strong: 98 55 200;
+    --c-violet-soft: 238 232 255;
+    color-scheme: light;
+  }
+}
+
+:root[data-theme='light'] {
+  --c-bg: 243 245 251;
+  --c-surface: 255 255 255;
+  --c-field: 232 236 246;
+  --c-line-2: 203 210 230;
+  --c-ink: 14 20 48;
+  --c-ink-2: 52 61 99;
+  --c-muted: 90 99 134;
+  --c-blue: 63 95 242;
+  --c-blue-solid: 63 95 242;
+  --c-blue-strong: 46 76 214;
+  --c-blue-soft: 232 236 255;
+  --c-red: 178 58 48;
+  --c-red-solid: 215 31 41;
+  --c-red-strong: 180 22 31;
+  --c-red-soft: 249 225 222;
+  --c-ok: 28 122 70;
+  --c-ok-solid: 28 122 70;
+  --c-ok-strong: 20 98 55;
+  --c-ok-soft: 225 243 232;
+  --c-warn: 154 100 0;
+  --c-warn-solid: 196 130 10;
+  --c-warn-strong: 154 100 0;
+  --c-warn-soft: 251 240 214;
+  --c-violet: 104 60 210;
+  --c-violet-solid: 118 70 230;
+  --c-violet-strong: 98 55 200;
+  --c-violet-soft: 238 232 255;
+  color-scheme: light;
 }
 
 html,
@@ -18,10 +105,167 @@ body {
 }
 
 body {
+  background: rgb(var(--c-bg));
+  color: rgb(var(--c-ink));
+  font-family: 'Manrope', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+h1,
+h2,
+h3 {
+  font-family: 'Archivo', 'Manrope', system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  box-shadow: 0 0 0 3px rgb(var(--c-blue-solid) / 0.14);
+}
+
+input[type='checkbox'],
+input[type='radio'] {
+  accent-color: rgb(var(--c-blue-solid));
+}
+
+.eyebrow {
+  font-family: 'Archivo', 'Manrope', system-ui, sans-serif;
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: rgb(var(--c-blue-solid));
+}
+
+/* Sidebar: always dark navy, like the Arzoom staff panel. */
+.side {
+  background: linear-gradient(180deg, #0b1030 0%, #0a0e24 60%, #1a0f24 100%);
+  color: #dfe4f7;
+  border-right: 1px solid rgb(255 255 255 / 0.06);
+}
+.side .logoplate {
+  background: #ffffff;
+  border-radius: 9px;
+  padding: 7px 11px;
+  display: inline-flex;
+}
+.side .logoplate img {
+  height: 19px;
+  display: block;
+}
+.side .brand-sub {
+  font-family: 'Archivo', 'Manrope', system-ui, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #8ea2ff;
+  font-weight: 600;
+}
+.side .sec {
+  font-family: 'Archivo', 'Manrope', system-ui, sans-serif;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: #6f7aa3;
+  font-weight: 600;
+  padding: 14px 10px 6px;
+}
+.side .nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  color: #c9d0ea;
+  font-weight: 600;
+  font-size: 13.5px;
+  transition: background 0.15s, color 0.15s;
+}
+.side .nav-item svg {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: #8f9ac4;
+}
+.side .nav-item:hover {
+  background: rgb(255 255 255 / 0.05);
+  color: #ffffff;
+}
+.side .nav-item.active {
+  background: rgb(82 115 255 / 0.18);
+  border-color: rgb(82 115 255 / 0.55);
+  color: #ffffff;
+}
+.side .nav-item.active svg {
+  color: #9db0ff;
+}
+.side .me {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.03);
+}
+.side .av {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-family: 'Archivo', 'Manrope', system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 13px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #5273ff, #8e5bff);
+  flex: none;
+}
+.side .icon-btn {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: #a9b3da;
+}
+.side .icon-btn:hover {
+  background: rgb(255 255 255 / 0.08);
+  color: #ffffff;
+}
+
+/* Login illustration side: always dark, it is a "screen". */
+.engine {
+  position: relative;
+  overflow: hidden;
+  color: #e9edff;
   background:
-    radial-gradient(circle at 15% 0%, rgba(61, 139, 255, 0.18), transparent 35%),
-    radial-gradient(circle at 90% 10%, rgba(56, 189, 248, 0.12), transparent 30%),
-    var(--background);
-  color: var(--foreground);
-  font-family: "Manrope", "Plus Jakarta Sans", "Segoe UI", sans-serif;
+    radial-gradient(700px 420px at 70% 30%, rgb(82 115 255 / 0.35), transparent 70%),
+    radial-gradient(500px 300px at 20% 90%, rgb(215 31 41 / 0.18), transparent 70%),
+    #070b1c;
+}
+.engine::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.045) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(255 255 255 / 0.045) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(circle at 60% 45%, #000 30%, transparent 75%);
+}
+.engine > * {
+  position: relative;
+}
+.flow {
+  stroke-dasharray: 4 10;
+  animation: flow 1.6s linear infinite;
+}
+@keyframes flow {
+  to {
+    stroke-dashoffset: -28;
+  }
 }

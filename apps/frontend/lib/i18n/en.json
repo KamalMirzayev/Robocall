@@ -3,8 +3,8 @@
     "loading": "Loading..."
   },
   "login": {
-    "adminPortal": "Admin Portal",
-    "title": "Robocall",
+    "adminPortal": "Staff sign-in",
+    "title": "AI call panel",
     "subtitle": "Sign in to manage voice operations and telephony.",
     "timedOut": "You were signed out due to inactivity. Please log in again.",
     "username": "Username",
@@ -13,7 +13,13 @@
     "passwordPlaceholder": "Enter password",
     "loggingIn": "Logging in...",
     "loginButton": "Login",
-    "loginFailed": "Login failed"
+    "loginFailed": "Login failed",
+    "engineEyebrow": "Arzoom AI calls",
+    "engineTitle": "AI handles the customer calls, you see the outcome",
+    "engineText": "Campaigns, live calls, recordings and transcripts in one panel.",
+    "chipCalls": "live calls",
+    "chipLang": "in Azerbaijani",
+    "chipRec": "recordings and transcripts"
   },
   "home": {
     "loading": "Loading..."
@@ -37,7 +43,7 @@
   "protectedLayout": {
     "loading": "Loading...",
     "openMenu": "Open menu",
-    "appName": "Robocall",
+    "appName": "Arzoom AI",
     "closeMenu": "Close menu",
     "role": "Role",
     "navCalls": "Calls",
@@ -58,7 +64,10 @@
     "dynamicContextCodes": "Dynamic Context Codes",
     "aiBotTools": "Tools",
     "admin": "Admin",
-    "logout": "Logout"
+    "logout": "Logout",
+    "brandSub": "AI call center",
+    "mainSection": "Panel",
+    "themeToggle": "Toggle theme"
   },
   "authLayout": {
     "loading": "Loading..."

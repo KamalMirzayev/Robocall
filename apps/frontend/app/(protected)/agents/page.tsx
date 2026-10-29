@@ -146,7 +146,7 @@ export default function AgentsPage() {
         <h1 className="text-3xl font-bold text-white">{t('agents.heading')}</h1>
         <button
           onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium"
+          className="px-4 py-2 bg-blue-600 text-[#fff] rounded hover:bg-blue-700 transition font-medium"
         >
           {t('agents.addAgent')}
         </button>
@@ -196,7 +196,7 @@ export default function AgentsPage() {
                 <div className="flex gap-2">
                   <button
                     onClick={() => openEdit(agent)}
-                    className="flex-1 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition"
+                    className="flex-1 px-3 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-[#fff] text-sm font-medium transition"
                   >
                     {t('agents.edit')}
                   </button>
@@ -205,8 +205,8 @@ export default function AgentsPage() {
                     disabled={deleting}
                     className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
                       isDeletePending
-                        ? 'bg-red-600 hover:bg-red-700 text-white'
-                        : 'bg-slate-700 hover:bg-red-600/40 text-white'
+                        ? 'bg-red-600 hover:bg-red-700 text-[#fff]'
+                        : 'bg-slate-700 hover:bg-red-600/40 text-[#fff]'
                     } disabled:opacity-50`}
                   >
                     {deleting ? t('agents.deleting') : t('agents.delete')}
@@ -337,7 +337,7 @@ export default function AgentsPage() {
                 <button
                   onClick={handleUpdate}
                   disabled={updating || !editForm.name}
-                  className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60 font-medium"
+                  className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-[#fff] disabled:opacity-60 font-medium"
                 >
                   {updating ? t('agents.saving') : t('agents.saveChanges')}
                 </button>

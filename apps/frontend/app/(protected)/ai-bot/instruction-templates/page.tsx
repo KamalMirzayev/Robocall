@@ -202,7 +202,7 @@ export default function InstructionTemplatesPage() {
         </select>
         <button
           onClick={fetchRows}
-          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-[#fff]"
         >
           {t('instructionTemplates.applyFilters')}
         </button>
@@ -323,7 +323,7 @@ export default function InstructionTemplatesPage() {
             <button
               type="submit"
               disabled={creating}
-              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+              className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-[#fff] disabled:opacity-60"
             >
               {creating ? t('instructionTemplates.creating') : t('instructionTemplates.createTemplate')}
             </button>
@@ -381,7 +381,7 @@ export default function InstructionTemplatesPage() {
                   <td className="px-4 py-3">
                     <button
                       onClick={() => openEdit(row)}
-                      className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition"
+                      className="px-3 py-1 rounded-lg bg-blue-600 hover:bg-blue-700 text-[#fff] text-xs font-medium transition"
                     >
                       {t('instructionTemplates.edit')}
                     </button>
@@ -501,7 +501,7 @@ export default function InstructionTemplatesPage() {
                 <button
                   type="submit"
                   disabled={updating}
-                  className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60 font-medium"
+                  className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-[#fff] disabled:opacity-60 font-medium"
                 >
                   {updating ? t('instructionTemplates.saving') : t('instructionTemplates.saveChanges')}
                 </button>

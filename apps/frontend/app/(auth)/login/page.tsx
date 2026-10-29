@@ -41,69 +41,105 @@ function LoginForm() {
   };
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center px-4 py-10">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_0%,rgba(61,139,255,0.18),transparent_35%),radial-gradient(circle_at_85%_10%,rgba(56,189,248,0.14),transparent_33%)]" />
-      <div className="absolute right-4 top-4">
-        <LanguageSwitcher />
-      </div>
-      <div className="relative w-full max-w-md">
-        <div className="rounded-2xl border border-slate-700/80 bg-slate-900/80 p-8 shadow-2xl backdrop-blur-sm">
-          <div className="mb-8 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-sky-300">{t('login.adminPortal')}</p>
-            <h1 className="mt-3 text-4xl font-bold text-white">{t('login.title')}</h1>
-            <p className="mt-2 text-sm text-slate-400">{t('login.subtitle')}</p>
-          </div>
+    <div className="grid min-h-screen lg:grid-cols-[minmax(380px,520px)_minmax(0,1fr)]">
+      <div className="relative grid place-items-center border-r border-slate-700 bg-slate-800 px-6 py-10">
+        <div className="absolute right-4 top-4">
+          <LanguageSwitcher />
+        </div>
+        <div className="w-full max-w-[380px]">
+          <span className="inline-flex rounded-[9px] bg-[#fff] px-[11px] py-[7px] ring-1 ring-slate-700">
+            <img src="/logo.png" alt="Arzoom" className="block h-[19px]" />
+          </span>
+          <p className="eyebrow mt-8">{t('login.adminPortal')}</p>
+          <h1 className="mt-2 text-[30px] font-bold leading-tight text-white">{t('login.title')}</h1>
+          <p className="mt-2 text-sm text-slate-400">{t('login.subtitle')}</p>
 
           {timedOut && !error && (
-            <div className="mb-4 p-4 bg-amber-500/20 border border-amber-500 rounded text-amber-400 text-sm">
+            <div className="mt-6 rounded-[10px] border border-amber-500/40 bg-amber-950 p-3 text-sm text-amber-300">
               {t('login.timedOut')}
             </div>
           )}
 
           {error && (
-            <div className="mb-4 p-4 bg-red-500/20 border border-red-500 rounded text-red-400 text-sm">
+            <div className="mt-6 rounded-[10px] border border-red-500/40 bg-red-950 p-3 text-sm text-red-300">
               {error}
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                {t('login.username')}
-              </label>
+          <form onSubmit={handleSubmit} className="mt-6 grid gap-4">
+            <label className="grid gap-1.5 text-[12.5px] font-semibold text-slate-400">
+              {t('login.username')}
               <input
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isLoading}
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                autoComplete="username"
+                className="w-full rounded-[9px] border border-slate-600 bg-slate-700 px-[13px] py-3 text-sm font-normal text-white placeholder-gray-400 outline-none focus:border-blue-500 disabled:opacity-50"
                 placeholder={t('login.usernamePlaceholder')}
               />
-            </div>
+            </label>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-300 mb-2">
-                {t('login.password')}
-              </label>
+            <label className="grid gap-1.5 text-[12.5px] font-semibold text-slate-400">
+              {t('login.password')}
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
-                className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded text-white placeholder-gray-400 focus:outline-none focus:border-blue-500 disabled:opacity-50"
+                autoComplete="current-password"
+                className="w-full rounded-[9px] border border-slate-600 bg-slate-700 px-[13px] py-3 text-sm font-normal text-white placeholder-gray-400 outline-none focus:border-blue-500 disabled:opacity-50"
                 placeholder={t('login.passwordPlaceholder')}
               />
-            </div>
+            </label>
 
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full rounded-lg bg-blue-600 px-4 py-2.5 font-semibold text-white transition hover:bg-blue-500 disabled:opacity-50"
+              className="mt-1 rounded-[10px] bg-blue-600 px-4 py-[13px] text-[15px] font-bold text-[#fff] transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-45"
             >
               {isLoading ? t('login.loggingIn') : t('login.loginButton')}
             </button>
           </form>
+        </div>
+      </div>
 
+      <div className="engine hidden content-center gap-7 px-[clamp(24px,5vw,72px)] py-12 lg:grid">
+        <div>
+          <p className="eyebrow !text-[#9DB0FF]">{t('login.engineEyebrow')}</p>
+          <h2 className="mt-2 max-w-[560px] text-[clamp(26px,2.6vw,38px)] font-bold leading-tight text-[#fff]">
+            {t('login.engineTitle')}
+          </h2>
+          <p className="mt-2.5 max-w-[520px] text-[15px] text-[#A9B3DA]">{t('login.engineText')}</p>
+        </div>
+        <svg viewBox="0 0 760 260" className="h-auto w-full max-w-[760px]" aria-hidden="true">
+          <rect x="20" y="90" width="150" height="80" rx="14" fill="#0F1530" stroke="#2D3758" />
+          <text x="95" y="126" textAnchor="middle" fill="#DCE2FF" fontSize="14" fontWeight="700">Kampaniya</text>
+          <text x="95" y="148" textAnchor="middle" fill="#8F9AC4" fontSize="12">1 240 nömrə</text>
+          <path className="flow" d="M170 130 H300" stroke="#5273FF" strokeWidth="2" fill="none" />
+          <circle cx="380" cy="130" r="72" fill="rgb(82 115 255 / .12)" stroke="#5273FF" />
+          <circle cx="380" cy="130" r="46" fill="#151B32" stroke="#8E5BFF" />
+          <text x="380" y="126" textAnchor="middle" fill="#FFFFFF" fontSize="15" fontWeight="800">AI</text>
+          <text x="380" y="145" textAnchor="middle" fill="#9DB0FF" fontSize="11">Gemini Live</text>
+          <path className="flow" d="M452 100 C520 60 560 50 600 50" stroke="#6FCF97" strokeWidth="2" fill="none" />
+          <path className="flow" d="M452 130 H600" stroke="#E9BE62" strokeWidth="2" fill="none" />
+          <path className="flow" d="M452 160 C520 200 560 210 600 210" stroke="#F08A80" strokeWidth="2" fill="none" />
+          <rect x="600" y="30" width="140" height="40" rx="10" fill="#0F1530" stroke="#2D3758" />
+          <text x="670" y="55" textAnchor="middle" fill="#9DE7BB" fontSize="12.5" fontWeight="700">Ödəniş vədi</text>
+          <rect x="600" y="110" width="140" height="40" rx="10" fill="#0F1530" stroke="#2D3758" />
+          <text x="670" y="135" textAnchor="middle" fill="#E9BE62" fontSize="12.5" fontWeight="700">Geri zəng</text>
+          <rect x="600" y="190" width="140" height="40" rx="10" fill="#0F1530" stroke="#2D3758" />
+          <text x="670" y="215" textAnchor="middle" fill="#F08A80" fontSize="12.5" fontWeight="700">Cavab yoxdur</text>
+        </svg>
+        <div className="flex flex-wrap gap-2.5">
+          {['chipCalls', 'chipLang', 'chipRec'].map((key) => (
+            <span
+              key={key}
+              className="rounded-full border border-[rgb(255_255_255/0.14)] bg-[rgb(255_255_255/0.05)] px-[13px] py-[7px] text-[12.5px] text-[#DCE2FF]"
+            >
+              {t(`login.${key}`)}
+            </span>
+          ))}
         </div>
       </div>
     </div>

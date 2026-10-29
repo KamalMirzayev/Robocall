@@ -480,7 +480,7 @@ export default function CampaignsPage() {
             setEditingId(null);
             setFormOpen(true);
           }}
-          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white"
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-[#fff]"
         >
           {t('campaigns.createButton')}
         </button>
@@ -774,14 +774,14 @@ export default function CampaignsPage() {
                 <button
                   onClick={runPreview}
                   disabled={pksImport.loading || pksImport.isPolling}
-                  className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white disabled:opacity-60"
+                  className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-[#fff] disabled:opacity-60"
                 >
                   {t('campaigns.import.previewButton')}
                 </button>
                 <button
                   onClick={runImport}
                   disabled={pksImport.loading || pksImport.isPolling || !pksImport.preview}
-                  className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+                  className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-[#fff] disabled:opacity-60"
                 >
                     {pksImport.isPolling ? t('campaigns.import.importingLabel') : t('campaigns.import.executeImportButton')}
                 </button>
@@ -962,7 +962,7 @@ export default function CampaignsPage() {
                       <button
                         onClick={runDatabaseImport}
                         disabled={importingDatabase || selectedCustomers.size === 0}
-                        className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+                        className="px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-[#fff] disabled:opacity-60"
                       >
                         {importingDatabase ? t('campaigns.import.importingLabel') : t('campaigns.import.importSelectedButton')}
                       </button>

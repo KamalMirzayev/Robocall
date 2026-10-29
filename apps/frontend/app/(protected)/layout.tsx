@@ -1,14 +1,61 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Menu, X } from 'lucide-react';
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  BarChart3,
+  Bot,
+  Code2,
+  FileText,
+  KeyRound,
+  ListTree,
+  LogOut,
+  Megaphone,
+  Menu,
+  Mic,
+  Network,
+  Phone,
+  ScrollText,
+  Server,
+  Shield,
+  Users,
+  Wallet,
+  Wrench,
+  X,
+} from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { useIdleTimeout } from '@/lib/use-idle-timeout';
 import { useLanguage } from '@/lib/language';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
+
+type NavItem = { href: string; label: string; icon: typeof Phone };
+
+const mainNav: NavItem[] = [
+  { href: '/calls', label: 'protectedLayout.navCalls', icon: Phone },
+  { href: '/campaigns', label: 'protectedLayout.navCampaigns', icon: Megaphone },
+  { href: '/agents', label: 'protectedLayout.navAgents', icon: Bot },
+  { href: '/customers', label: 'protectedLayout.navCustomers', icon: Users },
+  { href: '/recordings', label: 'protectedLayout.navRecordings', icon: Mic },
+];
+
+const telephonyNav: NavItem[] = [
+  { href: '/telephony', label: 'protectedLayout.accountsTrunks', icon: Server },
+  { href: '/ivr', label: 'protectedLayout.ivrMenus', icon: ListTree },
+  { href: '/dialplan', label: 'protectedLayout.dialplanRules', icon: Network },
+  { href: '/statistics', label: 'protectedLayout.statistics', icon: BarChart3 },
+  { href: '/usage', label: 'protectedLayout.navUsage', icon: Wallet },
+  { href: '/telephony/asterisk-logs', label: 'protectedLayout.asteriskLogs', icon: ScrollText },
+  { href: '/telephony/external-api', label: 'protectedLayout.externalApiAccess', icon: KeyRound },
+];
+
+const aiBotNav: NavItem[] = [
+  { href: '/ai-bot/instruction-templates', label: 'protectedLayout.instructionTemplates', icon: FileText },
+  { href: '/ai-bot/dynamic-context-codes', label: 'protectedLayout.dynamicContextCodes', icon: Code2 },
+  { href: '/ai-bot/tools', label: 'protectedLayout.aiBotTools', icon: Wrench },
+];
 
 export default function ProtectedLayout({
   children,
@@ -17,6 +64,7 @@ export default function ProtectedLayout({
 }) {
   const { isAuthenticated, isLoading, logout, user } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { t } = useLanguage();
 
@@ -43,7 +91,7 @@ export default function ProtectedLayout({
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-900">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
           <p className="text-white">{t('protectedLayout.loading')}</p>
         </div>
       </div>
@@ -54,19 +102,38 @@ export default function ProtectedLayout({
     return null;
   }
 
+  const isActive = (href: string) =>
+    pathname === href || (href !== '/telephony' && pathname.startsWith(`${href}/`));
+
+  const navLink = (item: NavItem) => (
+    <a
+      key={item.href}
+      href={item.href}
+      className={`nav-item${isActive(item.href) ? ' active' : ''}`}
+      onClick={() => setSidebarOpen(false)}
+    >
+      <item.icon />
+      {t(item.label)}
+    </a>
+  );
+
+  const initial = (user?.username || '?').charAt(0).toUpperCase();
+
   return (
     <div className="flex min-h-screen bg-slate-900">
       {/* Mobile top bar */}
-      <div className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center justify-between bg-slate-800 border-b border-slate-700 px-4 py-3">
+      <div className="side md:hidden fixed top-0 inset-x-0 z-30 flex items-center justify-between px-4 py-3">
         <button
           onClick={() => setSidebarOpen(true)}
           aria-label={t('protectedLayout.openMenu')}
-          className="text-gray-300 hover:text-white"
+          className="icon-btn"
         >
-          <Menu className="h-6 w-6" />
+          <Menu className="h-5 w-5" />
         </button>
-        <h1 className="text-lg font-bold text-white">{t('protectedLayout.appName')}</h1>
-        <div className="w-6" />
+        <span className="logoplate">
+          <img src="/logo.png" alt="Arzoom" />
+        </span>
+        <div className="w-8" />
       </div>
 
       {/* Mobile overlay */}
@@ -79,122 +146,80 @@ export default function ProtectedLayout({
 
       {/* Sidebar */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-50 w-64 bg-slate-800 border-r border-slate-700 flex flex-col transform transition-transform duration-200 ease-in-out md:translate-x-0 ${
+        className={`side fixed md:sticky md:top-0 md:h-screen inset-y-0 left-0 z-50 w-64 flex flex-col transform transition-transform duration-200 ease-in-out md:translate-x-0 ${
           sidebarOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        <div className="p-4 border-b border-slate-700 flex items-start justify-between">
+        <div className="px-4 pt-5 pb-3 flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-white">{t('protectedLayout.appName')}</h1>
-            <p className="text-sm text-gray-400 mt-1">{user?.username}</p>
-            {user && <p className="text-xs text-gray-500 capitalize">{t('protectedLayout.role')}: {user.role}</p>}
+            <span className="logoplate">
+              <img src="/logo.png" alt="Arzoom" />
+            </span>
+            <p className="brand-sub mt-3">{t('protectedLayout.brandSub')}</p>
           </div>
-          <button
-            onClick={() => setSidebarOpen(false)}
-            aria-label={t('protectedLayout.closeMenu')}
-            className="md:hidden text-gray-400 hover:text-white"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <span className="md:hidden">
+            <button
+              onClick={() => setSidebarOpen(false)}
+              aria-label={t('protectedLayout.closeMenu')}
+              className="icon-btn"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </span>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-          <a href="/calls" className="block px-4 py-2 text-gray-300 hover:bg-slate-700 rounded transition">
-            {t('protectedLayout.navCalls')}
-          </a>
-          <a href="/campaigns" className="block px-4 py-2 text-gray-300 hover:bg-slate-700 rounded transition">
-            {t('protectedLayout.navCampaigns')}
-          </a>
-          <a href="/agents" className="block px-4 py-2 text-gray-300 hover:bg-slate-700 rounded transition">
-            {t('protectedLayout.navAgents')}
-          </a>
-          <a href="/customers" className="block px-4 py-2 text-gray-300 hover:bg-slate-700 rounded transition">
-            {t('protectedLayout.navCustomers')}
-          </a>
-          <a href="/recordings" className="block px-4 py-2 text-gray-300 hover:bg-slate-700 rounded transition">
-            {t('protectedLayout.navRecordings')}
-          </a>
+        <nav className="flex-1 px-3 pb-4 overflow-y-auto">
+          <p className="sec">{t('protectedLayout.mainSection')}</p>
+          <div className="space-y-1">{mainNav.map(navLink)}</div>
           {/* Asterisk/PBX config and AI-engineering are admin-only domains. */}
           {user?.role === 'admin' && (
             <>
-              <div className="pt-2 pb-2 border-t border-slate-700 mt-2">
-                <p className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase">{t('protectedLayout.telephonySection')}</p>
-                <a href="/telephony" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  {t('protectedLayout.accountsTrunks')}
-                </a>
-                <a href="/ivr" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  {t('protectedLayout.ivrMenus')}
-                </a>
-                <a href="/dialplan" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  {t('protectedLayout.dialplanRules')}
-                </a>
-                <a href="/statistics" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  {t('protectedLayout.statistics')}
-                </a>
-                <a href="/usage" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  {t('protectedLayout.navUsage')}
-                </a>
-                <a href="/telephony/asterisk-logs" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  {t('protectedLayout.asteriskLogs')}
-                </a>
-                <a href="/telephony/external-api" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  {t('protectedLayout.externalApiAccess')}
-                </a>
-              </div>
-              <div className="pt-2 pb-2 border-t border-slate-700 mt-2">
-                <p className="px-4 py-2 text-xs font-semibold text-gray-500 uppercase">{t('protectedLayout.aiBotSection')}</p>
-                {/* Hidden for later use */}
-                {/* <a href="/ai-bot" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  Overview
-                </a> */}
-                <a href="/ai-bot/instruction-templates" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  {t('protectedLayout.instructionTemplates')}
-                </a>
-                <a href="/ai-bot/dynamic-context-codes" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  {t('protectedLayout.dynamicContextCodes')}
-                </a>
-                {/* <a href="/ai-bot/intents" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  Intents
-                </a>
-                <a href="/ai-bot/responses" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  Responses
-                </a>
-                <a href="/ai-bot/scenarios" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  Scenarios
-                </a>
-                <a href="/ai-bot/status-categories" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  Status Categories
-                </a> */}
-                <a href="/ai-bot/tools" className="block px-4 py-2 pl-6 text-gray-300 hover:bg-slate-700 rounded transition text-sm">
-                  {t('protectedLayout.aiBotTools')}
-                </a>
-              </div>
+              <p className="sec">{t('protectedLayout.telephonySection')}</p>
+              <div className="space-y-1">{telephonyNav.map(navLink)}</div>
+              <p className="sec">{t('protectedLayout.aiBotSection')}</p>
+              <div className="space-y-1">{aiBotNav.map(navLink)}</div>
             </>
           )}
-          <a href="/admin" className="block px-4 py-2 text-gray-300 hover:bg-slate-700 rounded transition">
-            {t('protectedLayout.admin')}
-          </a>
+          <div className="mt-3 space-y-1">
+            {navLink({ href: '/admin', label: 'protectedLayout.admin', icon: Shield })}
+          </div>
         </nav>
 
-        <div className="p-4 border-t border-slate-700">
-          <div className="flex justify-center mb-3">
+        <div className="p-3 space-y-3">
+          <div className="flex items-center justify-between px-1">
             <LanguageSwitcher />
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] text-[#6f7aa3]">v2.0.1</span>
+              <ThemeToggle className="icon-btn" label={t('protectedLayout.themeToggle')} />
+            </div>
           </div>
-          <p className="text-center text-xs text-gray-500 mb-2">v2.0.1</p>
-          <button
-            onClick={async () => {
-              await logout();
-              router.push('/login');
-            }}
-            className="w-full px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded transition"
-          >
-            {t('protectedLayout.logout')}
-          </button>
+          <div className="me">
+            <span className="av">{initial}</span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13.5px] font-bold text-[#fff]">{user?.username}</p>
+              {user && (
+                <p className="truncate text-xs capitalize text-[#8f9ac4]">
+                  {t('protectedLayout.role')}: {user.role}
+                </p>
+              )}
+            </div>
+            <button
+              onClick={async () => {
+                await logout();
+                router.push('/login');
+              }}
+              aria-label={t('protectedLayout.logout')}
+              title={t('protectedLayout.logout')}
+              className="icon-btn"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto bg-slate-900 pt-14 md:pt-0">
+      <main className="flex-1 min-w-0 overflow-auto bg-slate-900 pt-14 md:pt-0">
         {children}
       </main>
     </div>

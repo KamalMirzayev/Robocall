@@ -3,8 +3,8 @@
     "loading": "Yüklənir..."
   },
   "login": {
-    "adminPortal": "Admin Paneli",
-    "title": "Robocall",
+    "adminPortal": "Əməkdaş girişi",
+    "title": "AI zəng paneli",
     "subtitle": "Səsli əməliyyatları və telefoniyanı idarə etmək üçün daxil olun.",
     "timedOut": "Fəaliyyətsizliyə görə sistemdən çıxarıldınız. Zəhmət olmasa yenidən daxil olun.",
     "username": "İstifadəçi adı",
@@ -13,7 +13,13 @@
     "passwordPlaceholder": "Şifrəni daxil edin",
     "loggingIn": "Daxil olunur...",
     "loginButton": "Daxil ol",
-    "loginFailed": "Daxil olma uğursuz oldu"
+    "loginFailed": "Daxil olma uğursuz oldu",
+    "engineEyebrow": "Arzoom AI zəng",
+    "engineTitle": "Müştərilərə zəngləri süni intellekt aparır, siz nəticəni görürsünüz",
+    "engineText": "Kampaniyalar, canlı zənglər, yazılar və transkriptlər bir paneldə.",
+    "chipCalls": "canlı zəng",
+    "chipLang": "Azərbaycan dilində",
+    "chipRec": "yazı və transkript"
   },
   "home": {
     "loading": "Yüklənir..."
@@ -37,7 +43,7 @@
   "protectedLayout": {
     "loading": "Yüklənir...",
     "openMenu": "Menyunu aç",
-    "appName": "Robocall",
+    "appName": "Arzoom AI",
     "closeMenu": "Menyunu bağla",
     "role": "Rol",
     "navCalls": "Zənglər",
@@ -58,7 +64,10 @@
     "dynamicContextCodes": "Dinamik Kontekst Kodları",
     "aiBotTools": "Alətlər",
     "admin": "Admin",
-    "logout": "Çıxış"
+    "logout": "Çıxış",
+    "brandSub": "AI zəng mərkəzi",
+    "mainSection": "Panel",
+    "themeToggle": "Tema dəyiş"
   },
   "authLayout": {
     "loading": "Yüklənir..."
