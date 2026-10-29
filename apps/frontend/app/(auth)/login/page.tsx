@@ -114,22 +114,27 @@ function LoginForm() {
         </div>
         <svg viewBox="0 0 760 260" className="h-auto w-full max-w-[760px]" aria-hidden="true">
           <rect x="20" y="90" width="150" height="80" rx="14" fill="#0F1530" stroke="#2D3758" />
-          <text x="95" y="126" textAnchor="middle" fill="#DCE2FF" fontSize="14" fontWeight="700">Kampaniya</text>
+          <text x="95" y="126" textAnchor="middle" fill="#DCE2FF" fontSize="14" fontWeight="700">Kampaniyalar</text>
           <text x="95" y="148" textAnchor="middle" fill="#8F9AC4" fontSize="12">1 240 nömrə</text>
           <path className="flow" d="M170 130 H300" stroke="#5273FF" strokeWidth="2" fill="none" />
           <circle cx="380" cy="130" r="72" fill="rgb(82 115 255 / .12)" stroke="#5273FF" />
           <circle cx="380" cy="130" r="46" fill="#151B32" stroke="#8E5BFF" />
           <text x="380" y="126" textAnchor="middle" fill="#FFFFFF" fontSize="15" fontWeight="800">AI</text>
           <text x="380" y="145" textAnchor="middle" fill="#9DB0FF" fontSize="11">Səsli agent</text>
-          <path className="flow" d="M452 100 C520 60 560 50 600 50" stroke="#6FCF97" strokeWidth="2" fill="none" />
-          <path className="flow" d="M452 130 H600" stroke="#E9BE62" strokeWidth="2" fill="none" />
-          <path className="flow" d="M452 160 C520 200 560 210 600 210" stroke="#F08A80" strokeWidth="2" fill="none" />
-          <rect x="600" y="30" width="140" height="40" rx="10" fill="#0F1530" stroke="#2D3758" />
-          <text x="670" y="55" textAnchor="middle" fill="#9DE7BB" fontSize="12.5" fontWeight="700">Ödəniş vədi</text>
-          <rect x="600" y="110" width="140" height="40" rx="10" fill="#0F1530" stroke="#2D3758" />
-          <text x="670" y="135" textAnchor="middle" fill="#E9BE62" fontSize="12.5" fontWeight="700">Geri zəng</text>
-          <rect x="600" y="190" width="140" height="40" rx="10" fill="#0F1530" stroke="#2D3758" />
-          <text x="670" y="215" textAnchor="middle" fill="#F08A80" fontSize="12.5" fontWeight="700">Cavab yoxdur</text>
+          {[
+            { y: 10, label: 'Müştəri məmnuniyyəti', color: '#6FCF97', path: 'M445 98 C510 40 550 30 580 30' },
+            { y: 75, label: 'Ödəniş xatırlatma', color: '#E9BE62', path: 'M452 118 C520 98 550 95 580 95' },
+            { y: 140, label: 'Telesales', color: '#9DB0FF', path: 'M452 142 C520 162 550 165 580 165' },
+            { y: 205, label: 'Marketinq', color: '#F08A80', path: 'M445 162 C510 220 550 230 580 230' },
+          ].map((o) => (
+            <g key={o.label}>
+              <path className="flow" d={o.path} stroke={o.color} strokeWidth="2" fill="none" />
+              <rect x="580" y={o.y} width="170" height="40" rx="10" fill="#0F1530" stroke="#2D3758" />
+              <text x="665" y={o.y + 25} textAnchor="middle" fill={o.color} fontSize="12.5" fontWeight="700">
+                {o.label}
+              </text>
+            </g>
+          ))}
         </svg>
         <div className="flex flex-wrap gap-2.5">
           {['chipCalls', 'chipLang', 'chipRec'].map((key) => (

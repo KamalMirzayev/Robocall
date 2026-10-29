@@ -6,7 +6,6 @@ import { LanguageProvider } from "@/lib/language";
 export const metadata: Metadata = {
   title: "Arzoom AI",
   description: "Arzoom AI call center: voice calls and telephony",
-  icons: { icon: "/logo.png" },
 };
 
 // Applies the saved light/dark choice before first paint so the page doesn't flash.
