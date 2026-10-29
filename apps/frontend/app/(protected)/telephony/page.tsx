@@ -149,7 +149,7 @@ export default function TelephonyPage() {
               console.error(err);
             }
           }}
-          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded font-medium"
+          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#fff] rounded font-medium"
         >
           🔄 {t('telephony.generateReload')}
         </button>
@@ -180,7 +180,7 @@ export default function TelephonyPage() {
                   setAccountForm({ name: '', extension: '', secret: '', account_type: 'local', caller_id: '', host: '', transport: 'udp', context: 'from-internal', codecs: 'ulaw,alaw', enabled: true });
                   setEditing({ type: 'account' });
                 }}
-                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded"
+                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-[#fff] text-sm rounded"
               >
                 {t('telephony.add')}
               </button>
@@ -269,7 +269,7 @@ export default function TelephonyPage() {
                   <div className="flex gap-2">
                     <button
                       onClick={handleSaveAccount}
-                      className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm"
+                      className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-[#fff] rounded text-sm"
                     >
                       {t('telephony.save')}
                     </button>
@@ -331,7 +331,7 @@ export default function TelephonyPage() {
                   setTrunkForm({ name: '', trunk_type: 'gsm_gateway', host: '', port: 5060, username: '', secret: '', from_user: '', from_domain: '', inbound_context: 'from-trunk', outbound_prefix: '', codecs: 'ulaw,alaw', dial_format: 'local', enabled: true });
                   setEditing({ type: 'trunk' });
                 }}
-                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded"
+                className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-[#fff] text-sm rounded"
               >
                 {t('telephony.add')}
               </button>
@@ -440,7 +440,7 @@ export default function TelephonyPage() {
                   <div className="flex gap-2">
                     <button
                       onClick={handleSaveTrunk}
-                      className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm"
+                      className="flex-1 px-3 py-2 bg-green-600 hover:bg-green-700 text-[#fff] rounded text-sm"
                     >
                       {t('telephony.save')}
                     </button>

@@ -126,7 +126,7 @@ export default function CampaignDetailsPage() {
           <button
             onClick={() => updateStatus('active')}
             disabled={campaign.status === 'active' || campaign.status === 'completed' || campaign.status === 'cancelled'}
-            className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50"
+            className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-[#fff] disabled:opacity-50"
           >
             {t('campaignDetail.resume')}
           </button>
@@ -169,7 +169,7 @@ export default function CampaignDetailsPage() {
           <button
             onClick={fetchNewMatches}
             disabled={importingMatches}
-            className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-50 whitespace-nowrap"
+            className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-[#fff] disabled:opacity-50 whitespace-nowrap"
           >
             {importingMatches ? t('campaignDetail.newMatchesFetching') : t('campaignDetail.newMatchesFetch')}
           </button>

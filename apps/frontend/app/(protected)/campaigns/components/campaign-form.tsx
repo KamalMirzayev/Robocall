@@ -444,7 +444,7 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
         <button
           type="submit"
           disabled={submitting || !isScheduleValid}
-          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60"
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-[#fff] disabled:opacity-60"
         >
           {submitting ? t('campaignForm.saving') : t('campaignForm.save')}
         </button>

@@ -178,7 +178,7 @@ export default function ExternalApiPage() {
           </button>
           <button
             onClick={openCreateForm}
-            className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium"
+            className="px-4 py-2 bg-blue-600 text-[#fff] rounded hover:bg-blue-700 transition font-medium"
           >
             + {t('externalApi.newClient')}
           </button>
@@ -301,7 +301,7 @@ export default function ExternalApiPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium disabled:opacity-60"
+                className="px-4 py-2 bg-blue-600 text-[#fff] rounded hover:bg-blue-700 transition font-medium disabled:opacity-60"
               >
                 {saving ? t('externalApi.saving') : editingId ? t('externalApi.saveChanges') : t('externalApi.createClient')}
               </button>

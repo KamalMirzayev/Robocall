@@ -138,7 +138,7 @@ export default function CustomersPage() {
         <h1 className="text-3xl font-bold text-white">{t('customers.heading')}</h1>
         <button
           onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium"
+          className="px-4 py-2 bg-blue-600 text-[#fff] rounded hover:bg-blue-700 transition font-medium"
         >
           + {t('customers.addCustomer')}
         </button>
@@ -180,7 +180,7 @@ export default function CustomersPage() {
           <button
             onClick={deleteCustomersByFilters}
             disabled={batchDeleting}
-            className="px-4 py-2 rounded bg-red-700 hover:bg-red-800 text-white disabled:opacity-60"
+            className="px-4 py-2 rounded bg-red-700 hover:bg-red-800 text-[#fff] disabled:opacity-60"
           >
             {batchDeleting ? t('customers.deleting') : t('customers.deleteByFiltersButton')}
           </button>

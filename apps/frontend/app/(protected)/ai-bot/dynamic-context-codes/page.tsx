@@ -124,7 +124,7 @@ export default function DynamicContextCodesPage() {
         </div>
         <button
           onClick={openCreateForm}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium shrink-0"
+          className="px-4 py-2 bg-blue-600 text-[#fff] rounded hover:bg-blue-700 transition font-medium shrink-0"
         >
           + {t('dynamicContextCodes.newCode')}
         </button>
@@ -195,7 +195,7 @@ export default function DynamicContextCodesPage() {
               <button
                 type="submit"
                 disabled={saving}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium disabled:opacity-60"
+                className="px-4 py-2 bg-blue-600 text-[#fff] rounded hover:bg-blue-700 transition font-medium disabled:opacity-60"
               >
                 {saving ? t('dynamicContextCodes.saving') : editingId ? t('dynamicContextCodes.saveChanges') : t('dynamicContextCodes.createCode')}
               </button>

@@ -88,7 +88,7 @@ function ChangePasswordSection() {
         <button
           type="submit"
           disabled={status === 'loading'}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white font-medium rounded transition"
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-[#fff] font-medium rounded transition"
         >
           {status === 'loading' ? t('admin.saving') : t('admin.changePassword')}
         </button>
@@ -235,7 +235,7 @@ function UserManagementSection() {
         <h2 className="text-xl font-semibold text-white">{t('admin.userManagement')}</h2>
         <button
           onClick={() => { setShowCreateForm(true); setCreateStatus(''); setCreateError(''); }}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded transition"
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-[#fff] text-sm font-medium rounded transition"
         >
           + {t('admin.newUser')}
         </button>
@@ -328,7 +328,7 @@ function UserManagementSection() {
               {createError && <p className="text-red-400 text-sm">{createError}</p>}
               <div className="flex gap-3 pt-2">
                 <button type="submit" disabled={createStatus === 'loading'}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded transition">
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-[#fff] text-sm font-medium rounded transition">
                   {createStatus === 'loading' ? t('admin.creating') : t('admin.createUser')}
                 </button>
                 <button type="button" onClick={() => setShowCreateForm(false)}
@@ -375,7 +375,7 @@ function UserManagementSection() {
               {editError && <p className="text-red-400 text-sm">{editError}</p>}
               <div className="flex gap-3 pt-2">
                 <button type="submit" disabled={editStatus === 'loading'}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium rounded transition">
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-[#fff] text-sm font-medium rounded transition">
                   {editStatus === 'loading' ? t('admin.saving') : t('admin.saveChanges')}
                 </button>
                 <button type="button" onClick={() => setEditUser(null)}
