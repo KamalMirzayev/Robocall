@@ -120,7 +120,7 @@ function LoginForm() {
           <circle cx="380" cy="130" r="72" fill="rgb(82 115 255 / .12)" stroke="#5273FF" />
           <circle cx="380" cy="130" r="46" fill="#151B32" stroke="#8E5BFF" />
           <text x="380" y="126" textAnchor="middle" fill="#FFFFFF" fontSize="15" fontWeight="800">AI</text>
-          <text x="380" y="145" textAnchor="middle" fill="#9DB0FF" fontSize="11">Gemini Live</text>
+          <text x="380" y="145" textAnchor="middle" fill="#9DB0FF" fontSize="11">Səsli agent</text>
           <path className="flow" d="M452 100 C520 60 560 50 600 50" stroke="#6FCF97" strokeWidth="2" fill="none" />
           <path className="flow" d="M452 130 H600" stroke="#E9BE62" strokeWidth="2" fill="none" />
           <path className="flow" d="M452 160 C520 200 560 210 600 210" stroke="#F08A80" strokeWidth="2" fill="none" />
