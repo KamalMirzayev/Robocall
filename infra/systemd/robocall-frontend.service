@@ -1,0 +1,32 @@
+[Unit]
+Description=Robocall Frontend Service (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+User=callbot
+WorkingDirectory=/opt/robocall/apps/frontend
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=robocall-frontend
+
+# Increase startup timeout for Next.js build
+TimeoutStartSec=300
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Environment
+Environment="NODE_ENV=production"
+Environment="NODE_OPTIONS=--max-old-space-size=1024"
+
+[Install]
+WantedBy=multi-user.target

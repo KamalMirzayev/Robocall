@@ -1,0 +1,31 @@
+[Unit]
+Description=Robocall API Service
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=callbot
+SupplementaryGroups=asterisk
+WorkingDirectory=/opt/robocall/apps/callbot-backend
+ExecStart=/usr/bin/npm run start
+Restart=always
+RestartSec=2
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=robocall-api
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Environment
+Environment="NODE_ENV=production"
+Environment="NODE_OPTIONS=--max-old-space-size=2048"
+
+[Install]
+WantedBy=multi-user.target

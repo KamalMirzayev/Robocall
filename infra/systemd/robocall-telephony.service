@@ -1,0 +1,31 @@
+[Unit]
+Description=Robocall Telephony Service
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=callbot
+SupplementaryGroups=asterisk
+WorkingDirectory=/opt/robocall/apps/telephony
+ExecStart=/usr/bin/npm start
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=robocall-telephony
+
+# Resource limits
+LimitNOFILE=65535
+LimitNPROC=4096
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Environment
+Environment="NODE_ENV=production"
+Environment="NODE_OPTIONS=--max-old-space-size=2048"
+
+[Install]
+WantedBy=multi-user.target

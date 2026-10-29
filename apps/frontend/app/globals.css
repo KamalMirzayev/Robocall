@@ -1,0 +1,27 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #0b1220;
+  --foreground: #e6edf7;
+  --card: #121b2e;
+  --muted: #96a3bb;
+  --border: #243149;
+  --primary: #3d8bff;
+  --ring: #77a9ff;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+body {
+  background:
+    radial-gradient(circle at 15% 0%, rgba(61, 139, 255, 0.18), transparent 35%),
+    radial-gradient(circle at 90% 10%, rgba(56, 189, 248, 0.12), transparent 30%),
+    var(--background);
+  color: var(--foreground);
+  font-family: "Manrope", "Plus Jakarta Sans", "Segoe UI", sans-serif;
+}
