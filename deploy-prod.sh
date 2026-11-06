@@ -303,6 +303,12 @@ GEMINI_VAD_SILENCE_DURATION_MS=180
 GEMINI_VAD_PREFIX_PADDING_MS=120
 GEMINI_PENDING_AUDIO_FRAMES=600
 
+# Partner knowledge base (cars, prices, leasing terms) the AI reads during calls.
+# PARTNER_KB_URL: the partner's webhook URL or origin; PARTNER_KB_TOKEN: the secret token.
+# Leave both empty to turn it off.
+PARTNER_KB_URL=
+PARTNER_KB_TOKEN=
+
 POST_CALL_SUMMARY_AI_ENABLED=true
 POST_CALL_SUMMARY_MODEL=gemini-2.5-flash
 POST_CALL_SUMMARY_TIMEOUT_MS=25000

@@ -14,6 +14,7 @@ import { recordLiveEstimatedUsage } from '../ai-usage.js';
 import { aiToolDeclarations, executeAiTool, isAiToolName } from '../ai-tools/index.js';
 import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, loadToneInstructionById } from '../templates.js';
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
+import { partnerKbInstruction } from '../partner-kb.js';
 
 type Customer = InferSelectModel<typeof customers>;
 type Agent = InferSelectModel<typeof agents>;
@@ -245,7 +246,7 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
   if (Number(customer.debtAmount) > 0) parts.push(`- Borc məbləği: ${customer.debtAmount} AZN`);
   if (customer.phone) parts.push(`- Telefon: ${customer.phone}`);
   
-  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${buildSummaryCategoryGuide()}`;
+  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${buildSummaryCategoryGuide()}`;
 }
 
 function buildInitialGreetingPrompt(customer: Customer) {
