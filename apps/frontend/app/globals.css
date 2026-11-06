@@ -269,3 +269,153 @@ input[type='radio'] {
     stroke-dashoffset: -28;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Panel polish: one layer over the page markup (main.panel) so every screen
+   gets the same rhythm, radii, fields and tables without touching each page.
+   Selectors are .panel-scoped so they outrank the single-class utilities.
+   --------------------------------------------------------------------------- */
+.panel {
+  --panel-shadow: 0 1px 2px rgb(14 20 48 / 0.05), 0 8px 24px -16px rgb(14 20 48 / 0.25);
+}
+.panel > * {
+  max-width: 1440px;
+  margin-inline: auto;
+}
+@media (min-width: 768px) {
+  .panel > .p-8 {
+    padding: 32px 40px 48px;
+  }
+}
+
+/* Page titles */
+.panel h1 {
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+.panel h1 + p {
+  font-size: 13.5px;
+  margin-top: 6px;
+  color: rgb(var(--c-muted));
+}
+.panel h2 {
+  letter-spacing: -0.005em;
+}
+
+/* Cards */
+.panel .bg-slate-800 {
+  border-radius: 14px;
+}
+.panel .bg-slate-800.border {
+  box-shadow: var(--panel-shadow);
+}
+.panel .bg-slate-800 .bg-slate-800 {
+  box-shadow: none;
+}
+
+/* Fields */
+.panel input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+.panel select,
+.panel textarea {
+  border-radius: 10px;
+  font-size: 13.5px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+}
+.panel input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='file']),
+.panel select {
+  min-height: 40px;
+}
+.panel input::placeholder,
+.panel textarea::placeholder {
+  color: rgb(var(--c-muted) / 0.8);
+}
+.panel input:focus,
+.panel select:focus,
+.panel textarea:focus {
+  outline: none;
+  border-color: rgb(var(--c-blue-solid));
+}
+.panel label.text-sm {
+  font-weight: 600;
+  font-size: 12.5px;
+}
+
+/* Buttons */
+.panel button,
+.panel a.rounded-lg {
+  font-weight: 600;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.panel button.rounded-lg,
+.panel a.rounded-lg {
+  border-radius: 10px;
+}
+.panel button.bg-blue-600 {
+  box-shadow: 0 6px 16px -8px rgb(var(--c-blue-solid) / 0.7);
+}
+.panel button:disabled {
+  cursor: not-allowed;
+}
+
+/* Tables */
+.panel table thead th {
+  font-family: 'Archivo', 'Manrope', system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(var(--c-muted));
+  white-space: nowrap;
+}
+.panel table thead {
+  background: rgb(var(--c-bg) / 0.7);
+}
+.panel table tbody tr {
+  transition: background-color 0.12s ease;
+}
+.panel table tbody tr:hover {
+  background: rgb(var(--c-blue-soft) / 0.45);
+}
+.panel table td {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Badges: small rounded labels become pills */
+.panel span.inline-flex.rounded,
+.panel span.inline-block.rounded {
+  border-radius: 999px;
+  font-weight: 600;
+  padding-inline: 10px;
+}
+
+/* Tabs (underline style used on Calls/Telephony) */
+.panel .border-b-2 {
+  font-weight: 600;
+}
+
+/* Empty / loading states: a quiet dashed card instead of bare text */
+.panel .p-8.text-center.text-gray-400,
+.panel .py-8.text-center.text-gray-400,
+.panel .text-center.py-12 {
+  border: 1px dashed rgb(var(--c-line-2));
+  border-radius: 14px;
+  background: rgb(var(--c-surface) / 0.6);
+}
+.panel td.text-center {
+  border: 0;
+  background: transparent;
+}
+
+/* Modals keep the card radius */
+.panel .fixed.inset-0 > div {
+  border-radius: 16px;
+}
+
+/* Row actions inside tables stay compact so the actions column fits */
+.panel td button {
+  font-size: 12.5px;
+  padding: 5px 10px;
+  white-space: nowrap;
+}

@@ -7,6 +7,8 @@ import {
   type InstructionTemplate,
 } from '@/lib/callbot-api';
 import { useLanguage } from '@/lib/language';
+import { SegmentGallery } from '@/components/SegmentGallery';
+import { SEGMENTS, SEGMENT_TONE_CLASSES, getSegment } from '@/lib/segments';
 
 type TemplateVariable = { key: string; description: string };
 
@@ -24,7 +26,7 @@ const initialForm: CreateInstructionTemplateInput = {
 };
 
 export default function InstructionTemplatesPage() {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [rows, setRows] = useState<InstructionTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -173,6 +175,14 @@ export default function InstructionTemplatesPage() {
         </div>
       )}
 
+      <SegmentGallery templates={rows} onCreated={fetchRows} />
+
+      <datalist id="segment-keys">
+        {SEGMENTS.map((segment) => (
+          <option key={segment.key} value={segment.key}>{segment.title[locale]}</option>
+        ))}
+      </datalist>
+
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 grid grid-cols-1 md:grid-cols-4 gap-3">
         <input
           value={query}
@@ -240,6 +250,7 @@ export default function InstructionTemplatesPage() {
               value={form.customer_category || ''}
               onChange={(e) => setForm((prev) => ({ ...prev, customer_category: e.target.value }))}
               placeholder={t('instructionTemplates.customerCategoryOptional')}
+              list="segment-keys"
               className="px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
             />
           </div>
@@ -370,7 +381,17 @@ export default function InstructionTemplatesPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-300">{row.tenant_id}</td>
                   <td className="px-4 py-3 text-gray-300">{row.version}</td>
-                  <td className="px-4 py-3 text-gray-300">{row.customer_category || '-'}</td>
+                  <td className="px-4 py-3 text-gray-300">
+                    {(() => {
+                      const segment = getSegment(row.customer_category);
+                      if (!segment) return row.customer_category || '-';
+                      return (
+                        <span className={`inline-flex px-2 py-1 rounded text-xs whitespace-nowrap ${SEGMENT_TONE_CLASSES[segment.tone].chip}`}>
+                          {segment.title[locale]}
+                        </span>
+                      );
+                    })()}
+                  </td>
                   <td className="px-4 py-3 text-gray-300 font-mono text-xs">{row.external_key || '-'}</td>
                   <td className="px-4 py-3">
                     <span className={`inline-flex px-2 py-1 rounded text-xs ${row.is_active ? 'bg-green-500/20 text-green-300' : 'bg-slate-600/40 text-gray-300'}`}>
@@ -460,6 +481,7 @@ export default function InstructionTemplatesPage() {
                 <label className="block text-xs text-gray-400 mb-1">{t('instructionTemplates.customerCategory')}</label>
                 <input
                   value={editForm.customer_category || ''}
+                  list="segment-keys"
                   onChange={(e) => setEditForm((prev) => ({ ...prev, customer_category: e.target.value }))}
                   className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white"
                 />

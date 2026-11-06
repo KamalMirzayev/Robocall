@@ -1005,5 +1005,20 @@
     "trunkAutoSelected": "Auto-selected (no trunk pinned)",
     "pricingInfo": "Hybrid plan:",
     "pricingDetail": "/month base + 0.20 /minute for answered calls. Only successful calls (customer answered) are billed — busy, no-answer, and invalid numbers are free."
+  },
+  "segments": {
+    "heading": "Segments",
+    "subtitle": "A ready instruction template for each use case. Add it in one click, then edit the text.",
+    "addTemplate": "Add template",
+    "templatesReady": "template(s)",
+    "addAnother": "Add another",
+    "adding": "Adding…",
+    "added": "Template added. You can edit it in the list below.",
+    "segment": "Segment",
+    "allSegments": "All segments",
+    "noSegment": "No segment",
+    "noTemplateForSegment": "No template for this segment yet. Add one in a click on the Instruction Templates page.",
+    "defaultTemplate": "Active (default) template",
+    "chooseSegmentHint": "Pick the call's purpose; the template list is filtered to match."
   }
 }

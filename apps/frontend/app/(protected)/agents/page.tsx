@@ -206,7 +206,7 @@ export default function AgentsPage() {
                     className={`flex-1 px-3 py-2 rounded-lg text-sm font-medium transition ${
                       isDeletePending
                         ? 'bg-red-600 hover:bg-red-700 text-[#fff]'
-                        : 'bg-slate-700 hover:bg-red-600/40 text-[#fff]'
+                        : 'border border-slate-600 text-red-300 hover:bg-red-500/10 hover:border-red-500'
                     } disabled:opacity-50`}
                   >
                     {deleting ? t('agents.deleting') : t('agents.delete')}

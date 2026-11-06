@@ -144,9 +144,13 @@ export default function CustomersPage() {
         </button>
       </div>
 
-      <div className="mb-4 rounded-lg border border-red-800/60 bg-red-950/20 p-4">
-        <h2 className="text-sm font-semibold text-red-300 mb-3">{t('customers.batchDeleteHeading')}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      {/* Destructive bulk tool: folded away by default so it doesn't lead the page. */}
+      <details className="mb-4 rounded-lg border border-red-800/60 bg-red-950/20 p-4 group">
+        <summary className="cursor-pointer list-none flex items-center justify-between text-sm font-semibold text-red-300">
+          {t('customers.batchDeleteHeading')}
+          <span className="text-xs text-gray-500 transition group-open:rotate-180">▾</span>
+        </summary>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
           <div>
             <label className="block text-xs text-gray-400 mb-1">{t('customers.importedDaysLabel')}</label>
             <input
@@ -197,7 +201,7 @@ export default function CustomersPage() {
             {t('customers.clearFiltersButton')}
           </button>
         </div>
-      </div>
+      </details>
 
       {actionError && (
         <div className="mb-4 rounded border border-red-700 bg-red-950/40 px-3 py-2 text-red-300 text-sm">

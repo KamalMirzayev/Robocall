@@ -7,6 +7,7 @@ import { useCampaignPksImport } from '@/hooks/useCallbot';
 import callbotApi from '@/lib/callbot-api';
 import { useLanguage } from '@/lib/language';
 import SearchableSelect from '@/components/SearchableSelect';
+import { SEGMENT_TONE_CLASSES, getSegment, type Segment } from '@/lib/segments';
 
 interface CampaignRow extends CampaignInput {
   id: number;
@@ -74,7 +75,7 @@ function scheduleLabel(
 
 export default function CampaignsPage() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const pksImport = useCampaignPksImport();
   const [campaigns, setCampaigns] = useState<CampaignRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -98,6 +99,22 @@ export default function CampaignsPage() {
   const [databaseImportResult, setDatabaseImportResult] = useState<any>(null);
   const [distinctValues, setDistinctValues] = useState<Record<string, string[]>>({});
   const [loadingColumn, setLoadingColumn] = useState<string | null>(null);
+
+  // template id -> segment, so each campaign row can show which use case it serves.
+  const [templateSegments, setTemplateSegments] = useState<Record<string, Segment>>({});
+  useEffect(() => {
+    callbotApi
+      .getInstructionTemplates()
+      .then((templates) => {
+        const map: Record<string, Segment> = {};
+        for (const tpl of templates) {
+          const segment = getSegment(tpl.customer_category);
+          if (segment) map[tpl.id] = segment;
+        }
+        setTemplateSegments(map);
+      })
+      .catch(() => undefined);
+  }, []);
 
   const weekdayLabels: Record<CampaignWeekday, string> = {
     mon: t('campaigns.days.mon'),
@@ -524,7 +541,18 @@ export default function CampaignsPage() {
                   onClick={() => router.push(`/campaigns/${campaign.id}`)}
                 >
                   <td className="px-4 py-3">
-                    <p className="text-white font-medium">{campaign.name}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-white font-medium">{campaign.name}</p>
+                      {campaign.baseTemplateId && templateSegments[campaign.baseTemplateId] && (
+                        <span
+                          className={`inline-flex px-2 py-0.5 rounded text-[11px] ${
+                            SEGMENT_TONE_CLASSES[templateSegments[campaign.baseTemplateId].tone].chip
+                          }`}
+                        >
+                          {templateSegments[campaign.baseTemplateId].title[locale]}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-gray-400 truncate max-w-md">{campaign.description}</p>
                     <p className="text-xs text-gray-500 mt-1">
                       {scheduleLabel(
@@ -543,9 +571,9 @@ export default function CampaignsPage() {
                   </td>
                   <td className="px-4 py-3 text-gray-300">{campaign.completedCalls}/{campaign.totalCustomers} ({progress}%)</td>
                   <td className="px-4 py-3 text-gray-300">{successRate}%</td>
-                  <td className="px-4 py-3 text-gray-300">{new Date(campaign.createdAt).toLocaleString()}</td>
+                  <td className="px-4 py-3 text-gray-300 whitespace-nowrap">{new Date(campaign.createdAt).toLocaleDateString()}</td>
                   <td className="px-4 py-3 text-right">
-                    <div className="flex justify-end gap-2">
+                    <div className="flex flex-wrap justify-end gap-1.5 ml-auto max-w-[280px]">
                       <button
                         onClick={(e) => {
                           e.stopPropagation();

@@ -1005,5 +1005,20 @@
     "trunkAutoSelected": "Avtomatik seçilib (trunk təyin edilməyib)",
     "pricingInfo": "Hibrid plan:",
     "pricingDetail": "/ay bazalıq + 0.20 /dəqiqə cavablanmış zənglər üçün. Yalnız uğurlu zənglər (müştəri cavab verdi) ödənişlidir — məşğul, cavabsız və səhv nömrələr pulsuzdur."
+  },
+  "segments": {
+    "heading": "Seqmentlər",
+    "subtitle": "Hər istifadə ssenarisi üçün hazır təlimat şablonu. Bir kliklə əlavə edin, sonra mətni redaktə edin.",
+    "addTemplate": "Şablonu əlavə et",
+    "templatesReady": "şablon",
+    "addAnother": "Yenisini yarat",
+    "adding": "Əlavə olunur…",
+    "added": "Şablon əlavə olundu. Aşağıdakı siyahıda redaktə edə bilərsiniz.",
+    "segment": "Seqment",
+    "allSegments": "Bütün seqmentlər",
+    "noSegment": "Seqmentsiz",
+    "noTemplateForSegment": "Bu seqment üçün şablon yoxdur. Təlimat Şablonları səhifəsində bir kliklə əlavə edin.",
+    "defaultTemplate": "Aktiv (standart) şablon",
+    "chooseSegmentHint": "Zəngin məqsədini seçin, şablon siyahısı ona görə süzülür."
   }
 }

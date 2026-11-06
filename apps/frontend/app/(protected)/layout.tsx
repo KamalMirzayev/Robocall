@@ -219,7 +219,7 @@ export default function ProtectedLayout({
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0 overflow-auto bg-slate-900 pt-14 md:pt-0">
+      <main className="panel flex-1 min-w-0 overflow-auto bg-slate-900 pt-14 md:pt-0">
         {children}
       </main>
     </div>

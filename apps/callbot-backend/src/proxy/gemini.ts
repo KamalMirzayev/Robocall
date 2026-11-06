@@ -239,8 +239,10 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
     `- Ad: ${customer.name}`,
     `- Soyad: ${customer.surname}`,
   ];
-  parts.push(`- Gecikmə günü: ${customer.overdueDays}`);
-  parts.push(`- Borc məbləği: ${customer.debtAmount} AZN`);
+  // Debt lines only for customers that actually carry debt data, so sales or survey
+  // segments don't get a "0 AZN debt" line that pulls the bot towards collection talk.
+  if (Number(customer.overdueDays) > 0) parts.push(`- Gecikmə günü: ${customer.overdueDays}`);
+  if (Number(customer.debtAmount) > 0) parts.push(`- Borc məbləği: ${customer.debtAmount} AZN`);
   if (customer.phone) parts.push(`- Telefon: ${customer.phone}`);
   
   return `${instruction}${FACT_GROUNDING_INSTRUCTION}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${buildSummaryCategoryGuide()}`;

@@ -5,6 +5,7 @@ import { callbotApi, type InstructionTemplate } from '@/lib/callbot-api';
 import { Agent } from '@/types/callbot';
 import { useSIPTrunks } from '@/hooks/useTelephony';
 import { useLanguage } from '@/lib/language';
+import { SEGMENTS, SEGMENT_TONE_CLASSES, getSegment } from '@/lib/segments';
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed' | 'cancelled';
 
@@ -63,13 +64,14 @@ const weekdayOptions: Array<{ key: CampaignWeekday; label: string }> = [
 ];
 
 export function CampaignForm({ initialValue, submitting = false, onSubmit, onCancel }: CampaignFormProps) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [form, setForm] = useState<CampaignInput>(initialValue ?? defaultValue);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const { trunks, loading: trunksLoading } = useSIPTrunks();
   const [baseTemplates, setBaseTemplates] = useState<InstructionTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [segmentKey, setSegmentKey] = useState<string>('');
   const [trunkDropdownOpen, setTrunkDropdownOpen] = useState(false);
   const trunkDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -106,7 +108,16 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
     async function loadTemplates() {
       try {
         const templates = await callbotApi.getInstructionTemplates();
-        setBaseTemplates(templates.filter((t) => t.template_type === 'base' && t.is_active));
+        // Segment templates are picked by id per campaign, so they're offered even when
+        // they aren't the single globally-active base template.
+        const usable = templates.filter(
+          (tpl) =>
+            tpl.template_type === 'base' &&
+            (tpl.is_active || Boolean(getSegment(tpl.customer_category)) || tpl.id === initialValue?.baseTemplateId)
+        );
+        setBaseTemplates(usable);
+        const current = usable.find((tpl) => tpl.id === initialValue?.baseTemplateId);
+        if (current && getSegment(current.customer_category)) setSegmentKey(current.customer_category as string);
       } catch (error) {
         console.error('Failed to load base templates:', error);
       } finally {
@@ -253,6 +264,42 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
       </div>
 
       <div>
+        <label className="block text-sm text-gray-300 mb-1">{t('segments.segment')}</label>
+        <p className="text-xs text-gray-500 mb-2">{t('segments.chooseSegmentHint')}</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => setSegmentKey('')}
+            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition ${
+              segmentKey === '' ? 'border-blue-500 bg-blue-50 text-blue-300' : 'border-slate-600 text-gray-300 hover:bg-slate-700'
+            }`}
+          >
+            {t('segments.allSegments')}
+          </button>
+          {SEGMENTS.map((segment) => {
+            const selected = segmentKey === segment.key;
+            return (
+              <button
+                key={segment.key}
+                type="button"
+                onClick={() => {
+                  setSegmentKey(segment.key);
+                  const first = baseTemplates.find((tpl) => tpl.customer_category === segment.key);
+                  setForm((prev) => ({ ...prev, baseTemplateId: first?.id }));
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition ${
+                  selected ? 'border-blue-500 bg-blue-50 text-blue-300' : 'border-slate-600 text-gray-300 hover:bg-slate-700'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${SEGMENT_TONE_CLASSES[segment.tone].dot}`} />
+                {segment.title[locale]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
         <label className="block text-sm text-gray-300 mb-1">{t('campaignForm.baseTemplate')}</label>
         <select
           value={form.baseTemplateId || ''}
@@ -261,12 +308,21 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
           disabled={loadingTemplates}
         >
           <option value="">{t('campaignForm.defaultBaseTemplate')}</option>
-          {baseTemplates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name}
-            </option>
-          ))}
+          {baseTemplates
+            .filter((template) => !segmentKey || template.customer_category === segmentKey)
+            .map((template) => {
+              const segment = getSegment(template.customer_category);
+              return (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                  {segment && !segmentKey ? ` · ${segment.title[locale]}` : ''}
+                </option>
+              );
+            })}
         </select>
+        {segmentKey && !loadingTemplates && !baseTemplates.some((tpl) => tpl.customer_category === segmentKey) && (
+          <p className="text-xs text-amber-300 mt-1.5">{t('segments.noTemplateForSegment')}</p>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
