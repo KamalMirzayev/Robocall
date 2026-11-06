@@ -1022,7 +1022,9 @@
     "noTemplateForSegment": "No template for this segment yet. Add one in a click on the Instruction Templates page.",
     "defaultTemplate": "Active (default) template",
     "chooseSegmentHint": "Pick the call's purpose: the template list is filtered and the settings are set to match.",
-    "presetApplied": "Segment defaults applied (attempts, interval, days and hours). Change them if you need to."
+    "presetApplied": "Segment defaults applied (attempts, interval, days and hours). Change them if you need to.",
+    "paramsHeading": "Segment parameters",
+    "paramsHint": "The bot uses this information on the call. Empty fields are ignored."
   },
   "integrations": {
     "heading": "Integrations",

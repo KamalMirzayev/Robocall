@@ -252,3 +252,102 @@ export const SEGMENT_CAMPAIGN_PRESETS: Record<SegmentKey, SegmentCampaignPreset>
     defaults: { skipNextDayAfterSuccess: true },
   },
 };
+
+// Per-segment campaign parameters. Saved on the campaign (segment_params) and given to the
+// bot at call time as {DYNAMIC_CONTEXT}. Keys and option values mirror
+// apps/callbot-backend/src/campaign-segments.ts.
+export interface SegmentField {
+  key: string;
+  type: 'text' | 'textarea' | 'date' | 'number' | 'select';
+  label: Record<Locale, string>;
+  placeholder?: Record<Locale, string>;
+  options?: Array<{ value: string; label: Record<Locale, string> }>;
+}
+
+export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
+  sales: [
+    {
+      key: 'offer', type: 'textarea',
+      label: { az: 'Təklif', en: 'Offer' },
+      placeholder: { az: 'Məs. noyabr ayı ərzində 20% ilkin ödənişlə lizinq', en: 'E.g. leasing with 20% down payment through November' },
+    },
+    {
+      key: 'models', type: 'text',
+      label: { az: 'Marka və modellər', en: 'Brands and models' },
+      placeholder: { az: 'Məs. BYD Seal 6, Toyota RAV4', en: 'E.g. BYD Seal 6, Toyota RAV4' },
+    },
+    {
+      key: 'benefit', type: 'text',
+      label: { az: 'Əsas üstünlük', en: 'Main benefit' },
+      placeholder: { az: 'Məs. ilk 3 ay servis pulsuz', en: 'E.g. first 3 months of service free' },
+    },
+    { key: 'deadline', type: 'date', label: { az: 'Təklifin son tarixi', en: 'Offer ends on' } },
+    {
+      key: 'nextStep', type: 'select',
+      label: { az: 'Maraq olarsa növbəti addım', en: 'Next step if interested' },
+      options: [
+        { value: 'application', label: { az: 'Müraciəti qeydə al', en: 'Take the application' } },
+        { value: 'showroom', label: { az: 'Salona dəvət et', en: 'Invite to the showroom' } },
+        { value: 'test_drive', label: { az: 'Test-sürüşə yazdır', en: 'Book a test drive' } },
+        { value: 'callback', label: { az: 'Menecerin geri zəngi', en: 'Manager calls back' } },
+      ],
+    },
+    { key: 'location', type: 'text', label: { az: 'Salon / filial ünvanı', en: 'Showroom / branch address' } },
+  ],
+  application_status: [
+    {
+      key: 'result', type: 'select',
+      label: { az: 'Müraciətin nəticəsi', en: 'Application result' },
+      options: [
+        { value: 'approved', label: { az: 'Təsdiq olunub', en: 'Approved' } },
+        { value: 'conditional', label: { az: 'Şərtlə təsdiq olunub', en: 'Approved with conditions' } },
+        { value: 'needs_documents', label: { az: 'Əlavə sənəd lazımdır', en: 'More documents needed' } },
+        { value: 'in_review', label: { az: 'Hələ baxılır', en: 'Still in review' } },
+        { value: 'rejected', label: { az: 'İmtina olunub', en: 'Rejected' } },
+      ],
+    },
+    {
+      key: 'documents', type: 'textarea',
+      label: { az: 'Tələb olunan sənədlər', en: 'Required documents' },
+      placeholder: { az: 'Məs. şəxsiyyət vəsiqəsi, iş yerindən arayış', en: 'E.g. ID card, employment certificate' },
+    },
+    {
+      key: 'nextStep', type: 'text',
+      label: { az: 'Növbəti addım', en: 'Next step' },
+      placeholder: { az: 'Məs. filiala gəlib müqaviləni imzalamaq', en: 'E.g. come to the branch and sign the contract' },
+    },
+    { key: 'location', type: 'text', label: { az: 'Filial ünvanı və iş saatları', en: 'Branch address and hours' } },
+    { key: 'deadline', type: 'date', label: { az: 'Təklif bu tarixədək qüvvədədir', en: 'Offer valid until' } },
+  ],
+  satisfaction: [
+    {
+      key: 'serviceType', type: 'select',
+      label: { az: 'Sorğu hansı xidmət haqqındadır', en: 'Survey is about' },
+      options: [
+        { value: 'purchase', label: { az: 'Avtomobil alışı', en: 'Car purchase' } },
+        { value: 'service', label: { az: 'Texniki servis', en: 'Car service' } },
+        { value: 'leasing', label: { az: 'Lizinq / kredit rəsmiləşdirilməsi', en: 'Leasing / loan paperwork' } },
+        { value: 'test_drive', label: { az: 'Test-sürüş', en: 'Test drive' } },
+        { value: 'call_center', label: { az: 'Zəng mərkəzi', en: 'Call center' } },
+      ],
+    },
+    {
+      key: 'scale', type: 'select',
+      label: { az: 'Qiymət şkalası', en: 'Score scale' },
+      options: [
+        { value: '1-5', label: { az: '1-dən 5-ə', en: '1 to 5' } },
+        { value: '0-10', label: { az: '0-dan 10-a', en: '0 to 10' } },
+      ],
+    },
+    {
+      key: 'lowScore', type: 'number',
+      label: { az: 'Bu baldan aşağı olarsa şikayət say', en: 'Treat scores below this as a complaint' },
+      placeholder: { az: 'Məs. 4', en: 'E.g. 4' },
+    },
+    {
+      key: 'questions', type: 'textarea',
+      label: { az: 'Əlavə suallar', en: 'Extra questions' },
+      placeholder: { az: 'Hər sətirdə bir sual', en: 'One question per line' },
+    },
+  ],
+};

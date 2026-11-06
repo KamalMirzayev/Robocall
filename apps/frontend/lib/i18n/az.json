@@ -1022,7 +1022,9 @@
     "noTemplateForSegment": "Bu seqment üçün şablon yoxdur. Təlimat Şablonları səhifəsində bir kliklə əlavə edin.",
     "defaultTemplate": "Aktiv (standart) şablon",
     "chooseSegmentHint": "Zəngin məqsədini seçin: şablon siyahısı süzülür, parametrlər ona uyğun qurulur.",
-    "presetApplied": "Seqmentə uyğun parametrlər tətbiq olundu (cəhd sayı, interval, günlər və saatlar). İstəsəniz dəyişin."
+    "presetApplied": "Seqmentə uyğun parametrlər tətbiq olundu (cəhd sayı, interval, günlər və saatlar). İstəsəniz dəyişin.",
+    "paramsHeading": "Seqment parametrləri",
+    "paramsHint": "Bot zəngdə bu məlumatdan istifadə edəcək. Boş sahələr nəzərə alınmır."
   },
   "integrations": {
     "heading": "İnteqrasiyalar",

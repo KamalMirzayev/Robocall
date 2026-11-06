@@ -198,6 +198,8 @@ export default function CampaignsPage() {
       trunkId: c.trunkId,
       trunkIds: c.trunkIds || [],
       baseTemplateId: c.baseTemplateId,
+      segment: c.segment ?? null,
+      segmentParams: c.segmentParams ?? null,
     } satisfies CampaignInput;
   }, [campaigns, editingId]);
 
@@ -543,15 +545,16 @@ export default function CampaignsPage() {
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-white font-medium">{campaign.name}</p>
-                      {campaign.baseTemplateId && templateSegments[campaign.baseTemplateId] && (
-                        <span
-                          className={`inline-flex px-2 py-0.5 rounded text-[11px] ${
-                            SEGMENT_TONE_CLASSES[templateSegments[campaign.baseTemplateId].tone].chip
-                          }`}
-                        >
-                          {templateSegments[campaign.baseTemplateId].title[locale]}
-                        </span>
-                      )}
+                      {(() => {
+                        const seg =
+                          getSegment(campaign.segment) ??
+                          (campaign.baseTemplateId ? templateSegments[campaign.baseTemplateId] : undefined);
+                        return seg ? (
+                          <span className={`inline-flex px-2 py-0.5 rounded text-[11px] ${SEGMENT_TONE_CLASSES[seg.tone].chip}`}>
+                            {seg.title[locale]}
+                          </span>
+                        ) : null;
+                      })()}
                     </div>
                     <p className="text-gray-400 truncate max-w-md">{campaign.description}</p>
                     <p className="text-xs text-gray-500 mt-1">

@@ -18,6 +18,9 @@ export const campaigns = pgTable('campaigns', {
   agentId: integer('agent_id').references(() => agents.id),
   trunkId: varchar('trunk_id', { length: 64 }),
   trunkIds: varchar('trunk_ids', { length: 500 }),
+  // Segment (sales, application_status, ...) and its parameters; see campaign-segments.ts.
+  segment: varchar('segment', { length: 40 }),
+  segmentParams: jsonb('segment_params'),
   totalCustomers: integer('total_customers').notNull().default(0),
   completedCalls: integer('completed_calls').notNull().default(0),
   successfulCalls: integer('successful_calls').notNull().default(0),

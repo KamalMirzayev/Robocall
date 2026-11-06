@@ -202,8 +202,14 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
     ? await loadBaseInstructionById(baseTemplateId)
     : await loadBaseInstruction();
   
+  // A template without the {DYNAMIC_CONTEXT} placeholder (e.g. the global default) would
+  // drop the campaign's parameters, so they are appended instead.
+  const withContext = dynamicContext && !baseInstruction.includes('{DYNAMIC_CONTEXT}')
+    ? `${baseInstruction}\n\nBu kampaniya üzrə məlumat:\n${dynamicContext}`
+    : baseInstruction;
+
   // Replace agent-level variables
-  let instruction = baseInstruction
+  let instruction = withContext
     .replace('{AGENT_NAME}', agent.name)
     .replace('{COMPANY_NAME}', agent.companyName ?? 'şirkətin')
     .replace('{TONE_INSTRUCTION}', toneInstruction)

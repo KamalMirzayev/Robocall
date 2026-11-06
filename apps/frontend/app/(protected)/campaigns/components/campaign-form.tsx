@@ -5,7 +5,7 @@ import { callbotApi, type InstructionTemplate } from '@/lib/callbot-api';
 import { Agent } from '@/types/callbot';
 import { useSIPTrunks } from '@/hooks/useTelephony';
 import { useLanguage } from '@/lib/language';
-import { SEGMENTS, SEGMENT_TONE_CLASSES, SEGMENT_CAMPAIGN_PRESETS, getSegment, type CampaignFlag, type SegmentKey } from '@/lib/segments';
+import { SEGMENTS, SEGMENT_TONE_CLASSES, SEGMENT_CAMPAIGN_PRESETS, SEGMENT_FIELDS, getSegment, type CampaignFlag, type SegmentKey } from '@/lib/segments';
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed' | 'cancelled';
 
@@ -29,6 +29,8 @@ export interface CampaignInput {
   baseTemplateId?: string;
   runStartDate?: string;
   runEndDate?: string;
+  segment?: string | null;
+  segmentParams?: Record<string, string> | null;
 }
 
 interface CampaignFormProps {
@@ -71,7 +73,7 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
   const { trunks, loading: trunksLoading } = useSIPTrunks();
   const [baseTemplates, setBaseTemplates] = useState<InstructionTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
-  const [segmentKey, setSegmentKey] = useState<string>('');
+  const [segmentKey, setSegmentKey] = useState<string>(initialValue?.segment || '');
   const [presetApplied, setPresetApplied] = useState(false);
   const [trunkDropdownOpen, setTrunkDropdownOpen] = useState(false);
   const trunkDropdownRef = useRef<HTMLDivElement>(null);
@@ -118,7 +120,9 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
         );
         setBaseTemplates(usable);
         const current = usable.find((tpl) => tpl.id === initialValue?.baseTemplateId);
-        if (current && getSegment(current.customer_category)) setSegmentKey(current.customer_category as string);
+        if (!initialValue?.segment && current && getSegment(current.customer_category)) {
+          setSegmentKey(current.customer_category as string);
+        }
       } catch (error) {
         console.error('Failed to load base templates:', error);
       } finally {
@@ -141,6 +145,8 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
     });
   };
 
+  const segmentFields = (segmentKey && SEGMENT_FIELDS[segmentKey as SegmentKey]) || [];
+
   // With a segment picked, only the settings that make sense for it are shown.
   const segmentFlags = segmentKey ? SEGMENT_CAMPAIGN_PRESETS[segmentKey as SegmentKey]?.flags : undefined;
   const showFlag = (flag: CampaignFlag) => !segmentFlags || segmentFlags.includes(flag) || Boolean(form[flag]);
@@ -155,7 +161,7 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
       onSubmit={(e) => {
         e.preventDefault();
         if (!isScheduleValid) return;
-        onSubmit(form);
+        onSubmit({ ...form, segment: segmentKey || '', segmentParams: segmentKey ? form.segmentParams ?? {} : null });
       }}
     >
       <div>
@@ -278,6 +284,7 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
             onClick={() => {
               setSegmentKey('');
               setPresetApplied(false);
+              setForm((prev) => ({ ...prev, segment: null, segmentParams: null }));
             }}
             className={`px-3 py-1.5 rounded-full border text-xs font-medium transition ${
               segmentKey === '' ? 'border-blue-500 bg-blue-50 text-blue-300' : 'border-slate-600 text-gray-300 hover:bg-slate-700'
@@ -297,6 +304,8 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
                   const preset = SEGMENT_CAMPAIGN_PRESETS[segment.key];
                   setForm((prev) => ({
                     ...prev,
+                    segment: segment.key,
+                    segmentParams: prev.segment === segment.key ? prev.segmentParams : {},
                     baseTemplateId: first?.id,
                     maxAttempts: preset.maxAttempts,
                     retryIntervalHours: preset.retryIntervalHours,
@@ -349,6 +358,49 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
           <p className="text-xs text-amber-300 mt-1.5">{t('segments.noTemplateForSegment')}</p>
         )}
       </div>
+
+      {segmentFields.length > 0 && (
+        <div className="space-y-3 border border-slate-700 rounded-lg p-3 bg-slate-900/30">
+          <div>
+            <p className="text-sm text-gray-300">
+              {t('segments.paramsHeading')} · {getSegment(segmentKey)?.title[locale]}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">{t('segments.paramsHint')}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {segmentFields.map((field) => {
+              const value = form.segmentParams?.[field.key] ?? '';
+              const set = (next: string) =>
+                setForm((prev) => ({ ...prev, segmentParams: { ...(prev.segmentParams ?? {}), [field.key]: next } }));
+              const cls = 'w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white';
+              return (
+                <div key={field.key} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+                  <label className="block text-sm text-gray-300 mb-1">{field.label[locale]}</label>
+                  {field.type === 'textarea' ? (
+                    <textarea value={value} onChange={(e) => set(e.target.value)} placeholder={field.placeholder?.[locale]} className={`${cls} min-h-20`} />
+                  ) : field.type === 'select' ? (
+                    <select value={value} onChange={(e) => set(e.target.value)} className={cls}>
+                      <option value="">—</option>
+                      {field.options?.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label[locale]}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={field.type}
+                      min={field.type === 'number' ? 0 : undefined}
+                      value={value}
+                      onChange={(e) => set(e.target.value)}
+                      placeholder={field.placeholder?.[locale]}
+                      className={cls}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>

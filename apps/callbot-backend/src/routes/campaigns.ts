@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { type PksRow, validateFin } from '../pks-utils.js';
 import { buildWorkbook, HEADER_STYLE, type XlsxCellInput } from '../xlsx.js';
+import { isCampaignSegment, sanitizeSegmentParams } from '../campaign-segments.js';
 
 export type PksFilters = Record<string, string>;
 export type PksFilterMode = 'and' | 'or' | 'grouped';
@@ -1368,7 +1369,7 @@ campaignsRouter.get('/', async (req, res) => {
              new_customer_matches_count, new_customer_matches_checked_at,
              run_weekdays, run_window_start, run_window_end,
              run_start_date::text, run_end_date::text,
-             base_template_id, agent_id, trunk_id, trunk_ids,
+             base_template_id, agent_id, trunk_id, trunk_ids, segment, segment_params,
              total_customers, completed_calls, successful_calls,
              created_at, updated_at
       FROM campaigns
@@ -1392,6 +1393,8 @@ campaignsRouter.get('/', async (req, res) => {
       runStartDate: c.run_start_date,
       runEndDate: c.run_end_date,
       baseTemplateId: c.base_template_id,
+      segment: c.segment ?? null,
+      segmentParams: c.segment_params ?? null,
       agentId: c.agent_id,
       trunkId: c.trunk_id,
       trunkIds: String(c.trunk_ids || '').split(',').map((t: string) => t.trim()).filter(Boolean),
@@ -1467,7 +1470,7 @@ campaignsRouter.get('/:id', async (req, res) => {
              new_customer_matches_count, new_customer_matches_checked_at,
              run_weekdays, run_window_start, run_window_end,
              run_start_date::text, run_end_date::text,
-             base_template_id, agent_id, trunk_id, trunk_ids,
+             base_template_id, agent_id, trunk_id, trunk_ids, segment, segment_params,
              total_customers, completed_calls, successful_calls,
              created_at, updated_at
       FROM campaigns
@@ -1497,6 +1500,8 @@ campaignsRouter.get('/:id', async (req, res) => {
       runStartDate: c.run_start_date,
       runEndDate: c.run_end_date,
       baseTemplateId: c.base_template_id,
+      segment: c.segment ?? null,
+      segmentParams: c.segment_params ?? null,
       agentId: c.agent_id,
       trunkId: c.trunk_id,
       trunkIds: String(c.trunk_ids || '').split(',').map((t: string) => t.trim()).filter(Boolean),
@@ -1699,6 +1704,8 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
   }
   const description = cleanText(req.body?.description) || null;
   const baseTemplateId = req.body?.baseTemplateId || null;
+  const segment = isCampaignSegment(req.body?.segment) ? req.body.segment : null;
+  const segmentParams = sanitizeSegmentParams(segment, req.body?.segmentParams);
   const agentId = req.body?.agentId || null;
   const trunkId = req.body?.trunkId || null;
   const trunkIds = Array.isArray(req.body?.trunkIds)
@@ -1711,19 +1718,19 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
         name, description, status, max_attempts, retry_interval_hours,
         order_by_monthly_payment_desc, skip_next_day_after_success, daily_customer_refresh,
         run_weekdays, run_window_start, run_window_end, run_start_date, run_end_date,
-        base_template_id, agent_id, trunk_id, trunk_ids,
+        base_template_id, agent_id, trunk_id, trunk_ids, segment, segment_params,
         total_customers, completed_calls, successful_calls, created_at, updated_at
       ) VALUES (
         ${name}, ${description}, ${status}, ${maxAttempts}, ${retryIntervalHours},
         ${orderByMonthlyPaymentDesc}, ${skipNextDayAfterSuccess}, ${dailyCustomerRefresh},
         ${runWeekdays}, ${runWindowStart}, ${runWindowEnd}, ${runStartDate}::date, ${runEndDate}::date,
-        ${baseTemplateId}, ${agentId}, ${trunkId}, ${trunkIds},
+        ${baseTemplateId}, ${agentId}, ${trunkId}, ${trunkIds}, ${segment}::varchar, ${segmentParams ? JSON.stringify(segmentParams) : null}::jsonb,
         0, 0, 0, now(), now()
       )
       RETURNING id, name, description, status, max_attempts, retry_interval_hours,
                 order_by_monthly_payment_desc, skip_next_day_after_success, daily_customer_refresh,
                 run_weekdays, run_window_start, run_window_end, run_start_date::text, run_end_date::text,
-                base_template_id, agent_id, trunk_id, trunk_ids,
+                base_template_id, agent_id, trunk_id, trunk_ids, segment, segment_params,
                 total_customers, completed_calls, successful_calls,
                 created_at, updated_at
     `));
@@ -1748,6 +1755,8 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
       runStartDate: c.run_start_date,
       runEndDate: c.run_end_date,
       baseTemplateId: c.base_template_id,
+      segment: c.segment ?? null,
+      segmentParams: c.segment_params ?? null,
       agentId: c.agent_id,
       trunkId: c.trunk_id,
       trunkIds: String(c.trunk_ids || '').split(',').map((t: string) => t.trim()).filter(Boolean),
@@ -1790,6 +1799,10 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
   const runStartDate = req.body?.runStartDate !== undefined ? cleanText(req.body.runStartDate) : null;
   const runEndDate = req.body?.runEndDate !== undefined ? cleanText(req.body.runEndDate) : null;
   const baseTemplateId = req.body?.baseTemplateId !== undefined ? req.body.baseTemplateId : null;
+  // The segment and its parameters are saved together; '' clears the segment.
+  const segmentGiven = req.body?.segment !== undefined;
+  const segment = segmentGiven && isCampaignSegment(req.body.segment) ? (req.body.segment as string) : null;
+  const segmentParams = segmentGiven ? sanitizeSegmentParams(segment, req.body?.segmentParams) : null;
   const agentId = req.body?.agentId !== undefined ? req.body.agentId : null;
   const trunkId = req.body?.trunkId !== undefined ? req.body.trunkId : null;
   const trunkIds = req.body?.trunkIds !== undefined
@@ -1814,6 +1827,7 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
     && agentId === null
     && trunkId === null
     && trunkIds === null
+    && !segmentGiven
   ) {
     res.status(400).json({ error: 'no fields to update' });
     return;
@@ -1844,12 +1858,14 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
           agent_id = coalesce(${agentId}::integer, agent_id),
           trunk_id = coalesce(${trunkId}, trunk_id),
           trunk_ids = coalesce(${trunkIds}, trunk_ids),
+          segment = CASE WHEN ${segmentGiven}::boolean THEN ${segment}::varchar ELSE segment END,
+          segment_params = CASE WHEN ${segmentGiven}::boolean THEN ${segmentParams ? JSON.stringify(segmentParams) : null}::jsonb ELSE segment_params END,
           updated_at = now()
       WHERE id = ${campaignId}
       RETURNING id, name, description, status, max_attempts, retry_interval_hours,
                 order_by_monthly_payment_desc, skip_next_day_after_success, daily_customer_refresh,
                 run_weekdays, run_window_start, run_window_end, run_start_date::text, run_end_date::text,
-                base_template_id, agent_id, trunk_id, trunk_ids,
+                base_template_id, agent_id, trunk_id, trunk_ids, segment, segment_params,
                 total_customers, completed_calls, successful_calls,
                 created_at, updated_at
     `));
@@ -1876,6 +1892,8 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
       runStartDate: c.run_start_date,
       runEndDate: c.run_end_date,
       baseTemplateId: c.base_template_id,
+      segment: c.segment ?? null,
+      segmentParams: c.segment_params ?? null,
       agentId: c.agent_id,
       trunkId: c.trunk_id,
       trunkIds: String(c.trunk_ids || '').split(',').map((t: string) => t.trim()).filter(Boolean),
