@@ -9,6 +9,7 @@ import {
   FileText,
   KeyRound,
   ListTree,
+  Plug,
   LogOut,
   Megaphone,
   Menu,
@@ -181,6 +182,8 @@ export default function ProtectedLayout({
             </>
           )}
           <div className="mt-3 space-y-1">
+            {user?.role === 'admin' &&
+              navLink({ href: '/integrations', label: 'protectedLayout.integrations', icon: Plug })}
             {navLink({ href: '/admin', label: 'protectedLayout.admin', icon: Shield })}
           </div>
         </nav>

@@ -91,10 +91,12 @@ export async function refreshPartnerKb(): Promise<void> {
   return state.loading;
 }
 
+// Always scheduled: the URL and token can be entered in the panel at any time.
 export function startPartnerKbRefresher(): void {
-  if (!partnerKbConfigured()) return;
-  void refreshPartnerKb();
-  setInterval(() => void refreshPartnerKb(), REFRESH_MS).unref();
+  if (partnerKbConfigured()) void refreshPartnerKb();
+  setInterval(() => {
+    if (partnerKbConfigured()) void refreshPartnerKb();
+  }, REFRESH_MS).unref();
 }
 
 export function partnerKbStatus() {

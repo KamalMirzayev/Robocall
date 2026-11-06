@@ -294,3 +294,12 @@ export const appUserSessions = pgTable('app_user_sessions', {
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Panel-entered integration keys (see src/settings.ts). Created at startup, declared here
+// so `drizzle-kit push` keeps it.
+export const appSettings = pgTable('app_settings', {
+  key: varchar('key', { length: 100 }).primaryKey(),
+  value: text('value').notNull(),
+  updatedBy: varchar('updated_by', { length: 80 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});

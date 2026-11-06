@@ -67,7 +67,8 @@
     "logout": "Çıxış",
     "brandSub": "AI zəng mərkəzi",
     "mainSection": "Panel",
-    "themeToggle": "Tema dəyiş"
+    "themeToggle": "Tema dəyiş",
+    "integrations": "İnteqrasiyalar"
   },
   "authLayout": {
     "loading": "Yüklənir..."
@@ -1020,5 +1021,66 @@
     "noTemplateForSegment": "Bu seqment üçün şablon yoxdur. Təlimat Şablonları səhifəsində bir kliklə əlavə edin.",
     "defaultTemplate": "Aktiv (standart) şablon",
     "chooseSegmentHint": "Zəngin məqsədini seçin, şablon siyahısı ona görə süzülür."
+  },
+  "integrations": {
+    "heading": "İnteqrasiyalar",
+    "subtitle": "API açarları və tokenlər burada saxlanır, kodda və .env faylında deyil. Gizli açarlar yazıldıqdan sonra bir daha göstərilmir.",
+    "loading": "Yüklənir…",
+    "loadFailed": "Ayarlar yüklənmədi",
+    "saveFailed": "Yadda saxlanmadı",
+    "adminOnly": "Bu bölmə yalnız admin üçündür.",
+    "set": "Qoşulub",
+    "fromEnv": ".env-dən",
+    "notSet": "Qoşulmayıb",
+    "replacePlaceholder": "Dəyişmək üçün yenisini yapışdırın",
+    "pastePlaceholder": "Açarı yapışdırın",
+    "toggleVisibility": "Göstər / gizlə",
+    "save": "Yadda saxla",
+    "saving": "Saxlanır…",
+    "clear": "Sil",
+    "saved": "Saxlanıldı",
+    "updated": "Yeniləndi:",
+    "test": "Yoxla",
+    "testing": "Yoxlanır…",
+    "testOk": "Açar işləyir",
+    "testFailed": "Xəta:",
+    "reload": "Yenidən yüklə",
+    "kbOff": "Qoşulmayıb",
+    "kbChunks": "qeyd yüklənib",
+    "groups": {
+      "ai": {
+        "title": "Gemini (AI səs)",
+        "text": "Zənglər, xülasə və analiz bu açarla işləyir. Açarın aid olduğu Google hesabı ödənişi qarşılayır."
+      },
+      "knowledge": {
+        "title": "Bilik bazası",
+        "text": "Bot zəng zamanı model, qiymət və şərtləri buradan oxuyur. Partnyorun webhook ünvanı və token-i."
+      },
+      "whatsapp": {
+        "title": "WhatsApp (Evolution API)",
+        "text": "Botun zəng zamanı müştəriyə WhatsApp mesajı göndərməsi üçün."
+      },
+      "webhook": {
+        "title": "Xarici webhook",
+        "text": "Geri zəng, status və WhatsApp hadisələri bu ünvana göndərilir."
+      },
+      "pks": {
+        "title": "PKS idxalı",
+        "text": "Kampaniyaya PKS bazasından müştəri idxalı üçün."
+      }
+    },
+    "keys": {
+      "GEMINI_API_KEY": "Gemini API açarı",
+      "PARTNER_KB_URL": "Webhook ünvanı",
+      "PARTNER_KB_TOKEN": "Token",
+      "RAG_SEARCH_URL": "Alternativ axtarış ünvanı (RAG)",
+      "EVOLUTION_API_URL": "API ünvanı",
+      "EVOLUTION_API_KEY": "API açarı",
+      "EVOLUTION_INSTANCE_NAME": "Instance adı",
+      "WEBHOOK_URL": "Webhook ünvanı",
+      "WEBHOOK_SECRET": "Webhook sirri",
+      "PKS_DB_QUERY_URL": "Sorğu ünvanı",
+      "PKS_DB_QUERY_API_KEY": "API açarı"
+    }
   }
 }

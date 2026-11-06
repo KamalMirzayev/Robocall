@@ -296,7 +296,7 @@ AUTH_INITIAL_USERNAME=admin
 AUTH_INITIAL_PASSWORD=${AUTH_INITIAL_PASSWORD}
 AUTH_COOKIE_SECURE=true
 
-# Set your Gemini API key here, or configure it later via Telephony -> AI API in the UI
+# Leave empty and enter the Gemini key in the panel (Integrations); a panel value wins over this one
 GEMINI_API_KEY=
 GEMINI_INITIAL_GREETING=on
 GEMINI_VAD_SILENCE_DURATION_MS=180
@@ -304,8 +304,7 @@ GEMINI_VAD_PREFIX_PADDING_MS=120
 GEMINI_PENDING_AUDIO_FRAMES=600
 
 # Partner knowledge base (cars, prices, leasing terms) the AI reads during calls.
-# PARTNER_KB_URL: the partner's webhook URL or origin; PARTNER_KB_TOKEN: the secret token.
-# Leave both empty to turn it off.
+# Normally entered in the panel under Integrations; these are only a fallback.
 PARTNER_KB_URL=
 PARTNER_KB_TOKEN=
 
@@ -492,7 +491,7 @@ EOF
   echo "  Credentials:   ${CREDENTIALS_FILE} (root-only, chmod 600)"
   echo
   echo "Still to do:"
-  echo "  1. Set GEMINI_API_KEY in apps/callbot-backend/.env (or via Telephony -> AI API in the UI), then: systemctl restart robocall-api"
+  echo "  1. Enter the Gemini API key in the panel under Integrations (or set GEMINI_API_KEY in apps/callbot-backend/.env), then: systemctl restart robocall-api"
   echo "  2. Log into the UI (Telephony) and add your real SIP trunk / GSM gateway for this server, then click 'Generate & Reload' to populate /etc/asterisk/custom/*.conf."
   echo "  3. Once you know your trunk/gateway's public IP, open SIP/RTP: ASTERISK_TRUNK_PROVIDER_IP=<ip> then re-run configure_ufw, or add the ufw rules by hand (see script header)."
   echo "  4. Set AudioSocket host/port in Telephony -> AI API in the UI once Asterisk is confirmed working (test with: asterisk -rx 'pjsip show transports')."

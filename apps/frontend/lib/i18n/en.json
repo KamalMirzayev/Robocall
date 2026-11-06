@@ -67,7 +67,8 @@
     "logout": "Logout",
     "brandSub": "AI call center",
     "mainSection": "Panel",
-    "themeToggle": "Toggle theme"
+    "themeToggle": "Toggle theme",
+    "integrations": "Integrations"
   },
   "authLayout": {
     "loading": "Loading..."
@@ -1020,5 +1021,66 @@
     "noTemplateForSegment": "No template for this segment yet. Add one in a click on the Instruction Templates page.",
     "defaultTemplate": "Active (default) template",
     "chooseSegmentHint": "Pick the call's purpose; the template list is filtered to match."
+  },
+  "integrations": {
+    "heading": "Integrations",
+    "subtitle": "API keys and tokens live here, not in the code or the .env file. Secret keys are never shown again once saved.",
+    "loading": "Loading…",
+    "loadFailed": "Could not load settings",
+    "saveFailed": "Could not save",
+    "adminOnly": "Admins only.",
+    "set": "Connected",
+    "fromEnv": "From .env",
+    "notSet": "Not set",
+    "replacePlaceholder": "Paste a new one to replace",
+    "pastePlaceholder": "Paste the key",
+    "toggleVisibility": "Show / hide",
+    "save": "Save",
+    "saving": "Saving…",
+    "clear": "Clear",
+    "saved": "Saved",
+    "updated": "Updated",
+    "test": "Test",
+    "testing": "Testing…",
+    "testOk": "Key works",
+    "testFailed": "Error:",
+    "reload": "Reload",
+    "kbOff": "Not connected",
+    "kbChunks": "entries loaded",
+    "groups": {
+      "ai": {
+        "title": "Gemini (AI voice)",
+        "text": "Calls, summaries and analysis run on this key. The Google account it belongs to pays for usage."
+      },
+      "knowledge": {
+        "title": "Knowledge base",
+        "text": "The bot reads models, prices and terms from here during calls. The partner's webhook URL and token."
+      },
+      "whatsapp": {
+        "title": "WhatsApp (Evolution API)",
+        "text": "Lets the bot send the customer a WhatsApp message during a call."
+      },
+      "webhook": {
+        "title": "External webhook",
+        "text": "Callback, status and WhatsApp events are posted here."
+      },
+      "pks": {
+        "title": "PKS import",
+        "text": "For importing customers from the PKS database into campaigns."
+      }
+    },
+    "keys": {
+      "GEMINI_API_KEY": "Gemini API key",
+      "PARTNER_KB_URL": "Webhook URL",
+      "PARTNER_KB_TOKEN": "Token",
+      "RAG_SEARCH_URL": "Alternative search URL (RAG)",
+      "EVOLUTION_API_URL": "API URL",
+      "EVOLUTION_API_KEY": "API key",
+      "EVOLUTION_INSTANCE_NAME": "Instance name",
+      "WEBHOOK_URL": "Webhook URL",
+      "WEBHOOK_SECRET": "Webhook secret",
+      "PKS_DB_QUERY_URL": "Query URL",
+      "PKS_DB_QUERY_API_KEY": "API key"
+    }
   }
 }

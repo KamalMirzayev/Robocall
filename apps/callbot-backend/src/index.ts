@@ -28,6 +28,8 @@ import { requireApiKey } from './api-auth.js';
 import { baseTemplateExists } from './templates.js';
 import { finalizeFailedJob } from './routes/telephony.js';
 import { partnerKbStatus, startPartnerKbRefresher } from './partner-kb.js';
+import { loadSettings } from './settings.js';
+import { settingsRouter } from './routes/settings.js';
 
 // Stopgap: a single socket error (e.g. EPIPE when a client disconnects
 // mid-stream) must not take down the whole API. Log and keep serving.
@@ -39,6 +41,8 @@ process.on('unhandledRejection', (reason) => {
 });
 
 await ensureAuthSchema();
+// Panel-entered keys (Admin -> Integrations) go into process.env before anything reads them.
+await loadSettings();
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -57,6 +61,7 @@ app.use('/api/ai-tools', requireAuth, aiToolsRouter);
 app.use('/api/instruction-templates', requireAuth, instructionTemplatesRouter);
 app.use('/api/api-clients', requireAuth, apiClientsRouter);
 app.use('/api/dynamic-context-codes', requireAuth, dynamicContextCodesRouter);
+app.use('/api/settings', requireAuth, settingsRouter);
 app.use('/api/external/v1', requireApiKey, externalCallsRouter);
 app.get('/health', (_req, res) => res.json({ ok: true, knowledgeBase: partnerKbStatus() }));
 app.get('/', (_req, res) => res.json({
