@@ -138,15 +138,19 @@ export default function CustomersPage() {
         <h1 className="text-3xl font-bold text-white">{t('customers.heading')}</h1>
         <button
           onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium"
+          className="px-4 py-2 bg-blue-600 text-[#fff] rounded hover:bg-blue-700 transition font-medium"
         >
           + {t('customers.addCustomer')}
         </button>
       </div>
 
-      <div className="mb-4 rounded-lg border border-red-800/60 bg-red-950/20 p-4">
-        <h2 className="text-sm font-semibold text-red-300 mb-3">{t('customers.batchDeleteHeading')}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      {/* Destructive bulk tool: folded away by default so it doesn't lead the page. */}
+      <details className="mb-4 rounded-lg border border-red-800/60 bg-red-950/20 p-4 group">
+        <summary className="cursor-pointer list-none flex items-center justify-between text-sm font-semibold text-red-300">
+          {t('customers.batchDeleteHeading')}
+          <span className="text-xs text-gray-500 transition group-open:rotate-180">▾</span>
+        </summary>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
           <div>
             <label className="block text-xs text-gray-400 mb-1">{t('customers.importedDaysLabel')}</label>
             <input
@@ -180,7 +184,7 @@ export default function CustomersPage() {
           <button
             onClick={deleteCustomersByFilters}
             disabled={batchDeleting}
-            className="px-4 py-2 rounded bg-red-700 hover:bg-red-800 text-white disabled:opacity-60"
+            className="px-4 py-2 rounded bg-red-700 hover:bg-red-800 text-[#fff] disabled:opacity-60"
           >
             {batchDeleting ? t('customers.deleting') : t('customers.deleteByFiltersButton')}
           </button>
@@ -197,7 +201,7 @@ export default function CustomersPage() {
             {t('customers.clearFiltersButton')}
           </button>
         </div>
-      </div>
+      </details>
 
       {actionError && (
         <div className="mb-4 rounded border border-red-700 bg-red-950/40 px-3 py-2 text-red-300 text-sm">

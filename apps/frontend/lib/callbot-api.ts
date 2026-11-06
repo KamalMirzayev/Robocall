@@ -578,6 +578,8 @@ export const callbotApi = {
     trunkId?: string;
     trunkIds?: string[];
     baseTemplateId?: string;
+    segment?: string | null;
+    segmentParams?: Record<string, string> | null;
   }) {
     try {
       const response = await apiClient.post('/callbot/campaigns', payload);
@@ -607,6 +609,8 @@ export const callbotApi = {
       trunkId?: string;
       trunkIds?: string[];
       baseTemplateId?: string;
+      segment?: string | null;
+      segmentParams?: Record<string, string> | null;
     }
   ) {
     try {

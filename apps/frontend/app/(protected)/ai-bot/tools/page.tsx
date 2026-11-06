@@ -147,7 +147,7 @@ export default function AIBotToolsPage() {
                   </div>
                   <button
                     onClick={() => setSelectedTool(tool.name)}
-                    className={`px-3 py-1.5 rounded text-sm ${selectedTool === tool.name ? 'bg-blue-600 text-white' : 'bg-slate-700 text-gray-200 hover:bg-slate-600'}`}
+                    className={`px-3 py-1.5 rounded text-sm ${selectedTool === tool.name ? 'bg-blue-600 text-[#fff]' : 'bg-slate-700 text-gray-200 hover:bg-slate-600'}`}
                   >
                     {t('aiBotTools.selectButton')}
                   </button>
@@ -207,7 +207,7 @@ export default function AIBotToolsPage() {
             <button
               onClick={handleRunTest}
               disabled={running || !isAdmin}
-              className="w-full px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-white disabled:opacity-60"
+              className="w-full px-4 py-2 rounded bg-emerald-600 hover:bg-emerald-700 text-[#fff] disabled:opacity-60"
             >
               {running ? t('aiBotTools.running') : t('aiBotTools.runTest')}
             </button>

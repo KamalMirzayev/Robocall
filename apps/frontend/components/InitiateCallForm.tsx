@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import apiClient from '@/lib/api-client';
+import callbotApi from '@/lib/callbot-api';
 import { useAgents } from '@/hooks/useCallbot';
 import { useTelephony } from '@/hooks/useTelephony';
 import { useLanguage } from '@/lib/language';
@@ -34,14 +35,27 @@ export default function InitiateCallForm({ onSuccess }: InitiateCallFormProps) {
     setSuccess(null);
 
     try {
-      if (!formData.customerId || !formData.agentId) {
-        setError(t('initiateCallForm.customerAgentRequired'));
+      let customerId = formData.customerId;
+      // A name typed into the search box but not picked from its list leaves no customer
+      // selected; fall back to finding the customer by the phone number instead.
+      const phoneDigits = (formData.phone || defaultPhone).replace(/\D/g, '');
+      if (!customerId && phoneDigits.length >= 9) {
+        const tail = phoneDigits.slice(-9);
+        const found = await callbotApi.getCustomersPage({ page: 1, pageSize: 10, search: tail });
+        const match = found.data.find((c) =>
+          [c.phone, c.mobilePhone].some((p) => String(p || '').replace(/\D/g, '').endsWith(tail))
+        );
+        if (match) customerId = String(match.id);
+      }
+
+      if (!customerId || !formData.agentId) {
+        setError(t(customerId ? 'initiateCallForm.customerAgentRequired' : 'initiateCallForm.pickCustomerFromList'));
         setLoading(false);
         return;
       }
 
       const response = await apiClient.post('/callbot/telephony/jobs', {
-        customerId: Number(formData.customerId),
+        customerId: Number(customerId),
         agentId: Number(formData.agentId),
         phone: formData.phone,
         trunkId: formData.trunkId || undefined,
@@ -191,7 +205,7 @@ export default function InitiateCallForm({ onSuccess }: InitiateCallFormProps) {
       <button
         type="submit"
         disabled={loading}
-        className="w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
+        className="w-full px-6 py-3 bg-blue-600 text-[#fff] rounded-lg hover:bg-blue-700 transition disabled:opacity-50 disabled:cursor-not-allowed font-medium"
       >
         {loading ? t('initiateCallForm.initiatingCall') : t('initiateCallForm.initiateCall')}
       </button>

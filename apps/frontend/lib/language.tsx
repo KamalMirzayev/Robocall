@@ -34,7 +34,7 @@ function lookup(dict: Record<string, unknown>, key: string): string | undefined 
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>('en');
+  const [locale, setLocaleState] = useState<Locale>('az');
 
   // Restore saved language preference on mount
   useEffect(() => {

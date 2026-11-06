@@ -3,8 +3,8 @@
     "loading": "Yüklənir..."
   },
   "login": {
-    "adminPortal": "Admin Paneli",
-    "title": "Robocall",
+    "adminPortal": "Əməkdaş girişi",
+    "title": "AI zəng paneli",
     "subtitle": "Səsli əməliyyatları və telefoniyanı idarə etmək üçün daxil olun.",
     "timedOut": "Fəaliyyətsizliyə görə sistemdən çıxarıldınız. Zəhmət olmasa yenidən daxil olun.",
     "username": "İstifadəçi adı",
@@ -13,7 +13,13 @@
     "passwordPlaceholder": "Şifrəni daxil edin",
     "loggingIn": "Daxil olunur...",
     "loginButton": "Daxil ol",
-    "loginFailed": "Daxil olma uğursuz oldu"
+    "loginFailed": "Daxil olma uğursuz oldu",
+    "engineEyebrow": "Arzoom AI zəng",
+    "engineTitle": "Kampaniyadan satışa qədər zəngləri süni intellekt aparır",
+    "engineText": "Müştəri məmnuniyyəti sorğuları, ödəniş xatırlatmaları, telesales və marketinq zəngləri bir paneldə.",
+    "chipCalls": "kampaniyalar",
+    "chipLang": "Azərbaycan dilində",
+    "chipRec": "yazı və transkript"
   },
   "home": {
     "loading": "Yüklənir..."
@@ -37,7 +43,7 @@
   "protectedLayout": {
     "loading": "Yüklənir...",
     "openMenu": "Menyunu aç",
-    "appName": "Robocall",
+    "appName": "Arzoom AI",
     "closeMenu": "Menyunu bağla",
     "role": "Rol",
     "navCalls": "Zənglər",
@@ -58,7 +64,11 @@
     "dynamicContextCodes": "Dinamik Kontekst Kodları",
     "aiBotTools": "Alətlər",
     "admin": "Admin",
-    "logout": "Çıxış"
+    "logout": "Çıxış",
+    "brandSub": "AI zəng mərkəzi",
+    "mainSection": "Panel",
+    "themeToggle": "Tema dəyiş",
+    "integrations": "İnteqrasiyalar"
   },
   "authLayout": {
     "loading": "Yüklənir..."
@@ -318,11 +328,11 @@
     "retryIntervalHours": "Təkrar Cəhd Intervalı (saat)",
     "settingsHeading": "Kampaniya Parametrləri",
     "paymentPriorityTitle": "Ən yüksək aylıq ödənişdən zəng etməyə başla",
-    "paymentPriorityDesc": "PKS müştəriləri idxal edildikdən sonra, zənglər ən yüksək `odenis_ayliq` dəyərinə görə prioritetləşdirilsin.",
+    "paymentPriorityDesc": "Zənglər ən böyük aylıq ödənişi olan müştərilərdən başlasın (PKS idxalı üçün).",
     "skipNextDayTitle": "Uğurlu zəngdən sonra növbəti gün zəng etmə",
     "skipNextDayDesc": "Dünənki zəng uğurlu olubsa, müştərini sabahkı növbəyə salma.",
     "dailyRefreshTitle": "Müştəri məlumatlarını hər gün yenilə",
-    "dailyRefreshDesc": "Hər səhər saat 08:30-da bu kampaniyada gözləyən müştərilərin borc/ödəniş məlumatları PKS-dən yenilənir. Yalnız PKS idxalı ilə yaradılmış kampaniyalar üçün işləyir.",
+    "dailyRefreshDesc": "Hər səhər 08:30-da gözləyən müştərilərin borc və ödəniş məlumatları PKS-dən yenilənsin. Yalnız PKS idxalı ilə yaradılmış kampaniyalarda işləyir.",
     "runWeekdays": "İcra Günləri",
     "selectWeekday": "Ən azı bir gün seçin.",
     "dailyStartTime": "Gündəlik Başlanğıc Vaxtı",
@@ -561,7 +571,8 @@
     "active": "Aktiv",
     "inactive": "Qeyri-aktiv",
     "initiatingCall": "Zəng başladılır...",
-    "initiateCall": "Zəngi başlat"
+    "initiateCall": "Zəngi başlat",
+    "pickCustomerFromList": "Müştərini açılan siyahıdan seçin (və ya bazada olan telefon nömrəsini yazın) və agent seçin."
   },
   "customerForm": {
     "heading": "Yeni Müştəri Əlavə Et",
@@ -996,5 +1007,84 @@
     "trunkAutoSelected": "Avtomatik seçilib (trunk təyin edilməyib)",
     "pricingInfo": "Hibrid plan:",
     "pricingDetail": "/ay bazalıq + 0.20 /dəqiqə cavablanmış zənglər üçün. Yalnız uğurlu zənglər (müştəri cavab verdi) ödənişlidir — məşğul, cavabsız və səhv nömrələr pulsuzdur."
+  },
+  "segments": {
+    "heading": "Seqmentlər",
+    "subtitle": "Hər istifadə ssenarisi üçün hazır təlimat şablonu. Bir kliklə əlavə edin, sonra mətni redaktə edin.",
+    "addTemplate": "Şablonu əlavə et",
+    "templatesReady": "şablon",
+    "addAnother": "Yenisini yarat",
+    "adding": "Əlavə olunur…",
+    "added": "Şablon əlavə olundu. Aşağıdakı siyahıda redaktə edə bilərsiniz.",
+    "segment": "Seqment",
+    "allSegments": "Bütün seqmentlər",
+    "noSegment": "Seqmentsiz",
+    "noTemplateForSegment": "Bu seqment üçün şablon yoxdur. Təlimat Şablonları səhifəsində bir kliklə əlavə edin.",
+    "defaultTemplate": "Aktiv (standart) şablon",
+    "chooseSegmentHint": "Zəngin məqsədini seçin: şablon siyahısı süzülür, parametrlər ona uyğun qurulur.",
+    "presetApplied": "Seqmentə uyğun parametrlər tətbiq olundu (cəhd sayı, interval, günlər və saatlar). İstəsəniz dəyişin.",
+    "paramsHeading": "Seqment parametrləri",
+    "paramsHint": "Bot zəngdə bu məlumatdan istifadə edəcək. Boş sahələr nəzərə alınmır."
+  },
+  "integrations": {
+    "heading": "İnteqrasiyalar",
+    "subtitle": "API açarları və tokenlər burada saxlanır, kodda və .env faylında deyil. Gizli açarlar yazıldıqdan sonra bir daha göstərilmir.",
+    "loading": "Yüklənir…",
+    "loadFailed": "Ayarlar yüklənmədi",
+    "saveFailed": "Yadda saxlanmadı",
+    "adminOnly": "Bu bölmə yalnız admin üçündür.",
+    "set": "Qoşulub",
+    "fromEnv": ".env-dən",
+    "notSet": "Qoşulmayıb",
+    "replacePlaceholder": "Dəyişmək üçün yenisini yapışdırın",
+    "pastePlaceholder": "Açarı yapışdırın",
+    "toggleVisibility": "Göstər / gizlə",
+    "save": "Yadda saxla",
+    "saving": "Saxlanır…",
+    "clear": "Sil",
+    "saved": "Saxlanıldı",
+    "updated": "Yeniləndi:",
+    "test": "Yoxla",
+    "testing": "Yoxlanır…",
+    "testOk": "Açar işləyir",
+    "testFailed": "Xəta:",
+    "reload": "Yenidən yüklə",
+    "kbOff": "Qoşulmayıb",
+    "kbChunks": "qeyd yüklənib",
+    "groups": {
+      "ai": {
+        "title": "Gemini (AI səs)",
+        "text": "Zənglər, xülasə və analiz bu açarla işləyir. Açarın aid olduğu Google hesabı ödənişi qarşılayır."
+      },
+      "knowledge": {
+        "title": "Bilik bazası",
+        "text": "Bot zəng zamanı model, qiymət və şərtləri buradan oxuyur. Partnyorun webhook ünvanı və token-i."
+      },
+      "whatsapp": {
+        "title": "WhatsApp (Evolution API)",
+        "text": "Botun zəng zamanı müştəriyə WhatsApp mesajı göndərməsi üçün."
+      },
+      "webhook": {
+        "title": "Xarici webhook",
+        "text": "Geri zəng, status və WhatsApp hadisələri bu ünvana göndərilir."
+      },
+      "pks": {
+        "title": "PKS idxalı",
+        "text": "Kampaniyaya PKS bazasından müştəri idxalı üçün."
+      }
+    },
+    "keys": {
+      "GEMINI_API_KEY": "Gemini API açarı",
+      "PARTNER_KB_URL": "Webhook ünvanı",
+      "PARTNER_KB_TOKEN": "Token",
+      "RAG_SEARCH_URL": "Alternativ axtarış ünvanı (RAG)",
+      "EVOLUTION_API_URL": "API ünvanı",
+      "EVOLUTION_API_KEY": "API açarı",
+      "EVOLUTION_INSTANCE_NAME": "Instance adı",
+      "WEBHOOK_URL": "Webhook ünvanı",
+      "WEBHOOK_SECRET": "Webhook sirri",
+      "PKS_DB_QUERY_URL": "Sorğu ünvanı",
+      "PKS_DB_QUERY_API_KEY": "API açarı"
+    }
   }
 }

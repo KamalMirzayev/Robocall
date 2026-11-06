@@ -14,6 +14,7 @@ import { recordLiveEstimatedUsage } from '../ai-usage.js';
 import { aiToolDeclarations, executeAiTool, isAiToolName } from '../ai-tools/index.js';
 import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, loadToneInstructionById } from '../templates.js';
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
+import { partnerKbInstruction } from '../partner-kb.js';
 
 type Customer = InferSelectModel<typeof customers>;
 type Agent = InferSelectModel<typeof agents>;
@@ -201,8 +202,14 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
     ? await loadBaseInstructionById(baseTemplateId)
     : await loadBaseInstruction();
   
+  // A template without the {DYNAMIC_CONTEXT} placeholder (e.g. the global default) would
+  // drop the campaign's parameters, so they are appended instead.
+  const withContext = dynamicContext && !baseInstruction.includes('{DYNAMIC_CONTEXT}')
+    ? `${baseInstruction}\n\nBu kampaniya üzrə məlumat:\n${dynamicContext}`
+    : baseInstruction;
+
   // Replace agent-level variables
-  let instruction = baseInstruction
+  let instruction = withContext
     .replace('{AGENT_NAME}', agent.name)
     .replace('{COMPANY_NAME}', agent.companyName ?? 'şirkətin')
     .replace('{TONE_INSTRUCTION}', toneInstruction)
@@ -239,11 +246,13 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
     `- Ad: ${customer.name}`,
     `- Soyad: ${customer.surname}`,
   ];
-  parts.push(`- Gecikmə günü: ${customer.overdueDays}`);
-  parts.push(`- Borc məbləği: ${customer.debtAmount} AZN`);
+  // Debt lines only for customers that actually carry debt data, so sales or survey
+  // segments don't get a "0 AZN debt" line that pulls the bot towards collection talk.
+  if (Number(customer.overdueDays) > 0) parts.push(`- Gecikmə günü: ${customer.overdueDays}`);
+  if (Number(customer.debtAmount) > 0) parts.push(`- Borc məbləği: ${customer.debtAmount} AZN`);
   if (customer.phone) parts.push(`- Telefon: ${customer.phone}`);
   
-  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${buildSummaryCategoryGuide()}`;
+  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${buildSummaryCategoryGuide()}`;
 }
 
 function buildInitialGreetingPrompt(customer: Customer) {

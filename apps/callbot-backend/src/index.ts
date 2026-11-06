@@ -27,6 +27,10 @@ import { dynamicContextCodesRouter } from './routes/dynamic-context-codes.js';
 import { requireApiKey } from './api-auth.js';
 import { baseTemplateExists } from './templates.js';
 import { finalizeFailedJob } from './routes/telephony.js';
+import { partnerKbStatus, startPartnerKbRefresher } from './partner-kb.js';
+import { loadSettings } from './settings.js';
+import { settingsRouter } from './routes/settings.js';
+import { ensureCampaignSegmentSchema, segmentContext } from './campaign-segments.js';
 
 // Stopgap: a single socket error (e.g. EPIPE when a client disconnects
 // mid-stream) must not take down the whole API. Log and keep serving.
@@ -38,6 +42,9 @@ process.on('unhandledRejection', (reason) => {
 });
 
 await ensureAuthSchema();
+// Panel-entered keys (Admin -> Integrations) go into process.env before anything reads them.
+await loadSettings();
+await ensureCampaignSegmentSchema();
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -56,8 +63,9 @@ app.use('/api/ai-tools', requireAuth, aiToolsRouter);
 app.use('/api/instruction-templates', requireAuth, instructionTemplatesRouter);
 app.use('/api/api-clients', requireAuth, apiClientsRouter);
 app.use('/api/dynamic-context-codes', requireAuth, dynamicContextCodesRouter);
+app.use('/api/settings', requireAuth, settingsRouter);
 app.use('/api/external/v1', requireApiKey, externalCallsRouter);
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) => res.json({ ok: true, knowledgeBase: partnerKbStatus() }));
 app.get('/', (_req, res) => res.json({
   name: 'Callbot Backend API',
   version: '1.0.0',
@@ -166,7 +174,7 @@ wss.on('connection', async (ws, req) => {
     // Look up the campaign linked to this customer+agent to get its base template.
     // campaign_calls records which campaign a customer belongs to; campaigns holds the template ID.
     const campaignRows = await db.execute(sql`
-      SELECT c.base_template_id
+      SELECT c.base_template_id, c.segment, c.segment_params
       FROM campaigns c
       JOIN campaign_calls cc ON cc.campaign_id = c.id
       WHERE cc.customer_id = ${customerId}
@@ -179,6 +187,10 @@ wss.on('connection', async (ws, req) => {
       ? campaignRows[0]
       : (campaignRows as { rows?: Array<{ base_template_id?: string }> }).rows?.[0];
     baseTemplateId = (campaignRow as { base_template_id?: string } | undefined)?.base_template_id ?? null;
+    // The campaign's segment parameters (offer, application result, survey setup) become
+    // the call's {DYNAMIC_CONTEXT}.
+    const row = campaignRow as { segment?: string | null; segment_params?: unknown } | undefined;
+    dynamicContext = segmentContext(row?.segment, row?.segment_params);
   }
 
   handleGeminiProxy(ws, customer, agent, jobId, baseTemplateId, dynamicContext).catch((err) => {
@@ -207,4 +219,5 @@ server.listen(PORT, () => {
   console.log(`Backend on port ${PORT}`);
   startCampaignScheduler();
   startPksImportJobProcessor();
+  startPartnerKbRefresher();
 });

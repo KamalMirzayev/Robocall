@@ -1,0 +1,106 @@
+import { sql } from 'drizzle-orm';
+import { db } from './db/index.js';
+
+// Per-segment campaign parameters (sales offer, application result, survey setup...).
+// The admin fills them in on the campaign form; at call time they are rendered into
+// {DYNAMIC_CONTEXT} so the bot knows what this campaign is about. Keys and select options
+// mirror apps/frontend/lib/segments.ts (SEGMENT_FIELDS); labels here are the prompt wording.
+
+interface FieldDef {
+  key: string;
+  label: string;
+  options?: Record<string, string>;
+}
+
+const SEGMENT_FIELDS: Record<string, FieldDef[]> = {
+  sales: [
+    { key: 'offer', label: 'Təklif' },
+    { key: 'models', label: 'Marka və modellər' },
+    { key: 'benefit', label: 'Əsas üstünlük' },
+    { key: 'deadline', label: 'Təklifin son tarixi' },
+    {
+      key: 'nextStep',
+      label: 'Maraq olarsa növbəti addım',
+      options: {
+        application: 'Müraciəti qeydə al',
+        showroom: 'Salona dəvət et',
+        test_drive: 'Test-sürüşə yazdır',
+        callback: 'Menecerin geri zəngini təklif et',
+      },
+    },
+    { key: 'location', label: 'Salon / filial ünvanı' },
+  ],
+  application_status: [
+    {
+      key: 'result',
+      label: 'Müraciətin nəticəsi',
+      options: {
+        approved: 'Təsdiq olunub',
+        conditional: 'Şərtlə təsdiq olunub',
+        needs_documents: 'Əlavə sənəd lazımdır',
+        in_review: 'Hələ baxılır',
+        rejected: 'İmtina olunub',
+      },
+    },
+    { key: 'documents', label: 'Tələb olunan sənədlər' },
+    { key: 'nextStep', label: 'Növbəti addım' },
+    { key: 'location', label: 'Filial ünvanı və iş saatları' },
+    { key: 'deadline', label: 'Təklif bu tarixədək qüvvədədir' },
+  ],
+  satisfaction: [
+    {
+      key: 'serviceType',
+      label: 'Sorğu bu xidmət haqqındadır',
+      options: {
+        purchase: 'Avtomobil alışı',
+        service: 'Texniki servis',
+        leasing: 'Lizinq / kredit rəsmiləşdirilməsi',
+        test_drive: 'Test-sürüş',
+        call_center: 'Zəng mərkəzi',
+      },
+    },
+    { key: 'scale', label: 'Qiymət şkalası', options: { '1-5': '1-dən 5-ə qədər', '0-10': '0-dan 10-a qədər' } },
+    { key: 'lowScore', label: 'Bu baldan aşağı qiymət şikayət sayılır' },
+    { key: 'questions', label: 'Əlavə suallar' },
+  ],
+};
+
+const MAX_VALUE_LENGTH = 1000;
+
+export function isCampaignSegment(segment: unknown): segment is string {
+  return typeof segment === 'string' && /^[a-z_]{1,40}$/.test(segment);
+}
+
+// Keeps only the known fields of the segment, as trimmed strings.
+export function sanitizeSegmentParams(segment: string | null, raw: unknown): Record<string, string> | null {
+  const fields = segment ? SEGMENT_FIELDS[segment] : undefined;
+  if (!fields || !raw || typeof raw !== 'object') return null;
+  const out: Record<string, string> = {};
+  for (const f of fields) {
+    const v = (raw as Record<string, unknown>)[f.key];
+    if (v === undefined || v === null) continue;
+    const s = String(v).trim().slice(0, MAX_VALUE_LENGTH);
+    if (!s) continue;
+    if (f.options && !(s in f.options)) continue;
+    out[f.key] = s;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+export function segmentContext(segment: string | null | undefined, params: unknown): string | null {
+  const fields = segment ? SEGMENT_FIELDS[segment] : undefined;
+  if (!fields || !params || typeof params !== 'object') return null;
+  const lines: string[] = [];
+  for (const f of fields) {
+    const v = (params as Record<string, unknown>)[f.key];
+    if (v === undefined || v === null || String(v).trim() === '') continue;
+    const s = String(v).trim();
+    lines.push(`- ${f.label}: ${f.options?.[s] ?? s}`);
+  }
+  return lines.length ? lines.join('\n') : null;
+}
+
+export async function ensureCampaignSegmentSchema(): Promise<void> {
+  await db.execute(sql`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS segment varchar(40)`);
+  await db.execute(sql`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS segment_params jsonb`);
+}

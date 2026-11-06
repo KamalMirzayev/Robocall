@@ -5,6 +5,7 @@ import { callbotApi, type InstructionTemplate } from '@/lib/callbot-api';
 import { Agent } from '@/types/callbot';
 import { useSIPTrunks } from '@/hooks/useTelephony';
 import { useLanguage } from '@/lib/language';
+import { SEGMENTS, SEGMENT_TONE_CLASSES, SEGMENT_CAMPAIGN_PRESETS, SEGMENT_FIELDS, getSegment, type CampaignFlag, type SegmentKey } from '@/lib/segments';
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed' | 'cancelled';
 
@@ -28,6 +29,8 @@ export interface CampaignInput {
   baseTemplateId?: string;
   runStartDate?: string;
   runEndDate?: string;
+  segment?: string | null;
+  segmentParams?: Record<string, string> | null;
 }
 
 interface CampaignFormProps {
@@ -63,13 +66,15 @@ const weekdayOptions: Array<{ key: CampaignWeekday; label: string }> = [
 ];
 
 export function CampaignForm({ initialValue, submitting = false, onSubmit, onCancel }: CampaignFormProps) {
-  const { t } = useLanguage();
+  const { t, locale } = useLanguage();
   const [form, setForm] = useState<CampaignInput>(initialValue ?? defaultValue);
   const [agents, setAgents] = useState<Agent[]>([]);
   const [loading, setLoading] = useState(true);
   const { trunks, loading: trunksLoading } = useSIPTrunks();
   const [baseTemplates, setBaseTemplates] = useState<InstructionTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
+  const [segmentKey, setSegmentKey] = useState<string>(initialValue?.segment || '');
+  const [presetApplied, setPresetApplied] = useState(false);
   const [trunkDropdownOpen, setTrunkDropdownOpen] = useState(false);
   const trunkDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -106,7 +111,18 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
     async function loadTemplates() {
       try {
         const templates = await callbotApi.getInstructionTemplates();
-        setBaseTemplates(templates.filter((t) => t.template_type === 'base' && t.is_active));
+        // Segment templates are picked by id per campaign, so they're offered even when
+        // they aren't the single globally-active base template.
+        const usable = templates.filter(
+          (tpl) =>
+            tpl.template_type === 'base' &&
+            (tpl.is_active || Boolean(getSegment(tpl.customer_category)) || tpl.id === initialValue?.baseTemplateId)
+        );
+        setBaseTemplates(usable);
+        const current = usable.find((tpl) => tpl.id === initialValue?.baseTemplateId);
+        if (!initialValue?.segment && current && getSegment(current.customer_category)) {
+          setSegmentKey(current.customer_category as string);
+        }
       } catch (error) {
         console.error('Failed to load base templates:', error);
       } finally {
@@ -129,6 +145,13 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
     });
   };
 
+  const segmentFields = (segmentKey && SEGMENT_FIELDS[segmentKey as SegmentKey]) || [];
+
+  // With a segment picked, only the settings that make sense for it are shown.
+  const segmentFlags = segmentKey ? SEGMENT_CAMPAIGN_PRESETS[segmentKey as SegmentKey]?.flags : undefined;
+  const showFlag = (flag: CampaignFlag) => !segmentFlags || segmentFlags.includes(flag) || Boolean(form[flag]);
+  const anyFlagShown = (['orderByMonthlyPaymentDesc', 'skipNextDayAfterSuccess', 'dailyCustomerRefresh'] as CampaignFlag[]).some(showFlag);
+
   const isDateRangeValid = !form.runStartDate || !form.runEndDate || form.runStartDate <= form.runEndDate;
   const isScheduleValid = form.runWeekdays.length > 0 && form.runWindowStart < form.runWindowEnd && isDateRangeValid;
 
@@ -138,7 +161,7 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
       onSubmit={(e) => {
         e.preventDefault();
         if (!isScheduleValid) return;
-        onSubmit(form);
+        onSubmit({ ...form, segment: segmentKey || '', segmentParams: segmentKey ? form.segmentParams ?? {} : null });
       }}
     >
       <div>
@@ -253,6 +276,61 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
       </div>
 
       <div>
+        <label className="block text-sm text-gray-300 mb-1">{t('segments.segment')}</label>
+        <p className="text-xs text-gray-500 mb-2">{t('segments.chooseSegmentHint')}</p>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSegmentKey('');
+              setPresetApplied(false);
+              setForm((prev) => ({ ...prev, segment: null, segmentParams: null }));
+            }}
+            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition ${
+              segmentKey === '' ? 'border-blue-500 bg-blue-50 text-blue-300' : 'border-slate-600 text-gray-300 hover:bg-slate-700'
+            }`}
+          >
+            {t('segments.allSegments')}
+          </button>
+          {SEGMENTS.map((segment) => {
+            const selected = segmentKey === segment.key;
+            return (
+              <button
+                key={segment.key}
+                type="button"
+                onClick={() => {
+                  setSegmentKey(segment.key);
+                  const first = baseTemplates.find((tpl) => tpl.customer_category === segment.key);
+                  const preset = SEGMENT_CAMPAIGN_PRESETS[segment.key];
+                  setForm((prev) => ({
+                    ...prev,
+                    segment: segment.key,
+                    segmentParams: prev.segment === segment.key ? prev.segmentParams : {},
+                    baseTemplateId: first?.id,
+                    maxAttempts: preset.maxAttempts,
+                    retryIntervalHours: preset.retryIntervalHours,
+                    runWeekdays: [...preset.runWeekdays],
+                    runWindowStart: preset.runWindowStart,
+                    runWindowEnd: preset.runWindowEnd,
+                    orderByMonthlyPaymentDesc: Boolean(preset.defaults.orderByMonthlyPaymentDesc),
+                    skipNextDayAfterSuccess: Boolean(preset.defaults.skipNextDayAfterSuccess),
+                    dailyCustomerRefresh: Boolean(preset.defaults.dailyCustomerRefresh),
+                  }));
+                  setPresetApplied(true);
+                }}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition ${
+                  selected ? 'border-blue-500 bg-blue-50 text-blue-300' : 'border-slate-600 text-gray-300 hover:bg-slate-700'
+                }`}
+              >
+                <span className={`h-2 w-2 rounded-full ${SEGMENT_TONE_CLASSES[segment.tone].dot}`} />
+                {segment.title[locale]}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
         <label className="block text-sm text-gray-300 mb-1">{t('campaignForm.baseTemplate')}</label>
         <select
           value={form.baseTemplateId || ''}
@@ -261,13 +339,68 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
           disabled={loadingTemplates}
         >
           <option value="">{t('campaignForm.defaultBaseTemplate')}</option>
-          {baseTemplates.map((template) => (
-            <option key={template.id} value={template.id}>
-              {template.name}
-            </option>
-          ))}
+          {baseTemplates
+            .filter((template) => !segmentKey || template.customer_category === segmentKey)
+            .map((template) => {
+              const segment = getSegment(template.customer_category);
+              return (
+                <option key={template.id} value={template.id}>
+                  {template.name}
+                  {segment && !segmentKey ? ` · ${segment.title[locale]}` : ''}
+                </option>
+              );
+            })}
         </select>
+        {presetApplied && segmentKey && (
+          <p className="text-xs text-emerald-300 mt-1.5">{t('segments.presetApplied')}</p>
+        )}
+        {segmentKey && !loadingTemplates && !baseTemplates.some((tpl) => tpl.customer_category === segmentKey) && (
+          <p className="text-xs text-amber-300 mt-1.5">{t('segments.noTemplateForSegment')}</p>
+        )}
       </div>
+
+      {segmentFields.length > 0 && (
+        <div className="space-y-3 border border-slate-700 rounded-lg p-3 bg-slate-900/30">
+          <div>
+            <p className="text-sm text-gray-300">
+              {t('segments.paramsHeading')} · {getSegment(segmentKey)?.title[locale]}
+            </p>
+            <p className="text-xs text-gray-500 mt-1">{t('segments.paramsHint')}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {segmentFields.map((field) => {
+              const value = form.segmentParams?.[field.key] ?? '';
+              const set = (next: string) =>
+                setForm((prev) => ({ ...prev, segmentParams: { ...(prev.segmentParams ?? {}), [field.key]: next } }));
+              const cls = 'w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white';
+              return (
+                <div key={field.key} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+                  <label className="block text-sm text-gray-300 mb-1">{field.label[locale]}</label>
+                  {field.type === 'textarea' ? (
+                    <textarea value={value} onChange={(e) => set(e.target.value)} placeholder={field.placeholder?.[locale]} className={`${cls} min-h-20`} />
+                  ) : field.type === 'select' ? (
+                    <select value={value} onChange={(e) => set(e.target.value)} className={cls}>
+                      <option value="">—</option>
+                      {field.options?.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label[locale]}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type={field.type}
+                      min={field.type === 'number' ? 0 : undefined}
+                      value={value}
+                      onChange={(e) => set(e.target.value)}
+                      placeholder={field.placeholder?.[locale]}
+                      className={cls}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div>
@@ -308,9 +441,11 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
         </div>
       </div>
 
+      {anyFlagShown && (
       <div className="space-y-3 border border-slate-700 rounded-lg p-3 bg-slate-900/30">
         <p className="text-sm text-gray-300">{t('campaignForm.settingsHeading')}</p>
 
+        {showFlag('orderByMonthlyPaymentDesc') && (
         <label className="flex items-start gap-3 rounded border border-slate-700 bg-slate-900/30 p-3 cursor-pointer">
           <input
             type="checkbox"
@@ -325,7 +460,9 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
             </span>
           </span>
         </label>
+        )}
 
+        {showFlag('skipNextDayAfterSuccess') && (
         <label className="flex items-start gap-3 rounded border border-slate-700 bg-slate-900/30 p-3 cursor-pointer">
           <input
             type="checkbox"
@@ -340,7 +477,9 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
             </span>
           </span>
         </label>
+        )}
 
+        {showFlag('dailyCustomerRefresh') && (
         <label className="flex items-start gap-3 rounded border border-slate-700 bg-slate-900/30 p-3 cursor-pointer">
           <input
             type="checkbox"
@@ -355,7 +494,9 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
             </span>
           </span>
         </label>
+        )}
       </div>
+      )}
 
       <div className="space-y-3 border border-slate-700 rounded-lg p-3 bg-slate-900/30">
         <div>
@@ -444,7 +585,7 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
         <button
           type="submit"
           disabled={submitting || !isScheduleValid}
-          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-60"
+          className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-[#fff] disabled:opacity-60"
         >
           {submitting ? t('campaignForm.saving') : t('campaignForm.save')}
         </button>

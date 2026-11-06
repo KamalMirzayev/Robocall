@@ -85,7 +85,7 @@ export default function RecordingsPage() {
                       ) : (
                         <button
                           onClick={() => setActiveRecordingId(recording.id)}
-                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium transition"
+                          className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-[#fff] rounded text-xs font-medium transition"
                         >
                           {t('recordings.play')}
                         </button>

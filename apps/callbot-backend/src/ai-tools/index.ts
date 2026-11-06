@@ -1,4 +1,5 @@
 import { Type } from '@google/genai';
+import { partnerKbConfigured, searchPartnerKb } from '../partner-kb.js';
 
 export type ToolName =
   | 'request_callback'
@@ -219,6 +220,11 @@ async function searchKnowledgeBaseTool(args: Record<string, unknown>) {
 
   if (!query) throw new Error('query is required');
 
+  // The partner knowledge base, when configured, is the source for products, prices and terms.
+  if (partnerKbConfigured()) {
+    return searchPartnerKb(query, { brand: cleanText(args.brand) || undefined, limit });
+  }
+
   const ragSearchUrl = cleanText(process.env.RAG_SEARCH_URL);
   if (!ragSearchUrl) {
     return { results: [], message: 'RAG_SEARCH_URL not configured' };
@@ -322,11 +328,13 @@ export const aiToolDeclarations = [
   },
   {
     name: 'search_knowledge_base',
-    description: 'Search knowledge base using semantic search backend.',
+    description:
+      'Search the company knowledge base: car brands, models, trims, prices, leasing terms (down payment, monthly payment, term), documents and branches. Call it before answering any question about products, prices or conditions.',
     parameters: {
       type: Type.OBJECT,
       properties: {
-        query: { type: Type.STRING, description: 'Search query text' },
+        query: { type: Type.STRING, description: 'What to look up, e.g. "Toyota RAV4 qiymət" or "lizinq üçün sənədlər"' },
+        brand: { type: Type.STRING, description: 'Optional brand filter in lowercase, e.g. byd, toyota, mitsubishi, mazda' },
         limit: { type: Type.NUMBER, description: 'Maximum number of results, default 5' },
       },
       required: ['query'],
