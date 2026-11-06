@@ -328,11 +328,11 @@
     "retryIntervalHours": "Retry Interval (h)",
     "settingsHeading": "Campaign Settings",
     "paymentPriorityTitle": "Start calling from highest monthly payment",
-    "paymentPriorityDesc": "After PKS customers are imported, prioritize calls by largest `odenis_ayliq` first.",
+    "paymentPriorityDesc": "Call customers with the largest monthly payment first (for PKS imports).",
     "skipNextDayTitle": "Do not call next day after successful call",
     "skipNextDayDesc": "Skip customer queueing for tomorrow if yesterday's call was successful.",
     "dailyRefreshTitle": "Daily update customer data",
-    "dailyRefreshDesc": "Every morning at 08:30, refresh debt/payment info for customers still pending in this campaign from PKS. Only takes effect for campaigns built from a PKS import.",
+    "dailyRefreshDesc": "Every morning at 08:30, refresh debt and payment data for pending customers from PKS. Only works for campaigns built from a PKS import.",
     "runWeekdays": "Run Weekdays",
     "selectWeekday": "Select at least one weekday.",
     "dailyStartTime": "Daily Start Time",
@@ -1021,7 +1021,8 @@
     "noSegment": "No segment",
     "noTemplateForSegment": "No template for this segment yet. Add one in a click on the Instruction Templates page.",
     "defaultTemplate": "Active (default) template",
-    "chooseSegmentHint": "Pick the call's purpose; the template list is filtered to match."
+    "chooseSegmentHint": "Pick the call's purpose: the template list is filtered and the settings are set to match.",
+    "presetApplied": "Segment defaults applied (attempts, interval, days and hours). Change them if you need to."
   },
   "integrations": {
     "heading": "Integrations",

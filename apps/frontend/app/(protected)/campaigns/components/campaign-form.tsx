@@ -5,7 +5,7 @@ import { callbotApi, type InstructionTemplate } from '@/lib/callbot-api';
 import { Agent } from '@/types/callbot';
 import { useSIPTrunks } from '@/hooks/useTelephony';
 import { useLanguage } from '@/lib/language';
-import { SEGMENTS, SEGMENT_TONE_CLASSES, getSegment } from '@/lib/segments';
+import { SEGMENTS, SEGMENT_TONE_CLASSES, SEGMENT_CAMPAIGN_PRESETS, getSegment, type CampaignFlag, type SegmentKey } from '@/lib/segments';
 
 export type CampaignStatus = 'draft' | 'active' | 'paused' | 'completed' | 'cancelled';
 
@@ -72,6 +72,7 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
   const [baseTemplates, setBaseTemplates] = useState<InstructionTemplate[]>([]);
   const [loadingTemplates, setLoadingTemplates] = useState(true);
   const [segmentKey, setSegmentKey] = useState<string>('');
+  const [presetApplied, setPresetApplied] = useState(false);
   const [trunkDropdownOpen, setTrunkDropdownOpen] = useState(false);
   const trunkDropdownRef = useRef<HTMLDivElement>(null);
 
@@ -139,6 +140,11 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
       };
     });
   };
+
+  // With a segment picked, only the settings that make sense for it are shown.
+  const segmentFlags = segmentKey ? SEGMENT_CAMPAIGN_PRESETS[segmentKey as SegmentKey]?.flags : undefined;
+  const showFlag = (flag: CampaignFlag) => !segmentFlags || segmentFlags.includes(flag) || Boolean(form[flag]);
+  const anyFlagShown = (['orderByMonthlyPaymentDesc', 'skipNextDayAfterSuccess', 'dailyCustomerRefresh'] as CampaignFlag[]).some(showFlag);
 
   const isDateRangeValid = !form.runStartDate || !form.runEndDate || form.runStartDate <= form.runEndDate;
   const isScheduleValid = form.runWeekdays.length > 0 && form.runWindowStart < form.runWindowEnd && isDateRangeValid;
@@ -269,7 +275,10 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
         <div className="flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => setSegmentKey('')}
+            onClick={() => {
+              setSegmentKey('');
+              setPresetApplied(false);
+            }}
             className={`px-3 py-1.5 rounded-full border text-xs font-medium transition ${
               segmentKey === '' ? 'border-blue-500 bg-blue-50 text-blue-300' : 'border-slate-600 text-gray-300 hover:bg-slate-700'
             }`}
@@ -285,7 +294,20 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
                 onClick={() => {
                   setSegmentKey(segment.key);
                   const first = baseTemplates.find((tpl) => tpl.customer_category === segment.key);
-                  setForm((prev) => ({ ...prev, baseTemplateId: first?.id }));
+                  const preset = SEGMENT_CAMPAIGN_PRESETS[segment.key];
+                  setForm((prev) => ({
+                    ...prev,
+                    baseTemplateId: first?.id,
+                    maxAttempts: preset.maxAttempts,
+                    retryIntervalHours: preset.retryIntervalHours,
+                    runWeekdays: [...preset.runWeekdays],
+                    runWindowStart: preset.runWindowStart,
+                    runWindowEnd: preset.runWindowEnd,
+                    orderByMonthlyPaymentDesc: Boolean(preset.defaults.orderByMonthlyPaymentDesc),
+                    skipNextDayAfterSuccess: Boolean(preset.defaults.skipNextDayAfterSuccess),
+                    dailyCustomerRefresh: Boolean(preset.defaults.dailyCustomerRefresh),
+                  }));
+                  setPresetApplied(true);
                 }}
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs font-medium transition ${
                   selected ? 'border-blue-500 bg-blue-50 text-blue-300' : 'border-slate-600 text-gray-300 hover:bg-slate-700'
@@ -320,6 +342,9 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
               );
             })}
         </select>
+        {presetApplied && segmentKey && (
+          <p className="text-xs text-emerald-300 mt-1.5">{t('segments.presetApplied')}</p>
+        )}
         {segmentKey && !loadingTemplates && !baseTemplates.some((tpl) => tpl.customer_category === segmentKey) && (
           <p className="text-xs text-amber-300 mt-1.5">{t('segments.noTemplateForSegment')}</p>
         )}
@@ -364,9 +389,11 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
         </div>
       </div>
 
+      {anyFlagShown && (
       <div className="space-y-3 border border-slate-700 rounded-lg p-3 bg-slate-900/30">
         <p className="text-sm text-gray-300">{t('campaignForm.settingsHeading')}</p>
 
+        {showFlag('orderByMonthlyPaymentDesc') && (
         <label className="flex items-start gap-3 rounded border border-slate-700 bg-slate-900/30 p-3 cursor-pointer">
           <input
             type="checkbox"
@@ -381,7 +408,9 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
             </span>
           </span>
         </label>
+        )}
 
+        {showFlag('skipNextDayAfterSuccess') && (
         <label className="flex items-start gap-3 rounded border border-slate-700 bg-slate-900/30 p-3 cursor-pointer">
           <input
             type="checkbox"
@@ -396,7 +425,9 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
             </span>
           </span>
         </label>
+        )}
 
+        {showFlag('dailyCustomerRefresh') && (
         <label className="flex items-start gap-3 rounded border border-slate-700 bg-slate-900/30 p-3 cursor-pointer">
           <input
             type="checkbox"
@@ -411,7 +442,9 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
             </span>
           </span>
         </label>
+        )}
       </div>
+      )}
 
       <div className="space-y-3 border border-slate-700 rounded-lg p-3 bg-slate-900/30">
         <div>

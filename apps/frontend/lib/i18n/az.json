@@ -328,11 +328,11 @@
     "retryIntervalHours": "Təkrar Cəhd Intervalı (saat)",
     "settingsHeading": "Kampaniya Parametrləri",
     "paymentPriorityTitle": "Ən yüksək aylıq ödənişdən zəng etməyə başla",
-    "paymentPriorityDesc": "PKS müştəriləri idxal edildikdən sonra, zənglər ən yüksək `odenis_ayliq` dəyərinə görə prioritetləşdirilsin.",
+    "paymentPriorityDesc": "Zənglər ən böyük aylıq ödənişi olan müştərilərdən başlasın (PKS idxalı üçün).",
     "skipNextDayTitle": "Uğurlu zəngdən sonra növbəti gün zəng etmə",
     "skipNextDayDesc": "Dünənki zəng uğurlu olubsa, müştərini sabahkı növbəyə salma.",
     "dailyRefreshTitle": "Müştəri məlumatlarını hər gün yenilə",
-    "dailyRefreshDesc": "Hər səhər saat 08:30-da bu kampaniyada gözləyən müştərilərin borc/ödəniş məlumatları PKS-dən yenilənir. Yalnız PKS idxalı ilə yaradılmış kampaniyalar üçün işləyir.",
+    "dailyRefreshDesc": "Hər səhər 08:30-da gözləyən müştərilərin borc və ödəniş məlumatları PKS-dən yenilənsin. Yalnız PKS idxalı ilə yaradılmış kampaniyalarda işləyir.",
     "runWeekdays": "İcra Günləri",
     "selectWeekday": "Ən azı bir gün seçin.",
     "dailyStartTime": "Gündəlik Başlanğıc Vaxtı",
@@ -1021,7 +1021,8 @@
     "noSegment": "Seqmentsiz",
     "noTemplateForSegment": "Bu seqment üçün şablon yoxdur. Təlimat Şablonları səhifəsində bir kliklə əlavə edin.",
     "defaultTemplate": "Aktiv (standart) şablon",
-    "chooseSegmentHint": "Zəngin məqsədini seçin, şablon siyahısı ona görə süzülür."
+    "chooseSegmentHint": "Zəngin məqsədini seçin: şablon siyahısı süzülür, parametrlər ona uyğun qurulur.",
+    "presetApplied": "Seqmentə uyğun parametrlər tətbiq olundu (cəhd sayı, interval, günlər və saatlar). İstəsəniz dəyişin."
   },
   "integrations": {
     "heading": "İnteqrasiyalar",

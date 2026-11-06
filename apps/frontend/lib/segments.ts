@@ -196,3 +196,59 @@ export const SEGMENT_TONE_CLASSES: Record<Segment['tone'], { chip: string; dot: 
   ok: { chip: 'bg-emerald-50 text-emerald-300', dot: 'bg-emerald-500', ring: 'ring-emerald-500' },
   sky: { chip: 'bg-sky-50 text-sky-300', dot: 'bg-sky-500', ring: 'ring-sky-500' },
 };
+
+// Campaign defaults per segment, applied when a segment is picked in the campaign form.
+// `flags` lists which campaign settings make sense for the segment; the rest are hidden
+// (and switched off), e.g. "highest monthly payment first" only matters for debt calls.
+export type CampaignFlag = 'orderByMonthlyPaymentDesc' | 'skipNextDayAfterSuccess' | 'dailyCustomerRefresh';
+export type Weekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+export interface SegmentCampaignPreset {
+  maxAttempts: number;
+  retryIntervalHours: number;
+  runWeekdays: Weekday[];
+  runWindowStart: string;
+  runWindowEnd: string;
+  flags: CampaignFlag[];
+  defaults: Partial<Record<CampaignFlag, boolean>>;
+}
+
+const WORKDAYS: Weekday[] = ['mon', 'tue', 'wed', 'thu', 'fri'];
+const WORKDAYS_SAT: Weekday[] = [...WORKDAYS, 'sat'];
+
+export const SEGMENT_CAMPAIGN_PRESETS: Record<SegmentKey, SegmentCampaignPreset> = {
+  // Two tries two days apart; a customer who said yes or no is not called again tomorrow.
+  sales: {
+    maxAttempts: 2, retryIntervalHours: 48, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:00', runWindowEnd: '19:00',
+    flags: ['skipNextDayAfterSuccess'],
+    defaults: { skipNextDayAfterSuccess: true },
+  },
+  // Persistent: daily retries, biggest payments first, fresh debt figures every morning.
+  collection: {
+    maxAttempts: 5, retryIntervalHours: 24, runWeekdays: WORKDAYS_SAT, runWindowStart: '09:00', runWindowEnd: '20:00',
+    flags: ['orderByMonthlyPaymentDesc', 'skipNextDayAfterSuccess', 'dailyCustomerRefresh'],
+    defaults: { orderByMonthlyPaymentDesc: true, skipNextDayAfterSuccess: true, dailyCustomerRefresh: true },
+  },
+  // Time-sensitive news: retry the same day a few hours later.
+  application_status: {
+    maxAttempts: 3, retryIntervalHours: 4, runWeekdays: WORKDAYS, runWindowStart: '09:00', runWindowEnd: '18:00',
+    flags: [],
+    defaults: {},
+  },
+  payment_reminder: {
+    maxAttempts: 2, retryIntervalHours: 24, runWeekdays: WORKDAYS, runWindowStart: '10:00', runWindowEnd: '18:00',
+    flags: ['orderByMonthlyPaymentDesc', 'skipNextDayAfterSuccess', 'dailyCustomerRefresh'],
+    defaults: { skipNextDayAfterSuccess: true, dailyCustomerRefresh: true },
+  },
+  satisfaction: {
+    maxAttempts: 2, retryIntervalHours: 24, runWeekdays: WORKDAYS, runWindowStart: '11:00', runWindowEnd: '18:00',
+    flags: ['skipNextDayAfterSuccess'],
+    defaults: { skipNextDayAfterSuccess: true },
+  },
+  // One polite try; marketing should never feel like chasing.
+  marketing: {
+    maxAttempts: 1, retryIntervalHours: 72, runWeekdays: WORKDAYS_SAT, runWindowStart: '11:00', runWindowEnd: '19:00',
+    flags: ['skipNextDayAfterSuccess'],
+    defaults: { skipNextDayAfterSuccess: true },
+  },
+};
