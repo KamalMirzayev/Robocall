@@ -571,7 +571,8 @@
     "active": "Active",
     "inactive": "Inactive",
     "initiatingCall": "Initiating Call...",
-    "initiateCall": "Initiate Call"
+    "initiateCall": "Initiate Call",
+    "pickCustomerFromList": "Pick the customer from the dropdown list (or enter a phone number that is in the customer base) and choose an agent."
   },
   "customerForm": {
     "heading": "Add New Customer",

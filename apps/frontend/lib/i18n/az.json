@@ -571,7 +571,8 @@
     "active": "Aktiv",
     "inactive": "Qeyri-aktiv",
     "initiatingCall": "Zəng başladılır...",
-    "initiateCall": "Zəngi başlat"
+    "initiateCall": "Zəngi başlat",
+    "pickCustomerFromList": "Müştərini açılan siyahıdan seçin (və ya bazada olan telefon nömrəsini yazın) və agent seçin."
   },
   "customerForm": {
     "heading": "Yeni Müştəri Əlavə Et",
