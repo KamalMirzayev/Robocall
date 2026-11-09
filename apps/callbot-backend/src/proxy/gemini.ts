@@ -246,6 +246,9 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
   const parts: string[] = [];
   if (customer.name?.trim()) parts.push(`- Ad: ${customer.name}`);
   if (customer.surname?.trim() && customer.surname.trim() !== '-') parts.push(`- Soyad: ${customer.surname}`);
+  if (!customer.name?.trim()) {
+    parts.push('- Ad: məlum deyil. Müştəriyə həmişə "hörmətli müştəri" deyə müraciət et, ad soruşma və ad uydurma.');
+  }
   // Debt lines only for customers that actually carry debt data, so sales or survey
   // segments don't get a "0 AZN debt" line that pulls the bot towards collection talk.
   if (Number(customer.overdueDays) > 0) parts.push(`- Gecikmə günü: ${customer.overdueDays}`);
@@ -264,7 +267,7 @@ function buildInitialGreetingPrompt(customer: Customer) {
     .trim();
   // ARZOOM applications carry no name: greet without one and ask for the application owner.
   if (!fullName || fullName === '-') {
-    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hər vaxtınız xeyir olsun." Özünü və şirkəti qısa təqdim et, kredit müraciəti ilə bağlı zəng etdiyini de və danışmağa vaxtı olub-olmadığını soruş. Bundan sonra cavabı gözlə.`;
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, hər vaxtınız xeyir olsun." Özünü və şirkəti qısa təqdim et, kredit müraciəti ilə bağlı zəng etdiyini de və danışmağa vaxtı olub-olmadığını soruş. Bundan sonra cavabı gözlə.`;
   }
   return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hər vaxtınız xeyir olsun. ${fullName} ilə danışıram?" Bundan sonra cavabı gözlə.`;
 }
