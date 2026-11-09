@@ -186,7 +186,7 @@ async function upsertItem(item: ArzoomItem): Promise<{ id: number; statusChanged
         source_organization = ${values.sourceOrganization}, category = ${values.category},
         pks_status_category = ${values.statusCategory}, comment_template_name = ${values.note},
         pks_status = ${values.callStatus}, pks_comment = ${values.callComment},
-        application_status = ${values.status}, arzoom_data = ${values.data}::jsonb, last_synced_at = now()
+        application_status = ${values.status}, arzoom_data = ${values.data}::jsonb || coalesce(jsonb_strip_nulls(jsonb_build_object('sales_ext', arzoom_data->'sales_ext')), '{}'::jsonb), last_synced_at = now()
       WHERE id = ${existing.id as number}
     `);
     // A new offer after a re-offer request counts as a change too, so the customer is called again.
