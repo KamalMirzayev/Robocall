@@ -213,7 +213,8 @@ export async function updateCampaignStatistics(campaignId: number) {
             completed_calls = ${completedCalls},
             successful_calls = ${successfulCalls},
             status = CASE 
-              WHEN ${shouldMarkComplete} AND status = 'active' THEN 'completed'
+              -- ARZOOM application campaigns run continuously: new applications keep arriving.
+              WHEN ${shouldMarkComplete} AND status = 'active' AND segment IS DISTINCT FROM 'application_status' THEN 'completed'
               ELSE status
             END,
             updated_at = now()
