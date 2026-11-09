@@ -995,7 +995,15 @@
       "dbResultPrefix": "Successfully imported",
       "dbResultMid": "customers and attached",
       "dbResultSuffix": "to campaign.",
-      "dbResultAlreadyAttachedSuffix": "were already attached."
+      "dbResultAlreadyAttachedSuffix": "were already attached.",
+      "arzoomTab": "Import from Arzoom",
+      "arzoomHint": "Add Arzoom credit applications to this campaign by status. Rejected applications are never called.",
+      "arzoomEligible": "Matching applications",
+      "arzoomCounting": "Counting…",
+      "arzoomAdded": "Added",
+      "arzoomAlready": "already in the campaign",
+      "arzoomImporting": "Adding…",
+      "arzoomImportButton": "Add applications to the campaign"
     }
   },
   "usage": {

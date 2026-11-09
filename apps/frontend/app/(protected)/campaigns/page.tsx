@@ -7,6 +7,7 @@ import { useCampaignPksImport } from '@/hooks/useCallbot';
 import callbotApi from '@/lib/callbot-api';
 import { useLanguage } from '@/lib/language';
 import SearchableSelect from '@/components/SearchableSelect';
+import ArzoomImportPanel from '@/components/ArzoomImportPanel';
 import { SEGMENT_TONE_CLASSES, getSegment, type Segment } from '@/lib/segments';
 
 interface CampaignRow extends CampaignInput {
@@ -85,7 +86,7 @@ export default function CampaignsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [importCampaign, setImportCampaign] = useState<CampaignRow | null>(null);
-  const [importMode, setImportMode] = useState<'pks' | 'database'>('pks');
+  const [importMode, setImportMode] = useState<'pks' | 'database' | 'arzoom'>('pks');
   const [conditions, setConditions] = useState<FilterCondition[]>([
     { id: 1, column: 'status', operator: '=', value: 'Инкассо' },
   ]);
@@ -706,7 +707,28 @@ export default function CampaignsPage() {
               >
                 {t('campaigns.import.databaseTab')}
               </button>
+              <button
+                onClick={() => {
+                  setImportMode('arzoom');
+                  setDatabaseImportResult(null);
+                }}
+                className={`px-4 py-2 font-medium ${
+                  importMode === 'arzoom'
+                    ? 'text-blue-400 border-b-2 border-blue-400'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {t('campaigns.import.arzoomTab')}
+              </button>
             </div>
+
+            {importMode === 'arzoom' && importCampaign && (
+              <ArzoomImportPanel
+                campaignId={Number(importCampaign.id)}
+                campaignStatuses={importCampaign.segmentParams?.statuses ?? null}
+                onImported={loadCampaigns}
+              />
+            )}
 
             {importMode === 'pks' && (
               <>

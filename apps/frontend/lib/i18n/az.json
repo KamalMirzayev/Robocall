@@ -995,7 +995,15 @@
       "dbResultPrefix": "Uğurla idxal edildi:",
       "dbResultMid": "müştəri, kampaniyaya əlavə edildi:",
       "dbResultSuffix": "ədəd.",
-      "dbResultAlreadyAttachedSuffix": "artıq əlavə edilmişdi."
+      "dbResultAlreadyAttachedSuffix": "artıq əlavə edilmişdi.",
+      "arzoomTab": "Arzoom-dan İdxal",
+      "arzoomHint": "Arzoom-dan gələn kredit müraciətlərini statusa görə bu kampaniyaya əlavə edin. Rədd edilmiş müraciətlərə zəng edilmir.",
+      "arzoomEligible": "Uyğun müraciət",
+      "arzoomCounting": "Sayılır…",
+      "arzoomAdded": "Əlavə olundu",
+      "arzoomAlready": "artıq kampaniyada idi",
+      "arzoomImporting": "Əlavə olunur…",
+      "arzoomImportButton": "Müraciətləri kampaniyaya əlavə et"
     }
   },
   "usage": {

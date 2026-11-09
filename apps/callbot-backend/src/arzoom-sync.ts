@@ -427,3 +427,57 @@ export function pushPendingFeedback(): Promise<void> {
   });
   return pushing;
 }
+
+// Puts every live ARZOOM application whose status fits the campaign into its queue: used
+// right after such a campaign is created or edited, and by the "Arzoom-dan idxal" tab.
+// `statuses` overrides the campaign's own statuses parameter; dryRun only counts.
+export async function importArzoomToCampaign(
+  campaignId: number,
+  opts: { statuses?: string[]; dryRun?: boolean } = {}
+): Promise<{ eligible: number; added: number; byStatus: Record<string, number> }> {
+  const [campaign] = rowsFrom(await db.execute(sql`
+    SELECT coalesce(segment_params->>'statuses', segment_params->>'result') AS result FROM campaigns WHERE id = ${campaignId}
+  `));
+  if (!campaign) throw new Error('campaign not found');
+  const picked = opts.statuses?.length
+    ? opts.statuses
+    : String(campaign.result || '').split(',').map((x) => x.trim()).filter(Boolean);
+  const fits = (result: string | undefined) =>
+    Boolean(result) && (picked.length ? picked.includes(result as string) : DEFAULT_RESULTS.has(result as string));
+
+  const customers = rowsFrom(await db.execute(sql`
+    SELECT c.id, c.application_status, cc.id AS link_id, cc.status AS link_status
+    FROM customers c
+    LEFT JOIN LATERAL (
+      SELECT id, status FROM campaign_calls WHERE campaign_id = ${campaignId} AND customer_id = c.id ORDER BY id DESC LIMIT 1
+    ) cc ON true
+    WHERE c.source_system = ${ARZOOM_SOURCE} AND c.application_status IS DISTINCT FROM 'deleted'
+  `));
+  let eligible = 0;
+  let added = 0;
+  const byStatus: Record<string, number> = {};
+  for (const row of customers) {
+    const result = STATUS_TO_RESULT[String(row.application_status || '')];
+    if (!fits(result)) continue;
+    eligible++;
+    byStatus[result as string] = (byStatus[result as string] ?? 0) + 1;
+    if (opts.dryRun) continue;
+    if (!row.link_id) {
+      await db.execute(sql`
+        INSERT INTO campaign_calls (campaign_id, customer_id, status, attempt_number, created_at, updated_at)
+        VALUES (${campaignId}, ${row.id as number}, 'pending', 0, now(), now())
+      `);
+      added++;
+    } else if (row.link_status === 'cancelled') {
+      await db.execute(sql`UPDATE campaign_calls SET status = 'pending', attempt_number = 0, updated_at = now() WHERE id = ${row.link_id as number}`);
+      added++;
+    }
+  }
+  if (added) {
+    await db.execute(sql`
+      UPDATE campaigns SET total_customers = (SELECT count(*) FROM campaign_calls WHERE campaign_id = ${campaignId}), updated_at = now()
+      WHERE id = ${campaignId}
+    `);
+  }
+  return { eligible, added, byStatus };
+}

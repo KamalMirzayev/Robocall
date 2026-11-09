@@ -6,6 +6,7 @@ import { db } from '../db/index.js';
 import { type PksRow, validateFin } from '../pks-utils.js';
 import { buildWorkbook, HEADER_STYLE, type XlsxCellInput } from '../xlsx.js';
 import { isCampaignSegment, sanitizeSegmentParams } from '../campaign-segments.js';
+import { importArzoomToCampaign } from '../arzoom-sync.js';
 
 export type PksFilters = Record<string, string>;
 export type PksFilterMode = 'and' | 'or' | 'grouped';
@@ -1739,6 +1740,10 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
       return;
     }
     const c = inserted[0];
+    // A "loan application result" campaign starts with the ARZOOM applications that fit it.
+    if (c.segment === 'application_status') {
+      await importArzoomToCampaign(Number(c.id)).catch((err) => console.error('ARZOOM import failed', err));
+    }
     res.status(201).json({
       id: c.id,
       name: c.name,
@@ -1768,6 +1773,21 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
     });
   } catch (err) {
     res.status(500).json(buildRouteError(err, 'failed to create campaign'));
+  }
+});
+
+// ARZOOM applications -> this campaign, by application status. body: { statuses?: string[], dryRun?: boolean }
+campaignsRouter.post('/:id/import-arzoom', requireRole('admin', 'campaign_manager'), async (req, res) => {
+  const campaignId = Number(req.params.id);
+  if (!Number.isInteger(campaignId) || campaignId <= 0) {
+    res.status(400).json({ error: 'invalid campaign id' });
+    return;
+  }
+  const statuses = Array.isArray(req.body?.statuses) ? req.body.statuses.map((s: unknown) => String(s)).slice(0, 10) : undefined;
+  try {
+    res.json(await importArzoomToCampaign(campaignId, { statuses, dryRun: req.body?.dryRun === true }));
+  } catch (err) {
+    res.status(500).json(buildRouteError(err, 'failed to import ARZOOM applications'));
   }
 });
 
@@ -1876,6 +1896,9 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
     }
 
     const c = updated[0];
+    if (segmentGiven && c.segment === 'application_status') {
+      await importArzoomToCampaign(Number(c.id)).catch((err) => console.error('ARZOOM import failed', err));
+    }
     res.json({
       id: c.id,
       name: c.name,
