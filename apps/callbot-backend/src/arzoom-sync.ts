@@ -15,14 +15,13 @@ const CURSOR_KEY = 'arzoom_sync_cursor';
 const PAGE_LIMIT = 500;
 const MAX_PAGES_PER_RUN = 40;
 const FETCH_TIMEOUT_MS = 20_000;
-const INTERVAL_MS = Math.max(1, Number(process.env.ARZOOM_SYNC_MINUTES || 5)) * 60_000;
+const INTERVAL_MS = Math.max(1, Number(process.env.ARZOOM_SYNC_MINUTES || 1)) * 60_000;
 
 // ARZOOM status -> application_status segment's "result" value, used to auto-attach
 // customers to active campaigns of that segment. A campaign without a result takes every
 // status in DEFAULT_RESULTS. Rejected applications are never called.
-// "rejected" and "reoffer" (a new offer is being prepared) are never called.
+// "review" (Baxılır), "rejected" and "reoffer" (a new offer is being prepared) are never called.
 const STATUS_TO_RESULT: Record<string, string> = {
-  review: 'in_review',
   info: 'needs_documents',
   offer: 'approved',
   accepted: 'sent_to_sales',
@@ -113,6 +112,8 @@ export async function ensureArzoomSchema(): Promise<void> {
     )
   `);
   await db.execute(sql`ALTER TABLE arzoom_feedback ADD COLUMN IF NOT EXISTS requested_terms jsonb`);
+  // Earliest time the campaign scheduler may dial this link (see callDelayMinutes).
+  await db.execute(sql`ALTER TABLE campaign_calls ADD COLUMN IF NOT EXISTS call_after timestamptz`);
 }
 
 async function readCursor(): Promise<string> {
@@ -213,8 +214,20 @@ async function upsertItem(item: ArzoomItem): Promise<{ id: number; statusChanged
 // Puts the customer into every active "loan application result" campaign whose result
 // parameter matches the application's status (or that has no result set), and takes them
 // out of the pending queue of campaigns whose result no longer matches.
-async function attachToCampaigns(customerId: number, status: string | undefined, statusChanged: boolean): Promise<void> {
+// "Satışa ötürülüb" is called right away; "Təklif göndərilib", "Əlavə sənəd gözlənilir" and
+// applications with a guarantor 15 minutes after the status change, so the customer has
+// time to see the SMS / cabinet first.
+const CALL_DELAY_MINUTES = Math.max(0, Number(process.env.ARZOOM_CALL_DELAY_MINUTES || 15));
+function callDelayMinutes(item: ArzoomItem): number {
+  if (item.status === 'accepted') return 0;
+  if (item.status === 'offer' || item.status === 'info' || item.guarantor === true) return CALL_DELAY_MINUTES;
+  return 0;
+}
+
+async function attachToCampaigns(customerId: number, item: ArzoomItem, statusChanged: boolean): Promise<void> {
+  const status = item.status;
   const result = status ? STATUS_TO_RESULT[status] : undefined;
+  const callAfter = sql`now() + make_interval(mins => ${callDelayMinutes(item)})`;
   const campaigns = rowsFrom(await db.execute(sql`
     SELECT id, coalesce(segment_params->>'statuses', segment_params->>'result') AS result,
            coalesce(segment_params->>'autoAdd', 'off') AS auto_add, coalesce(segment_params->>'requeue', 'on') AS requeue
@@ -233,18 +246,21 @@ async function attachToCampaigns(customerId: number, status: string | undefined,
     if (wanted && !link && c.auto_add !== 'on') continue;
     if (wanted && link && statusChanged && c.requeue !== 'off' && ['completed', 'failed', 'answered', 'no_answer'].includes(String(link.status))) {
       // New status, new conversation: queue the customer again.
-      await db.execute(sql`UPDATE campaign_calls SET status = 'pending', attempt_number = 0, updated_at = now() WHERE id = ${link.id as number}`);
+      await db.execute(sql`UPDATE campaign_calls SET status = 'pending', attempt_number = 0, call_after = ${callAfter}, updated_at = now() WHERE id = ${link.id as number}`);
       continue;
     }
     if (wanted && !link) {
       await db.execute(sql`
-        INSERT INTO campaign_calls (campaign_id, customer_id, status, attempt_number, created_at, updated_at)
-        VALUES (${campaignId}, ${customerId}, 'pending', 0, now(), now())
+        INSERT INTO campaign_calls (campaign_id, customer_id, status, attempt_number, call_after, created_at, updated_at)
+        VALUES (${campaignId}, ${customerId}, 'pending', 0, ${callAfter}, now(), now())
       `);
       await db.execute(sql`UPDATE campaigns SET total_customers = total_customers + 1, updated_at = now() WHERE id = ${campaignId}`);
     } else if (wanted && link && link.status === 'cancelled') {
       // Status moved back into this campaign's result (e.g. info -> offer): queue again.
-      await db.execute(sql`UPDATE campaign_calls SET status = 'pending', attempt_number = 0, updated_at = now() WHERE id = ${link.id as number}`);
+      await db.execute(sql`UPDATE campaign_calls SET status = 'pending', attempt_number = 0, call_after = ${callAfter}, updated_at = now() WHERE id = ${link.id as number}`);
+    } else if (wanted && link && link.status === 'pending' && statusChanged) {
+      // Still waiting, but the status moved on (e.g. info -> accepted): new waiting time.
+      await db.execute(sql`UPDATE campaign_calls SET call_after = ${callAfter}, updated_at = now() WHERE id = ${link.id as number}`);
     } else if (!wanted && link && link.status === 'pending') {
       await db.execute(sql`UPDATE campaign_calls SET status = 'cancelled', updated_at = now() WHERE id = ${link.id as number}`);
     }
@@ -270,7 +286,7 @@ async function runSync(): Promise<void> {
     // In order: a later live row for the same id must win over an earlier delete.
     for (const item of items) {
       const upserted = await upsertItem(item);
-      if (upserted) await attachToCampaigns(upserted.id, item.status, upserted.statusChanged);
+      if (upserted) await attachToCampaigns(upserted.id, item, upserted.statusChanged);
       count++;
     }
     if (body.next_since && body.next_since !== since) {

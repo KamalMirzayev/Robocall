@@ -44,7 +44,6 @@ const SEGMENT_FIELDS: Record<string, FieldDef[]> = {
         needs_documents: 'Əlavə sənəd gözlənilir',
         declined: 'Müştəri imtina etdi / ləğv etdi',
         sent_to_sales: 'Satışa ötürülüb',
-        in_review: 'Baxılır',
       },
     },
     { key: 'callCenter', label: 'Zəng mərkəzi nömrəsi' },

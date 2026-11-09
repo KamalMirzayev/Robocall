@@ -316,7 +316,6 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
         { value: 'needs_documents', label: { az: 'Əlavə sənəd gözlənilir', en: 'Documents awaited' } },
         { value: 'declined', label: { az: 'Müştəri imtina / ləğv etdi', en: 'Customer declined / cancelled' } },
         { value: 'sent_to_sales', label: { az: 'Satışa ötürülüb', en: 'Handed to sales' } },
-        { value: 'in_review', label: { az: 'Baxılır', en: 'In review' } },
       ],
     },
     {

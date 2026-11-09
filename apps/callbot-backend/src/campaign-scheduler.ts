@@ -274,6 +274,7 @@ export async function campaignSchedulerTick() {
         WHERE campaign_id = ${campaign.id}
           AND status IN ('pending', 'retrying')
           AND attempt_number < ${campaign.maxAttempts}
+          AND (call_after IS NULL OR call_after <= now())
         ORDER BY created_at ASC
         LIMIT 50
       `)) as CampaignCallRow[];
