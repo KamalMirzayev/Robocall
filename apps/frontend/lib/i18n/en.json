@@ -352,7 +352,7 @@
     },
     "arzoom": {
       "autoAddTitle": "Add new Arzoom applications automatically",
-      "autoAddDesc": "New applications with the selected statuses join the campaign as soon as they arrive from Arzoom.",
+      "autoAddDesc": "When off, you add applications yourself via Import → Import from Arzoom. When on, every application with the selected statuses (new ones too) joins the campaign.",
       "requeueTitle": "Call again when the application status changes",
       "requeueDesc": "E.g. when an offer is sent for an application that was waiting for documents, the customer is called again about the new status."
     }

@@ -161,8 +161,10 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
   // payment segments, or when a campaign already has them switched on.
   const showFlag = (flag: CampaignFlag) => (segmentFlags ?? ['skipNextDayAfterSuccess']).includes(flag) || Boolean(form[flag]);
   const isArzoomCampaign = segmentKey === 'application_status';
-  // ARZOOM switches live in segmentParams; a missing value means "on".
-  const arzoomOn = (key: 'autoAdd' | 'requeue') => form.segmentParams?.[key] !== 'off';
+  // ARZOOM switches live in segmentParams. Auto-add is opt-in (it can pull every matching
+  // application into the campaign); requeue is on unless switched off.
+  const arzoomOn = (key: 'autoAdd' | 'requeue') =>
+    key === 'autoAdd' ? form.segmentParams?.autoAdd === 'on' : form.segmentParams?.requeue !== 'off';
   const setArzoom = (key: 'autoAdd' | 'requeue', on: boolean) =>
     setForm((prev) => ({ ...prev, segmentParams: { ...(prev.segmentParams ?? {}), [key]: on ? 'on' : 'off' } }));
   const anyFlagShown =

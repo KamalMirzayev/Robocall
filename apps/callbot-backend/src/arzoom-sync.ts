@@ -209,7 +209,7 @@ async function attachToCampaigns(customerId: number, status: string | undefined,
   const result = status ? STATUS_TO_RESULT[status] : undefined;
   const campaigns = rowsFrom(await db.execute(sql`
     SELECT id, coalesce(segment_params->>'statuses', segment_params->>'result') AS result,
-           coalesce(segment_params->>'autoAdd', 'on') AS auto_add, coalesce(segment_params->>'requeue', 'on') AS requeue
+           coalesce(segment_params->>'autoAdd', 'off') AS auto_add, coalesce(segment_params->>'requeue', 'on') AS requeue
     FROM campaigns
     WHERE segment = 'application_status' AND status IN ('active', 'draft', 'paused')
   `));
@@ -221,7 +221,8 @@ async function attachToCampaigns(customerId: number, status: string | undefined,
     const [link] = rowsFrom(await db.execute(sql`
       SELECT id, status FROM campaign_calls WHERE campaign_id = ${campaignId} AND customer_id = ${customerId} LIMIT 1
     `));
-    if (wanted && !link && c.auto_add === 'off') continue;
+    // Only campaigns that opted in get new applications on their own.
+    if (wanted && !link && c.auto_add !== 'on') continue;
     if (wanted && link && statusChanged && c.requeue !== 'off' && ['completed', 'failed', 'answered', 'no_answer'].includes(String(link.status))) {
       // New status, new conversation: queue the customer again.
       await db.execute(sql`UPDATE campaign_calls SET status = 'pending', attempt_number = 0, updated_at = now() WHERE id = ${link.id as number}`);

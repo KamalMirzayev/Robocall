@@ -352,7 +352,7 @@
     },
     "arzoom": {
       "autoAddTitle": "Arzoom-dan gələn yeni müraciətləri avtomatik əlavə et",
-      "autoAddDesc": "Seçilmiş statuslara uyğun yeni müraciətlər Arzoom-dan gələn kimi kampaniyaya düşür.",
+      "autoAddDesc": "Söndürülübsə, müraciətləri yalnız İdxal → Arzoom-dan İdxal ilə özünüz əlavə edirsiniz. Açılsa, seçilmiş statuslara uyğun bütün müraciətlər (yeniləri də) kampaniyaya düşür.",
       "requeueTitle": "Müraciətin statusu dəyişəndə yenidən zəng et",
       "requeueDesc": "Məsələn, əlavə sənəd gözlənilən müraciətə təklif göndəriləndə müştəriyə yeni statusla yenidən zəng edilir."
     }
