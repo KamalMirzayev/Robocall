@@ -13,6 +13,38 @@ export interface Agent {
   updated_at?: string;
 }
 
+// One ARZOOM leasing application as robocall stores it (customers.arzoom_data).
+export interface ArzoomTerms {
+  car_price?: number | null;
+  down_payment_pct?: number | null;
+  down_payment?: number | null;
+  amount?: number | null;
+  months?: number | null;
+  monthly_payment?: number | null;
+}
+
+export interface ArzoomApplication {
+  id: string;
+  status?: string;
+  status_label?: string;
+  phone?: string;
+  brand?: string | null;
+  model?: string | null;
+  car_price?: number | null;
+  guarantor?: boolean | null;
+  income_sources?: string[];
+  partner?: string | null;
+  partner_ref?: string | null;
+  offer?: ArzoomTerms | null;
+  final_terms?: ArzoomTerms | null;
+  info_docs?: string[];
+  info_text?: string | null;
+  reject_reason?: string | null;
+  last_call?: { outcome_label?: string; text?: string; at?: string } | null;
+  cabinet_url?: string | null;
+  changed_at?: string;
+}
+
 export interface Customer {
   id: string | number;
   name: string;
@@ -51,6 +83,8 @@ export interface Customer {
   importedAt?: string;
   lastSyncedAt?: string;
   sourcePayloadHash?: string;
+  applicationStatus?: string | null;
+  arzoomData?: ArzoomApplication | null;
   status?: 'active' | 'inactive' | 'completed';
   createdAt?: string;
   updatedAt?: string;

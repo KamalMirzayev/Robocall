@@ -15,6 +15,7 @@ import { aiToolDeclarations, executeAiTool, isAiToolName } from '../ai-tools/ind
 import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, loadToneInstructionById } from '../templates.js';
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
+import { arzoomCustomerLines } from '../arzoom-sync.js';
 
 type Customer = InferSelectModel<typeof customers>;
 type Agent = InferSelectModel<typeof agents>;
@@ -242,15 +243,16 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
     instruction = instruction.replace(new RegExp(variable.key.replace(/[{}]/g, '\\$&'), 'g'), customerData[variable.key] || variable.key);
   });
   
-  const parts = [
-    `- Ad: ${customer.name}`,
-    `- Soyad: ${customer.surname}`,
-  ];
+  const parts: string[] = [];
+  if (customer.name?.trim()) parts.push(`- Ad: ${customer.name}`);
+  if (customer.surname?.trim() && customer.surname.trim() !== '-') parts.push(`- Soyad: ${customer.surname}`);
   // Debt lines only for customers that actually carry debt data, so sales or survey
   // segments don't get a "0 AZN debt" line that pulls the bot towards collection talk.
   if (Number(customer.overdueDays) > 0) parts.push(`- Gecikmə günü: ${customer.overdueDays}`);
   if (Number(customer.debtAmount) > 0) parts.push(`- Borc məbləği: ${customer.debtAmount} AZN`);
   if (customer.phone) parts.push(`- Telefon: ${customer.phone}`);
+  // ARZOOM leasing application (status, car, offer terms, requested documents).
+  parts.push(...arzoomCustomerLines(customer.arzoomData));
   
   return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${buildSummaryCategoryGuide()}`;
 }
@@ -260,8 +262,11 @@ function buildInitialGreetingPrompt(customer: Customer) {
     .filter(Boolean)
     .join(' ')
     .trim();
-  const namePart = fullName || customer.name || 'müştəri';
-  return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hər vaxtınız xeyir olsun. ${namePart} ilə danışıram?" Bundan sonra cavabı gözlə.`;
+  // ARZOOM applications carry no name: greet without one and ask for the application owner.
+  if (!fullName || fullName === '-') {
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hər vaxtınız xeyir olsun." Özünü və şirkəti qısa təqdim et, lizinq müraciəti ilə bağlı zəng etdiyini de və danışmağa vaxtı olub-olmadığını soruş. Bundan sonra cavabı gözlə.`;
+  }
+  return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hər vaxtınız xeyir olsun. ${fullName} ilə danışıram?" Bundan sonra cavabı gözlə.`;
 }
 
 async function buildCallMemoryContextBounded(customer: Customer, agent: Agent) {

@@ -31,6 +31,7 @@ import { partnerKbStatus, startPartnerKbRefresher } from './partner-kb.js';
 import { loadSettings } from './settings.js';
 import { settingsRouter } from './routes/settings.js';
 import { ensureCampaignSegmentSchema, segmentContext } from './campaign-segments.js';
+import { ensureArzoomSchema, startArzoomSync } from './arzoom-sync.js';
 
 // Stopgap: a single socket error (e.g. EPIPE when a client disconnects
 // mid-stream) must not take down the whole API. Log and keep serving.
@@ -45,6 +46,7 @@ await ensureAuthSchema();
 // Panel-entered keys (Admin -> Integrations) go into process.env before anything reads them.
 await loadSettings();
 await ensureCampaignSegmentSchema();
+await ensureArzoomSchema();
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -220,4 +222,5 @@ server.listen(PORT, () => {
   startCampaignScheduler();
   startPksImportJobProcessor();
   startPartnerKbRefresher();
+  startArzoomSync();
 });

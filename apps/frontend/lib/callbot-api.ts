@@ -317,7 +317,7 @@ export const callbotApi = {
   // CustomerSearchSelect — the full list is ~33k rows and was rendering unpaginated on every
   // load. getCustomers() above is left as-is (returns everything) for callers that still need
   // the whole list (statistics aggregation, campaigns/page.tsx).
-  async getCustomersPage(params: { page: number; pageSize: number; search?: string }): Promise<{ data: Customer[]; total: number; page: number; pageSize: number }> {
+  async getCustomersPage(params: { page: number; pageSize: number; search?: string; source?: 'arzoom' | 'other' }): Promise<{ data: Customer[]; total: number; page: number; pageSize: number }> {
     try {
       const response = await apiClient.get<{ data: Customer[]; total: number; page: number; pageSize: number }>('/callbot/customers', { params });
       return response.data;

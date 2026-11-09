@@ -668,6 +668,28 @@
       "lastSyncedAt": "Last Synced At",
       "createdAt": "Created At",
       "actions": "Actions"
+    },
+    "views": {
+      "arzoom": "Arzoom applications",
+      "pks": "PKS template",
+      "arzoomHint": "Leasing applications synced from Arzoom.",
+      "pksHint": "The old credit and collections columns (customers not from Arzoom)."
+    },
+    "arzoom": {
+      "application": "Application No",
+      "status": "Status",
+      "car": "Car",
+      "carPrice": "Car price",
+      "terms": "Terms",
+      "note": "Documents / reason",
+      "guarantor": "Guarantor",
+      "lastCall": "Last contact",
+      "deleted": "Deleted",
+      "yes": "Yes",
+      "no": "No",
+      "down": "down",
+      "months": "mo",
+      "perMonth": "mo"
     }
   },
   "admin": {
@@ -1071,6 +1093,10 @@
       "pks": {
         "title": "PKS import",
         "text": "For importing customers from the PKS database into campaigns."
+      },
+      "arzoom": {
+        "title": "Arzoom leasing applications",
+        "text": "Applications in Arzoom are pulled into robocall as customers every 5 minutes. Create the token in the Arzoom panel (Users → Robocall integration) and paste it here."
       }
     },
     "keys": {
@@ -1084,7 +1110,13 @@
       "WEBHOOK_URL": "Webhook URL",
       "WEBHOOK_SECRET": "Webhook secret",
       "PKS_DB_QUERY_URL": "Query URL",
-      "PKS_DB_QUERY_API_KEY": "API key"
-    }
+      "PKS_DB_QUERY_API_KEY": "API key",
+      "ARZOOM_API_URL": "Arzoom site address",
+      "ARZOOM_API_TOKEN": "Integration token"
+    },
+    "arzoomOff": "Not connected",
+    "arzoomApplications": "applications",
+    "arzoomLastSync": "last sync",
+    "syncNow": "Sync now"
   }
 }

@@ -123,6 +123,9 @@ export const customers = pgTable('customers', {
   importedAt: timestamp('imported_at', { withTimezone: true }),
   lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
   sourcePayloadHash: varchar('source_payload_hash', { length: 64 }),
+  // ARZOOM leasing applications (arzoom-sync.ts): the full application and its status.
+  applicationStatus: varchar('application_status', { length: 40 }),
+  arzoomData: jsonb('arzoom_data'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

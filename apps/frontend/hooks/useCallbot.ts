@@ -202,7 +202,7 @@ export function useCustomers() {
  * Paginated variant of useCustomers, for the customers list page (~33k rows — too many to
  * fetch/render unpaginated, see useCustomers above for callers that need the full list).
  */
-export function useCustomersPage(pageSize = 50) {
+export function useCustomersPage(pageSize = 50, source?: 'arzoom' | 'other') {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -212,7 +212,7 @@ export function useCustomersPage(pageSize = 50) {
   const fetchPage = useCallback(async (targetPage: number) => {
     setLoading(true);
     try {
-      const result = await callbotApi.getCustomersPage({ page: targetPage, pageSize });
+      const result = await callbotApi.getCustomersPage({ page: targetPage, pageSize, source });
       setCustomers(result.data);
       setTotal(result.total);
       setError(null);
@@ -221,11 +221,15 @@ export function useCustomersPage(pageSize = 50) {
     } finally {
       setLoading(false);
     }
-  }, [pageSize]);
+  }, [pageSize, source]);
 
   useEffect(() => {
     fetchPage(page);
   }, [page, fetchPage]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [source]);
 
   return {
     customers,

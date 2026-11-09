@@ -7,7 +7,7 @@ import apiClient from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { useLanguage } from '@/lib/language';
 
-type Group = 'ai' | 'knowledge' | 'whatsapp' | 'webhook' | 'pks';
+type Group = 'ai' | 'knowledge' | 'arzoom' | 'whatsapp' | 'webhook' | 'pks';
 
 interface SettingRow {
   key: string;
@@ -21,6 +21,14 @@ interface SettingRow {
   updatedBy: string | null;
 }
 
+interface ArzoomStatus {
+  configured: boolean;
+  customers: number;
+  lastRunAt: string | null;
+  lastCount: number;
+  error: string | null;
+}
+
 interface KbStatus {
   configured: boolean;
   chunks: number;
@@ -28,13 +36,13 @@ interface KbStatus {
   error: string | null;
 }
 
-const GROUPS: Group[] = ['ai', 'knowledge', 'whatsapp', 'webhook', 'pks'];
+const GROUPS: Group[] = ['ai', 'knowledge', 'arzoom', 'whatsapp', 'webhook', 'pks'];
 
 function errorText(err: unknown, fallback: string) {
   return (err as AxiosError<{ error?: string }>)?.response?.data?.error || fallback;
 }
 
-function SettingField({ row, onSaved }: { row: SettingRow; onSaved: (data: { settings: SettingRow[]; knowledgeBase: KbStatus }) => void }) {
+function SettingField({ row, onSaved }: { row: SettingRow; onSaved: (data: { settings: SettingRow[]; knowledgeBase: KbStatus; arzoom?: ArzoomStatus }) => void }) {
   const { t } = useLanguage();
   const [value, setValue] = useState(row.secret ? '' : row.value ?? '');
   const [show, setShow] = useState(false);
@@ -145,14 +153,16 @@ export default function IntegrationsPage() {
   const { user } = useAuth();
   const [rows, setRows] = useState<SettingRow[]>([]);
   const [kb, setKb] = useState<KbStatus | null>(null);
+  const [arzoom, setArzoom] = useState<ArzoomStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [geminiTest, setGeminiTest] = useState<{ ok: boolean; error?: string } | null>(null);
-  const [testing, setTesting] = useState<'gemini' | 'kb' | null>(null);
+  const [testing, setTesting] = useState<'gemini' | 'kb' | 'arzoom' | null>(null);
 
-  const apply = (data: { settings: SettingRow[]; knowledgeBase: KbStatus }) => {
+  const apply = (data: { settings: SettingRow[]; knowledgeBase: KbStatus; arzoom?: ArzoomStatus }) => {
     setRows(data.settings);
     setKb(data.knowledgeBase);
+    if (data.arzoom) setArzoom(data.arzoom);
   };
 
   useEffect(() => {
@@ -181,6 +191,16 @@ export default function IntegrationsPage() {
     try {
       const { data } = await apiClient.post('/callbot/settings/test/knowledge-base');
       setKb(data);
+    } finally {
+      setTesting(null);
+    }
+  };
+
+  const syncArzoom = async () => {
+    setTesting('arzoom');
+    try {
+      const { data } = await apiClient.post('/callbot/settings/test/arzoom');
+      setArzoom(data);
     } finally {
       setTesting(null);
     }
@@ -224,6 +244,26 @@ export default function IntegrationsPage() {
                       className="px-3 py-1.5 rounded-lg border border-slate-600 text-gray-300 hover:bg-slate-700 text-xs"
                     >
                       {testing === 'gemini' ? t('integrations.testing') : t('integrations.test')}
+                    </button>
+                  </div>
+                )}
+                {group === 'arzoom' && arzoom && (
+                  <div className="flex items-center gap-2">
+                    <span className={`text-xs ${arzoom.error ? 'text-red-300' : arzoom.customers ? 'text-green-300' : 'text-gray-400'}`}>
+                      {!arzoom.configured
+                        ? t('integrations.arzoomOff')
+                        : arzoom.error
+                          ? `${t('integrations.testFailed')} ${arzoom.error}`
+                          : `${arzoom.customers} ${t('integrations.arzoomApplications')}${
+                              arzoom.lastRunAt ? ` · ${t('integrations.arzoomLastSync')} ${new Date(arzoom.lastRunAt).toLocaleTimeString()}` : ''
+                            }`}
+                    </span>
+                    <button
+                      onClick={syncArzoom}
+                      disabled={testing === 'arzoom' || !arzoom.configured}
+                      className="px-3 py-1.5 rounded-lg border border-slate-600 text-gray-300 hover:bg-slate-700 text-xs disabled:opacity-50"
+                    >
+                      {testing === 'arzoom' ? t('integrations.testing') : t('integrations.syncNow')}
                     </button>
                   </div>
                 )}

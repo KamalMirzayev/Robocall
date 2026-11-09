@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireRole } from '../auth.js';
 import { db } from '../db/index.js';
 import { customers } from '../db/schema.js';
-import { desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 
 export const customersRouter = Router();
 
@@ -219,7 +219,15 @@ function searchCondition(search: string): SQL | undefined {
 // `search` too, so InitiateCallForm's dropdown doesn't need to fetch everyone either).
 customersRouter.get('/', async (req, res) => {
   const search = String(req.query.search ?? '');
-  const where = searchCondition(search);
+  // source=arzoom lists only ARZOOM applications; source=other everything else.
+  const source = String(req.query.source ?? '');
+  const sourceWhere = source === 'arzoom'
+    ? sql`${customers.sourceSystem} = 'arzoom'`
+    : source === 'other'
+      ? sql`${customers.sourceSystem} IS DISTINCT FROM 'arzoom'`
+      : undefined;
+  const searchWhere = searchCondition(search);
+  const where = searchWhere && sourceWhere ? and(searchWhere, sourceWhere) : searchWhere ?? sourceWhere;
   const hasPaging = req.query.page != null || req.query.pageSize != null;
 
   if (!hasPaging && !where) {

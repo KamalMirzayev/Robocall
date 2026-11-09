@@ -668,6 +668,28 @@
       "lastSyncedAt": "Son Sinxronizasiya",
       "createdAt": "Yaradılma Tarixi",
       "actions": "Əməliyyatlar"
+    },
+    "views": {
+      "arzoom": "Arzoom müraciətləri",
+      "pks": "PKS şablonu",
+      "arzoomHint": "Arzoom-dan avtomatik gələn lizinq müraciətləri.",
+      "pksHint": "Kredit və borc yığımı üçün köhnə sütunlar (Arzoom-dan başqa müştərilər)."
+    },
+    "arzoom": {
+      "application": "Müraciət No",
+      "status": "Status",
+      "car": "Avtomobil",
+      "carPrice": "Avtomobilin qiyməti",
+      "terms": "Şərtlər",
+      "note": "Sənədlər / səbəb",
+      "guarantor": "Zamin",
+      "lastCall": "Son əlaqə",
+      "deleted": "Silinib",
+      "yes": "Var",
+      "no": "Yox",
+      "down": "ilkin",
+      "months": "ay",
+      "perMonth": "ay"
     }
   },
   "admin": {
@@ -1071,6 +1093,10 @@
       "pks": {
         "title": "PKS idxalı",
         "text": "Kampaniyaya PKS bazasından müştəri idxalı üçün."
+      },
+      "arzoom": {
+        "title": "Arzoom lizinq müraciətləri",
+        "text": "Arzoom-dakı müraciətlər hər 5 dəqiqədən bir müştəri kimi robocall-a çəkilir. Tokeni Arzoom panelində (İstifadəçilər → Robocall inteqrasiyası) yaradın və buraya yapışdırın."
       }
     },
     "keys": {
@@ -1084,7 +1110,13 @@
       "WEBHOOK_URL": "Webhook ünvanı",
       "WEBHOOK_SECRET": "Webhook sirri",
       "PKS_DB_QUERY_URL": "Sorğu ünvanı",
-      "PKS_DB_QUERY_API_KEY": "API açarı"
-    }
+      "PKS_DB_QUERY_API_KEY": "API açarı",
+      "ARZOOM_API_URL": "Arzoom sayt ünvanı",
+      "ARZOOM_API_TOKEN": "İnteqrasiya tokeni"
+    },
+    "arzoomOff": "Qoşulmayıb",
+    "arzoomApplications": "müraciət",
+    "arzoomLastSync": "son yeniləmə",
+    "syncNow": "İndi yenilə"
   }
 }

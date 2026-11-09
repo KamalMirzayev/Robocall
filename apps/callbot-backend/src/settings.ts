@@ -8,7 +8,7 @@ import { db } from './db/index.js';
 
 export interface SettingDef {
   key: string;
-  group: 'ai' | 'knowledge' | 'whatsapp' | 'webhook' | 'pks';
+  group: 'ai' | 'knowledge' | 'arzoom' | 'whatsapp' | 'webhook' | 'pks';
   secret: boolean;
   url?: boolean;
 }
@@ -18,6 +18,8 @@ export const SETTINGS: SettingDef[] = [
   { key: 'PARTNER_KB_URL', group: 'knowledge', secret: false, url: true },
   { key: 'PARTNER_KB_TOKEN', group: 'knowledge', secret: true },
   { key: 'RAG_SEARCH_URL', group: 'knowledge', secret: false, url: true },
+  { key: 'ARZOOM_API_URL', group: 'arzoom', secret: false, url: true },
+  { key: 'ARZOOM_API_TOKEN', group: 'arzoom', secret: true },
   { key: 'EVOLUTION_API_URL', group: 'whatsapp', secret: false, url: true },
   { key: 'EVOLUTION_API_KEY', group: 'whatsapp', secret: true },
   { key: 'EVOLUTION_INSTANCE_NAME', group: 'whatsapp', secret: false },

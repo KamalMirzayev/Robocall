@@ -2,13 +2,14 @@ import { Router, type Request } from 'express';
 import { requireRole, type AppUser } from '../auth.js';
 import { describeSettings, isSettingKey, saveSetting, validateSetting } from '../settings.js';
 import { partnerKbStatus, refreshPartnerKb } from '../partner-kb.js';
+import { arzoomStatus, resetArzoomCursor, syncArzoom } from '../arzoom-sync.js';
 
 export const settingsRouter = Router();
 
 settingsRouter.use(requireRole('admin'));
 
-settingsRouter.get('/', (_req, res) => {
-  res.json({ settings: describeSettings(), knowledgeBase: partnerKbStatus() });
+settingsRouter.get('/', async (_req, res) => {
+  res.json({ settings: describeSettings(), knowledgeBase: partnerKbStatus(), arzoom: await arzoomStatus() });
 });
 
 settingsRouter.put('/:key', async (req, res) => {
@@ -27,7 +28,10 @@ settingsRouter.put('/:key', async (req, res) => {
     const user = (req as Request & { user?: AppUser }).user;
     await saveSetting(key, value, user?.username ?? null);
     if (key.startsWith('PARTNER_KB_')) await refreshPartnerKb();
-    res.json({ settings: describeSettings(), knowledgeBase: partnerKbStatus() });
+    if (key === 'ARZOOM_API_URL') await resetArzoomCursor();
+    // The first pull can take a while; it runs in the background.
+    if (key.startsWith('ARZOOM_')) void syncArzoom();
+    res.json({ settings: describeSettings(), knowledgeBase: partnerKbStatus(), arzoom: await arzoomStatus() });
   } catch (err) {
     res.status(500).json({ error: (err as Error)?.message || 'failed to save setting' });
   }
@@ -54,4 +58,10 @@ settingsRouter.post('/test/gemini', async (_req, res) => {
 settingsRouter.post('/test/knowledge-base', async (_req, res) => {
   await refreshPartnerKb();
   res.json(partnerKbStatus());
+});
+
+// Pulls new and changed ARZOOM applications now instead of waiting for the next run.
+settingsRouter.post('/test/arzoom', async (_req, res) => {
+  await syncArzoom();
+  res.json(await arzoomStatus());
 });
