@@ -276,7 +276,7 @@ export default function ExternalApiPage() {
                   type="text"
                   value={form.defaultWebhookUrl}
                   onChange={(e) => setForm({ ...form, defaultWebhookUrl: e.target.value })}
-                  placeholder="https://your-backend.example.com/webhooks/robocall"
+                  placeholder="https://your-backend.example.com/webhooks/arzoomcall"
                   className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded text-white"
                 />
               </div>

@@ -219,7 +219,7 @@
   },
   "dynamicContextCodes": {
     "heading": "Dynamic Context Codes",
-    "description": "The registry of codes external callers (like a mobile-app backend) can pass as dynamicContext when triggering a call — each resolves to a Robocall-authored phrase substituted into a template's {DYNAMIC_CONTEXT} placeholder, instead of accepting arbitrary free text.",
+    "description": "The registry of codes external callers (like a mobile-app backend) can pass as dynamicContext when triggering a call — each resolves to a ArzoomCall-authored phrase substituted into a template's {DYNAMIC_CONTEXT} placeholder, instead of accepting arbitrary free text.",
     "newCode": "New Code",
     "newCodeTitle": "New Dynamic Context Code",
     "editCodeTitle": "Edit Dynamic Context Code",
