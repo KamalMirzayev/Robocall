@@ -15,7 +15,7 @@ import { aiToolDeclarations, executeAiTool, isAiToolName } from '../ai-tools/ind
 import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, loadToneInstructionById } from '../templates.js';
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
-import { arzoomCustomerLines } from '../arzoom-sync.js';
+import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript } from '../arzoom-sync.js';
 
 type Customer = InferSelectModel<typeof customers>;
 type Agent = InferSelectModel<typeof agents>;
@@ -680,6 +680,14 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           transcript: finalTranscript,
           summary: await summarizeTranscriptWithAi(finalTranscript),
         }).where(eq(calls.id, callId));
+        if (customer.sourceSystem === 'arzoom') {
+          await ensureArzoomFeedbackFromTranscript({
+            customerId: customer.id,
+            telephonyJobId,
+            startedAt,
+            transcript: finalTranscript,
+          }).catch((err) => console.error('Failed to save ARZOOM feedback', err));
+        }
       } catch (err) {
         console.error('Failed to update call record', err);
       }

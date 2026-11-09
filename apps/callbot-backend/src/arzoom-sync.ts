@@ -1,5 +1,7 @@
 import { sql } from 'drizzle-orm';
+import { GoogleGenAI } from '@google/genai';
 import { db } from './db/index.js';
+import { recordAiTokenUsage } from './ai-usage.js';
 
 // ARZOOM (Arzoom Avto leasing app) -> robocall customers.
 // GET {ARZOOM_API_URL}/api/integrations/robocall/applications?since=&limit= with header
@@ -346,6 +348,7 @@ export function arzoomCustomerLines(data: unknown): string[] {
   if (item.status === 'rejected' && item.reject_reason) lines.push(`- İmtina səbəbi (müştəriyə deyilə bilər): ${item.reject_reason}`);
   if (item.guarantor === true) lines.push('- Zamin: var');
   if (item.cabinet_url) lines.push(`- Şəxsi kabinet linki: ${item.cabinet_url}`);
+  lines.push('- Zəngin sonunda, sağollaşmadan əvvəl, record_application_feedback alətini MÜTLƏQ çağır (nəticə və müştərinin səbəbi).');
   if (item.last_call?.outcome_label) {
     lines.push(`- Əvvəlki əlaqə: ${item.last_call.outcome_label}${item.last_call.text ? ` — ${item.last_call.text}` : ''}`);
   }
@@ -489,4 +492,65 @@ export async function importArzoomToCampaign(
     `);
   }
   return { eligible, added, byStatus };
+}
+
+// Safety net: if the bot ended an ARZOOM call without calling record_application_feedback,
+// the outcome and reason are taken from the transcript after the call.
+export async function ensureArzoomFeedbackFromTranscript(params: {
+  customerId: number;
+  telephonyJobId: number | null;
+  startedAt: Date;
+  transcript: string | null;
+}): Promise<void> {
+  const transcript = String(params.transcript || '').trim();
+  if (!transcript) return;
+  const [customer] = rowsFrom(await db.execute(sql`
+    SELECT 1 FROM customers WHERE id = ${params.customerId} AND source_system = ${ARZOOM_SOURCE} LIMIT 1
+  `));
+  if (!customer) return;
+  const [existing] = rowsFrom(await db.execute(sql`
+    SELECT 1 FROM arzoom_feedback WHERE customer_id = ${params.customerId}
+      AND (telephony_job_id = ${params.telephonyJobId} OR created_at >= ${params.startedAt.toISOString()}::timestamptz)
+    LIMIT 1
+  `));
+  if (existing) return;
+
+  let outcome = 'other';
+  let reason = '';
+  const key = String(process.env.GEMINI_API_KEY || '').trim();
+  if (key) {
+    try {
+      const model = process.env.POST_CALL_SUMMARY_MODEL || 'gemini-2.5-flash';
+      const ai = new GoogleGenAI({ apiKey: key });
+      const prompt = `Bu, kredit müraciəti ilə bağlı telefon zənginin transkriptidir (A: bot, C: müştəri).
+Müştərinin son fikrini müəyyən et və YALNIZ JSON qaytar: {"outcome": "...", "reason": "..."}
+outcome bunlardan biri olmalıdır: ${Object.entries(FEEDBACK_OUTCOMES).map(([k, v]) => `${k} (${v})`).join(', ')}.
+reason: müştərinin dediyi səbəb və ya qısa qeyd, Azərbaycan dilində, 1-2 cümlə. Müştəri cavab verməyibsə və ya danışıq alınmayıbsa outcome "other" olsun.
+
+Transkript:
+${transcript.slice(-8000)}`;
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: { temperature: 0, responseMimeType: 'application/json' },
+      });
+      await recordAiTokenUsage({
+        model,
+        operation: 'arzoom_feedback',
+        usageMetadata: (response as { usageMetadata?: unknown }).usageMetadata as never,
+      }).catch(() => undefined);
+      const parsed = JSON.parse(String(response.text || '{}').replace(/^```json|```$/g, '').trim()) as { outcome?: string; reason?: string };
+      if (parsed.outcome && parsed.outcome in FEEDBACK_OUTCOMES) outcome = parsed.outcome;
+      reason = String(parsed.reason || '').trim().slice(0, 1000);
+    } catch (err) {
+      console.error('[arzoom-sync] transcript feedback failed', err);
+    }
+  }
+  if (outcome === 'declined' && !reason) outcome = 'other';
+  await recordArzoomFeedback({
+    customerId: params.customerId,
+    telephonyJobId: params.telephonyJobId,
+    outcome,
+    reason: reason || 'Zəngdən avtomatik çıxarılıb',
+  });
 }
