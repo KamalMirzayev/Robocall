@@ -373,6 +373,13 @@ export function arzoomCustomerLines(data: unknown): string[] {
   if (['offer', 'accepted', 'declined', 'cancelled'].includes(String(item.status))) {
     lines.push('- Müştəri ilkin ödəniş (faiz və ya məbləğ), aylıq ödəniş və ya müddətlə razı deyilsə: hansı ilkin ödəniş faizini/məbləğini, aylıq ödənişi və ya müddəti istədiyini dəqiq soruş. Sonra record_application_feedback alətini çağır: aylıq ödəniş üçün outcome=wants_lower_monthly, ilkin ödəniş üçün wants_lower_down, müddət/məbləğ üçün wants_other_terms; reason-a müştərinin öz sözlərini yaz (məs. "aylıq 800-dən çox ola bilməz") və istədiyi rəqəmləri requested_* sahələrinə ver. Müştəriyə de ki, istəyi nəzərə alınaraq ona son təklif hazırlanacaq və tezliklə onunla yenidən əlaqə saxlanılacaq. Özündən yeni şərt və ya endirim vəd etmə.');
   }
+  // Monthly payment can come down by at most ~20%: give the bot the exact floor so it never
+  // has to calculate, and have it steer the customer towards it.
+  const monthly = num((item.final_terms || item.offer)?.monthly_payment);
+  if (monthly && ['offer', 'accepted', 'declined', 'cancelled'].includes(String(item.status))) {
+    const floor = Math.ceil((monthly * 0.8) / 10) * 10;
+    lines.push(`- Aylıq ödənişin aşağı salınma həddi: ən çox ${money(floor)} səviyyəsinədək (indiki ${money(monthly)}-dan təxminən 20% az). Müştəri bundan da aşağı rəqəm istəsə (məsələn, ${money(Math.round(floor * 0.9 / 10) * 10)}), nəzakətlə izah et ki, belə böyük endirim mümkün deyil və onu ${money(floor)}-a yaxın rəqəmə razılaşdırmağa çalış: "Sizin üçün təxminən ${money(floor)} aylıq ödənişlə təklif hazırlamağa çalışa bilərik, bu sizə uyğun olarmı?" Müştərinin son razılaşdığı rəqəmi requested_monthly_payment-ə yaz. Bu həddi və ya 20% rəqəmini özün təklif kimi vəd etmə, yalnız "çalışa bilərik" de. Müştəri ${money(floor)}-dan yuxarı rəqəm istəyirsə, olduğu kimi qəbul et.`);
+  }
   if (item.status === 'offer' || item.status === 'accepted') {
     lines.push('- Müştəri şərtlərlə razıdırsa və ya "razıyam, necə edək" kimi davam etmək istəyirsə: əvvəl record_application_feedback alətini outcome=agrees_will_visit ilə çağır, sonra "Zəhmət olmasa bir neçə saniyə xətdə qalın, sizi satış təmsilçisinə qoşuram" de və dərhal transfer_to_sales alətini çağır. Bundan sonra heç nə demə və end_call çağırma. Alət uğursuz olarsa, üzr istə, filiala yaxınlaşa və ya *5665 nömrəsinə zəng edə biləcəyini de.');
   }
