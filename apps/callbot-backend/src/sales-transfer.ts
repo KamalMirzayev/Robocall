@@ -88,7 +88,7 @@ async function orderByLoad(exts: string[]): Promise<string[]> {
       count(*) FILTER (WHERE status = 'answered' AND created_at >= date_trunc('day', now()))::int AS today,
       max(created_at) FILTER (WHERE status = 'answered') AS last_at,
       bool_or(status = 'answered' AND ended_at IS NULL AND created_at > now() - interval '2 hours') AS busy
-    FROM sales_transfers WHERE extension = ANY(${exts}) GROUP BY extension
+    FROM sales_transfers WHERE extension = ANY(${`{${exts.join(',')}}`}::text[]) GROUP BY extension
   `));
   const stat = new Map(rows.map((r) => [String(r.extension), r]));
   const shuffled = [...exts].sort(() => Math.random() - 0.5);
