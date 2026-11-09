@@ -22,7 +22,7 @@ export const SETTINGS: SettingDef[] = [
   { key: 'ARZOOM_API_URL', group: 'arzoom', secret: false, url: true },
   { key: 'ARZOOM_API_TOKEN', group: 'arzoom', secret: true },
   // Sales reps a customer who agrees is connected to, by car brand: "BYD: 161,162; Toyota: 334,305".
-  { key: 'SALES_TRANSFER_GROUPS', group: 'arzoom', secret: false, placeholder: 'BYD: 161,162,125,163; Toyota: 334,305,324,306,325' },
+  { key: 'SALES_TRANSFER_GROUPS', group: 'arzoom', secret: false, placeholder: 'BYD: 161,162,125,163; Toyota: 334,305,324,306,325; Mitsubishi/Mazda: 514,241,220' },
   { key: 'EVOLUTION_API_URL', group: 'whatsapp', secret: false, url: true },
   { key: 'EVOLUTION_API_KEY', group: 'whatsapp', secret: true },
   { key: 'EVOLUTION_INSTANCE_NAME', group: 'whatsapp', secret: false },

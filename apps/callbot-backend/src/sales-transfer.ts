@@ -10,7 +10,7 @@ import { db } from './db/index.js';
 // The bot goes quiet but its media channel stays, so the telephony service keeps the call up;
 // when either side hangs up the whole call ends.
 //
-// Reps are grouped by car brand (SALES_TRANSFER_GROUPS, "BYD: 161,162; Toyota: 334,305").
+// Reps are grouped by car brand (SALES_TRANSFER_GROUPS, "BYD: 161,162; Toyota: 334,305; Mitsubishi/Mazda: 514").
 // They are tried in order of fewest robocall transfers answered today, then longest idle.
 
 const ARI_APP = 'robocall-transfer';
@@ -21,7 +21,7 @@ const ariSecret = process.env.ASTERISK_ARI_SECRET || 'robocallAriSecret2026';
 const ringSeconds = Math.max(8, Math.min(Number(process.env.SALES_TRANSFER_RING_SECONDS || 18), 60));
 const maxAttempts = Math.max(1, Math.min(Number(process.env.SALES_TRANSFER_MAX_ATTEMPTS || 3), 10));
 
-export const DEFAULT_SALES_GROUPS = 'BYD: 161,162,125,163; Toyota: 334,305,324,306,325';
+export const DEFAULT_SALES_GROUPS = 'BYD: 161,162,125,163; Toyota: 334,305,324,306,325; Mitsubishi/Mazda: 514,241,220';
 
 function rowsFrom(result: unknown): Record<string, unknown>[] {
   if (Array.isArray(result)) return result as Record<string, unknown>[];
@@ -45,7 +45,8 @@ export function parseSalesGroups(text: string): Map<string, string[]> {
     const [name, list] = part.split(':');
     if (!name || !list) continue;
     const exts = list.split(/[,\s]+/).map((x) => x.trim()).filter((x) => /^[0-9*#]{2,15}$/.test(x));
-    if (exts.length) groups.set(name.trim().toLowerCase(), exts);
+    // "Mitsubishi/Mazda: ..." gives both brands the same reps.
+    if (exts.length) for (const n of name.split('/')) if (n.trim()) groups.set(n.trim().toLowerCase(), exts);
   }
   return groups;
 }
