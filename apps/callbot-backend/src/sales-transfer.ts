@@ -60,6 +60,12 @@ export function salesExtensionsFor(brand: string | null | undefined): string[] {
   return [];
 }
 
+// A customer can be pinned to particular reps (arzoom_data.sales_ext = "306"), e.g. for tests.
+export function pinnedExtensions(data: unknown): string[] {
+  const raw = (data as { sales_ext?: unknown } | null)?.sales_ext;
+  return String(raw ?? '').split(/[,\s]+/).map((x) => x.trim()).filter((x) => /^[0-9*#]{2,15}$/.test(x));
+}
+
 export async function ensureSalesTransferSchema(): Promise<void> {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS sales_transfers (
@@ -167,7 +173,7 @@ export interface TransferCallbacks {
 }
 
 export async function startSalesTransfer(
-  params: { telephonyJobId: number | null; customerId: number; brand: string | null; callerId: string | null },
+  params: { telephonyJobId: number | null; customerId: number; brand: string | null; callerId: string | null; extensions?: string[] },
   cb: TransferCallbacks
 ): Promise<TransferHandle> {
   let cancelled = false;
@@ -199,7 +205,7 @@ export async function startSalesTransfer(
 
   void (async () => {
     try {
-      const exts = salesExtensionsFor(params.brand);
+      const exts = params.extensions?.length ? params.extensions : salesExtensionsFor(params.brand);
       if (!exts.length) throw new Error(`no sales reps set for brand "${params.brand || '-'}"`);
       if (!params.telephonyJobId) throw new Error('no telephony job');
       const [job] = rowsFrom(await db.execute(sql`SELECT channel_id FROM telephony_jobs WHERE id = ${params.telephonyJobId}`));

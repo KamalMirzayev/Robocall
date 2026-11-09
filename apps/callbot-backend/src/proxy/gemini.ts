@@ -16,7 +16,7 @@ import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, load
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
 import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
-import { salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
+import { pinnedExtensions, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
 type Customer = InferSelectModel<typeof customers>;
 type Agent = InferSelectModel<typeof agents>;
@@ -333,6 +333,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   let transferStartTimer: NodeJS.Timeout | null = null;
   let transferConnectedAt: Date | null = null;
   const brand = (customer as { arzoomData?: { brand?: string } | null }).arzoomData?.brand ?? null;
+  const pinnedReps = pinnedExtensions((customer as { arzoomData?: unknown }).arzoomData);
   const rawSend = (msg: ServerMessage) => {
     if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(msg));
   };
@@ -395,7 +396,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     clearFinalSilenceEndTimer();
     console.log(`Sales transfer started for telephony job ${telephonyJobId ?? 'none'} brand=${brand ?? '-'}`);
     transferHandle = await startSalesTransfer(
-      { telephonyJobId, customerId: customer.id, brand, callerId: customer.phone || null },
+      { telephonyJobId, customerId: customer.id, brand, callerId: customer.phone || null, extensions: pinnedReps },
       {
         onConnected: (ext) => {
           transferState = 'connected';
@@ -579,7 +580,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             }
 
             if (functionName === 'transfer_to_sales') {
-              const exts = salesExtensionsFor(brand);
+              const exts = pinnedReps.length ? pinnedReps : salesExtensionsFor(brand);
               const ok = transferState === 'idle' && !endCallRequested && exts.length > 0 && Boolean(telephonyJobId);
               if (ok) {
                 transferState = 'pending';
