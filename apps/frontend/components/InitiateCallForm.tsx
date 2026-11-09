@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import apiClient from '@/lib/api-client';
 import callbotApi from '@/lib/callbot-api';
 import { useAgents } from '@/hooks/useCallbot';
@@ -27,6 +27,13 @@ export default function InitiateCallForm({ onSuccess }: InitiateCallFormProps) {
     phone: '',
     trunkId: '',
   });
+
+  // Default outbound trunk: the Yeastar one if enabled, otherwise the first enabled trunk.
+  const enabledTrunks = (sipTrunks || []).filter((tr) => tr.enabled);
+  const defaultTrunkId = (enabledTrunks.find((tr) => /yeastar/i.test(tr.name)) ?? enabledTrunks[0])?.id ?? '';
+  useEffect(() => {
+    if (defaultTrunkId) setFormData((prev) => (prev.trunkId ? prev : { ...prev, trunkId: defaultTrunkId }));
+  }, [defaultTrunkId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,7 +73,7 @@ export default function InitiateCallForm({ onSuccess }: InitiateCallFormProps) {
         customerId: '',
         agentId: '',
         phone: '',
-        trunkId: '',
+        trunkId: defaultTrunkId,
       });
       setSelectedCustomer(null);
 

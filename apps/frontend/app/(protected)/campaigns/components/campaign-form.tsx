@@ -93,6 +93,14 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
     setForm(initialValue ?? defaultValue);
   }, [initialValue]);
 
+  // A new campaign starts on the Yeastar trunk (or the first enabled one).
+  useEffect(() => {
+    if (initialValue || !trunks?.length) return;
+    const enabled = trunks.filter((tr) => tr.enabled);
+    const preferred = enabled.find((tr) => /yeastar/i.test(tr.name)) ?? enabled[0];
+    if (preferred) setForm((prev) => ((prev.trunkIds || []).length ? prev : { ...prev, trunkIds: [preferred.id] }));
+  }, [trunks, initialValue]);
+
   useEffect(() => {
     async function loadData() {
       try {
