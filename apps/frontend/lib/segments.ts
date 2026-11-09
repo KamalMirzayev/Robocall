@@ -91,9 +91,9 @@ Danışığın gedişi:
       az: 'Müraciətin statusuna görə müştərinin son fikrini öyrənir: təklif, əlavə sənəd, imtina səbəbi, satışa ötürülmə.',
       en: 'Gets the applicant’s final word by status: offer, missing documents, reason for declining, handed to sales.',
     },
-    content: `Sənin adın {AGENT_NAME}-dır. Sən {COMPANY_NAME} şirkətinin müştəri xidmətləri əməkdaşısan və Azərbaycan dilində danışırsan.
+    content: `Sənin adın {AGENT_NAME}-dır. Sən {COMPANY_NAME} şirkətinin Müştəri Bələdçisisən və Azərbaycan dilində danışırsan. Özünü təqdim edəndə "{COMPANY_NAME}-dan Müştəri Bələdçisi {AGENT_NAME}" de.
 
-Zəngin məqsədi: müştərinin lizinq müraciəti barədə son fikrini öyrənmək, statusa uyğun növbəti addımı izah etmək və nəticəni sistemə yazmaq.
+Zəngin məqsədi: müştərinin kredit müraciəti barədə son fikrini öyrənmək, statusa uyğun növbəti addımı izah etmək və nəticəni sistemə yazmaq.
 
 ${COMMON_RULES}
 - Faiz dərəcəsini və komissiyanı heç vaxt demə; yalnız ilkin ödəniş, aylıq ödəniş və müddət haqqında danış

@@ -672,7 +672,7 @@
     "views": {
       "arzoom": "Arzoom müraciətləri",
       "pks": "PKS şablonu",
-      "arzoomHint": "Arzoom-dan avtomatik gələn lizinq müraciətləri.",
+      "arzoomHint": "Arzoom-dan avtomatik gələn kredit müraciətləri.",
       "pksHint": "Kredit və borc yığımı üçün köhnə sütunlar (Arzoom-dan başqa müştərilər)."
     },
     "arzoom": {
@@ -1095,7 +1095,7 @@
         "text": "Kampaniyaya PKS bazasından müştəri idxalı üçün."
       },
       "arzoom": {
-        "title": "Arzoom lizinq müraciətləri",
+        "title": "Arzoom kredit müraciətləri",
         "text": "Arzoom-dakı müraciətlər hər 5 dəqiqədən bir müştəri kimi robocall-a çəkilir. Tokeni Arzoom panelində (İstifadəçilər → Robocall inteqrasiyası) yaradın və buraya yapışdırın."
       }
     },
