@@ -10,6 +10,8 @@ interface FieldDef {
   key: string;
   label: string;
   options?: Record<string, string>;
+  // Comma-separated list of option values.
+  multi?: boolean;
 }
 
 const SEGMENT_FIELDS: Record<string, FieldDef[]> = {
@@ -32,20 +34,20 @@ const SEGMENT_FIELDS: Record<string, FieldDef[]> = {
   ],
   application_status: [
     {
-      key: 'result',
-      label: 'Müraciətin nəticəsi',
+      key: 'statuses',
+      label: 'Bu kampaniyada zəng edilən müraciət statusları',
+      multi: true,
       options: {
-        approved: 'Təsdiq olunub',
-        conditional: 'Şərtlə təsdiq olunub',
-        needs_documents: 'Əlavə sənəd lazımdır',
-        in_review: 'Hələ baxılır',
-        rejected: 'İmtina olunub',
+        approved: 'Təklif göndərilib',
+        needs_documents: 'Əlavə sənəd gözlənilir',
+        declined: 'Müştəri imtina etdi / ləğv etdi',
+        sent_to_sales: 'Satışa ötürülüb',
+        in_review: 'Baxılır',
       },
     },
-    { key: 'documents', label: 'Tələb olunan sənədlər' },
-    { key: 'nextStep', label: 'Növbəti addım' },
+    { key: 'callCenter', label: 'Zəng mərkəzi nömrəsi' },
     { key: 'location', label: 'Filial ünvanı və iş saatları' },
-    { key: 'deadline', label: 'Təklif bu tarixədək qüvvədədir' },
+    { key: 'note', label: 'Əlavə qeyd' },
   ],
   satisfaction: [
     {
@@ -81,6 +83,11 @@ export function sanitizeSegmentParams(segment: string | null, raw: unknown): Rec
     if (v === undefined || v === null) continue;
     const s = String(v).trim().slice(0, MAX_VALUE_LENGTH);
     if (!s) continue;
+    if (f.options && f.multi) {
+      const picked = s.split(',').map((x) => x.trim()).filter((x) => x in f.options!);
+      if (picked.length) out[f.key] = [...new Set(picked)].join(',');
+      continue;
+    }
     if (f.options && !(s in f.options)) continue;
     out[f.key] = s;
   }
@@ -95,7 +102,10 @@ export function segmentContext(segment: string | null | undefined, params: unkno
     const v = (params as Record<string, unknown>)[f.key];
     if (v === undefined || v === null || String(v).trim() === '') continue;
     const s = String(v).trim();
-    lines.push(`- ${f.label}: ${f.options?.[s] ?? s}`);
+    const shown = f.multi
+      ? s.split(',').map((x) => f.options?.[x.trim()] ?? x.trim()).join(', ')
+      : f.options?.[s] ?? s;
+    lines.push(`- ${f.label}: ${shown}`);
   }
   return lines.length ? lines.join('\n') : null;
 }

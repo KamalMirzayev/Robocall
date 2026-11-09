@@ -1,11 +1,13 @@
 import { Type } from '@google/genai';
 import { partnerKbConfigured, searchPartnerKb } from '../partner-kb.js';
+import { FEEDBACK_OUTCOMES, recordArzoomFeedback } from '../arzoom-sync.js';
 
 export type ToolName =
   | 'request_callback'
   | 'send_whatsapp_msg'
   | 'search_knowledge_base'
-  | 'update_status';
+  | 'update_status'
+  | 'record_application_feedback';
 
 export interface ToolContext {
   customer: {
@@ -296,7 +298,33 @@ async function updateStatusTool(args: Record<string, unknown>, ctx: ToolContext)
   };
 }
 
+// ARZOOM leasing applications: the customer's final word, sent back to ARZOOM.
+async function recordApplicationFeedbackTool(args: Record<string, unknown>, ctx: ToolContext) {
+  const outcome = cleanText(args.outcome);
+  const reason = cleanText(args.reason);
+  if (ctx.dryRun) return { ok: true, dryRun: true, outcome, reason };
+  const result = await recordArzoomFeedback({ customerId: ctx.customer.id, telephonyJobId: ctx.telephonyJobId, outcome, reason });
+  if (!result.ok) throw new Error(result.error);
+  return { ok: true, message: 'Feedback saved' };
+}
+
 export const aiToolDeclarations = [
+  {
+    name: 'record_application_feedback',
+    description:
+      "Save the customer's final word about their leasing application at the end of the call (before saying goodbye). Use it for every application call. When the customer declines, reason must say why, in the customer's words.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        outcome: {
+          type: Type.STRING,
+          description: `One of: ${Object.entries(FEEDBACK_OUTCOMES).map(([k, v]) => `${k} (${v})`).join(', ')}`,
+        },
+        reason: { type: Type.STRING, description: 'Reason or short note in Azerbaijani, in the customer’s own words' },
+      },
+      required: ['outcome'],
+    },
+  },
   {
     name: 'request_callback',
     description: 'Schedule a callback request from a human agent instead of transferring the call.',
@@ -360,6 +388,7 @@ const aiToolHandlers: Record<ToolName, (args: Record<string, unknown>, ctx: Tool
   send_whatsapp_msg: sendWhatsappTool,
   search_knowledge_base: searchKnowledgeBaseTool,
   update_status: updateStatusTool,
+  record_application_feedback: recordApplicationFeedbackTool,
 };
 
 export function isAiToolName(name: string): name is ToolName {

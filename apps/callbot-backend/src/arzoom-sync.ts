@@ -16,14 +16,17 @@ const FETCH_TIMEOUT_MS = 20_000;
 const INTERVAL_MS = Math.max(1, Number(process.env.ARZOOM_SYNC_MINUTES || 5)) * 60_000;
 
 // ARZOOM status -> application_status segment's "result" value, used to auto-attach
-// customers to active campaigns of that segment.
+// customers to active campaigns of that segment. A campaign without a result takes every
+// status in DEFAULT_RESULTS. Rejected applications are never called.
 const STATUS_TO_RESULT: Record<string, string> = {
   review: 'in_review',
   info: 'needs_documents',
   offer: 'approved',
-  accepted: 'approved',
-  rejected: 'rejected',
+  accepted: 'sent_to_sales',
+  declined: 'declined',
+  cancelled: 'declined',
 };
+const DEFAULT_RESULTS = new Set(['approved', 'needs_documents', 'sent_to_sales', 'declined']);
 
 interface ArzoomTerms {
   car_price?: number | null;
@@ -92,6 +95,20 @@ export async function ensureArzoomSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS arzoom_data jsonb`);
   await db.execute(sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS application_status varchar(40)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS customers_source_key_idx ON customers (source_system, source_record_key)`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS arzoom_feedback (
+      id serial PRIMARY KEY,
+      application_id varchar(255) NOT NULL,
+      customer_id integer NOT NULL,
+      telephony_job_id integer,
+      outcome varchar(40) NOT NULL,
+      outcome_label text NOT NULL,
+      reason text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      pushed_at timestamptz,
+      push_error text
+    )
+  `);
 }
 
 async function readCursor(): Promise<string> {
@@ -191,12 +208,14 @@ async function upsertItem(item: ArzoomItem): Promise<number | null> {
 async function attachToCampaigns(customerId: number, status: string | undefined): Promise<void> {
   const result = status ? STATUS_TO_RESULT[status] : undefined;
   const campaigns = rowsFrom(await db.execute(sql`
-    SELECT id, segment_params->>'result' AS result FROM campaigns
+    SELECT id, coalesce(segment_params->>'statuses', segment_params->>'result') AS result FROM campaigns
     WHERE segment = 'application_status' AND status IN ('active', 'draft', 'paused')
   `));
   for (const c of campaigns) {
     const campaignId = Number(c.id);
-    const wanted = Boolean(result) && (!c.result || c.result === result);
+    // statuses is a comma-separated list (older campaigns had a single result value).
+    const picked = String(c.result || '').split(',').map((x) => x.trim()).filter(Boolean);
+    const wanted = Boolean(result) && (picked.length ? picked.includes(result as string) : DEFAULT_RESULTS.has(result as string));
     const [link] = rowsFrom(await db.execute(sql`
       SELECT id, status FROM campaign_calls WHERE campaign_id = ${campaignId} AND customer_id = ${customerId} LIMIT 1
     `));
@@ -218,6 +237,7 @@ async function attachToCampaigns(customerId: number, status: string | undefined)
 async function runSync(): Promise<void> {
   const ep = endpoint();
   if (!ep) return;
+  await pushPendingFeedback().catch((err) => console.error('[arzoom-sync] feedback push failed', err));
   let since = await readCursor();
   let count = 0;
   for (let page = 0; page < MAX_PAGES_PER_RUN; page++) {
@@ -321,4 +341,84 @@ export function arzoomCustomerLines(data: unknown): string[] {
     lines.push(`- Əvvəlki əlaqə: ${item.last_call.outcome_label}${item.last_call.text ? ` — ${item.last_call.text}` : ''}`);
   }
   return lines;
+}
+
+// ---------------------------------------------------------------------------------------
+// Call feedback back to ARZOOM. The bot calls record_application_feedback at the end of a
+// call; the result is saved here first (so nothing is lost if ARZOOM is down) and pushed to
+// POST {origin}/api/integrations/robocall/applications/{id}/feedback with the same token.
+
+export const FEEDBACK_OUTCOMES: Record<string, string> = {
+  agrees_will_visit: 'Şərtlərlə razıdır, filiala gələcək',
+  agrees_will_call: 'Şərtlərlə razıdır, *5665-ə zəng edəcək',
+  thinking: 'Düşünmək istəyir',
+  docs_will_send: 'Sənədləri təqdim edəcək',
+  docs_cannot: 'Sənədləri təqdim edə bilmir',
+  declined: 'İmtina edir',
+  callback: 'Sonra zəng edilməsini istədi',
+  wrong_person: 'Səhv nömrə / başqa şəxs',
+  other: 'Digər',
+};
+
+export async function recordArzoomFeedback(params: {
+  customerId: number;
+  telephonyJobId: number | null;
+  outcome: string;
+  reason: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const label = FEEDBACK_OUTCOMES[params.outcome];
+  if (!label) return { ok: false, error: `outcome must be one of: ${Object.keys(FEEDBACK_OUTCOMES).join(', ')}` };
+  if (params.outcome === 'declined' && !params.reason) return { ok: false, error: 'reason is required when the customer declines' };
+  const [customer] = rowsFrom(await db.execute(sql`
+    SELECT source_record_key FROM customers WHERE id = ${params.customerId} AND source_system = ${ARZOOM_SOURCE} LIMIT 1
+  `));
+  if (!customer) return { ok: false, error: 'not an ARZOOM application customer' };
+  await db.execute(sql`
+    INSERT INTO arzoom_feedback (application_id, customer_id, telephony_job_id, outcome, outcome_label, reason)
+    VALUES (${String(customer.source_record_key)}, ${params.customerId}, ${params.telephonyJobId}, ${params.outcome}, ${label}, ${params.reason || null})
+  `);
+  // Shown right away on the customers page (Son əlaqə), before ARZOOM echoes it back.
+  await db.execute(sql`
+    UPDATE customers SET pks_status = ${label}, pks_comment = ${params.reason || null} WHERE id = ${params.customerId}
+  `);
+  void pushPendingFeedback().catch((err) => console.error('[arzoom-sync] feedback push failed', err));
+  return { ok: true };
+}
+
+let pushing: Promise<void> | null = null;
+
+export function pushPendingFeedback(): Promise<void> {
+  if (pushing) return pushing;
+  pushing = (async () => {
+    const ep = endpoint();
+    if (!ep) return;
+    const rows = rowsFrom(await db.execute(sql`
+      SELECT id, application_id, telephony_job_id, outcome, outcome_label, reason, created_at
+      FROM arzoom_feedback WHERE pushed_at IS NULL ORDER BY id LIMIT 200
+    `));
+    for (const row of rows) {
+      try {
+        const res = await fetch(`${ep.url}/${encodeURIComponent(String(row.application_id))}/feedback`, {
+          method: 'POST',
+          headers: { 'X-Integration-Token': ep.token, 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            feedback_id: `robocall-${row.id}`,
+            call_ref: row.telephony_job_id ? `job-${row.telephony_job_id}` : null,
+            at: new Date(row.created_at as string).toISOString(),
+            outcome: row.outcome,
+            outcome_label: row.outcome_label,
+            reason: row.reason ?? null,
+          }),
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        await db.execute(sql`UPDATE arzoom_feedback SET pushed_at = now(), push_error = NULL WHERE id = ${row.id as number}`);
+      } catch (err) {
+        await db.execute(sql`UPDATE arzoom_feedback SET push_error = ${(err as Error)?.message || 'failed'} WHERE id = ${row.id as number}`);
+      }
+    }
+  })().finally(() => {
+    pushing = null;
+  });
+  return pushing;
 }

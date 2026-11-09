@@ -88,25 +88,38 @@ Danışığın gedişi:
     tone: 'violet',
     title: { az: 'Kredit müraciətinin nəticəsi', en: 'Loan application result' },
     summary: {
-      az: 'Müraciətin nəticəsini bildirir və növbəti addımı (sənəd, filial, imza) izah edir.',
-      en: 'Tells the applicant the decision and explains the next step.',
+      az: 'Müraciətin statusuna görə müştərinin son fikrini öyrənir: təklif, əlavə sənəd, imtina səbəbi, satışa ötürülmə.',
+      en: 'Gets the applicant’s final word by status: offer, missing documents, reason for declining, handed to sales.',
     },
     content: `Sənin adın {AGENT_NAME}-dır. Sən {COMPANY_NAME} şirkətinin müştəri xidmətləri əməkdaşısan və Azərbaycan dilində danışırsan.
 
-Zəngin məqsədi: müştəriyə kredit/lizinq müraciətinin nəticəsini bildirmək və növbəti addımı aydın izah etmək.
+Zəngin məqsədi: müştərinin lizinq müraciəti barədə son fikrini öyrənmək, statusa uyğun növbəti addımı izah etmək və nəticəni sistemə yazmaq.
 
 ${COMMON_RULES}
+- Faiz dərəcəsini və komissiyanı heç vaxt demə; yalnız ilkin ödəniş, aylıq ödəniş və müddət haqqında danış
 
-Müraciət haqqında məlumat (nəticə, məbləğ, müddət, tələb olunan sənədlər):
+Kampaniya məlumatı:
 {DYNAMIC_CONTEXT}
 
-Danışığın gedişi:
-1. Müştərinin özü ilə danışdığını təsdiqlə, müraciətinə görə zəng etdiyini de.
-2. Nəticəni sadə dillə bildir.
-3. Təsdiq olunubsa: məbləği, müddəti və növbəti addımı (sənədlər, filiala gəliş, imza) izah et, uyğun vaxtı soruş.
-4. Əlavə sənəd lazımdırsa: hansı sənədlərin lazım olduğunu say və WhatsApp nömrəsini ver: {WHATSAPP_PHONE}.
-5. İmtina olunubsa: nəzakətlə bildir, səbəbi barədə məlumat yoxdursa uydurma, gələcəkdə yenidən müraciət edə biləcəyini de.
-6. Müştərinin suallarını cavablandır və zəngi xülasə ilə bitir.`,
+Müraciətin statusu, avtomobil, təklifin şərtləri və istənən sənədlər aşağıdakı "Müştəri məlumatları" bölməsindədir. Danışığı həmin statusa görə qur:
+
+1. "Təklif göndərilib":
+   - Təklifin şərtlərini qısa xatırlat (ilkin ödəniş, müddət, aylıq ödəniş) və şərtlərlə razı olub-olmadığını soruş.
+   - Razıdırsa: filiala yaxınlaşmasını və ya zəng mərkəzi ilə (*5665; kampaniya məlumatında başqa nömrə varsa, onu) əlaqə saxlamasını de, hansını seçdiyini soruş.
+   - Tərəddüd edirsə: narahatlığını soruş, düşünmək istəyirsə nə vaxt yenidən zəng edə biləcəyimizi öyrən.
+   - Razı deyilsə: səbəbini dəqiqləşdir (qiymət, ilkin ödəniş, aylıq ödəniş, başqa yerdən alıb, avtomobil lazım deyil və s.).
+2. "Əlavə sənəd gözlənilir":
+   - Hansı sənədlərin gözlənildiyini müştəri məlumatlarından oxu və adbaad say (məs. MyGov-dan rəsmi arayış, əmək haqqı kartından çıxarış).
+   - Sənədləri nə vaxt təqdim edə biləcəyini soruş; şəxsi kabinet linki varsa, oradan yükləyə biləcəyini de, yoxdursa WhatsApp nömrəsini ver: {WHATSAPP_PHONE}.
+   - Sənədi təqdim edə bilmirsə, səbəbini öyrən.
+3. "Müştəri imtina etdi" və ya "Müştəri ləğv etdi" (ikisi eyni yanaşma):
+   - Nəzakətlə imtinanın səbəbini dəqiqləşdir; təzyiq etmə, mübahisə etmə.
+   - Səbəb aradan qaldırıla bilərsə (məs. başqa model, başqa ilkin ödəniş), *5665 zəng mərkəzinin kömək edə biləcəyini de.
+4. "Satışa ötürülüb":
+   - Müraciətinin satış şöbəsinə ötürüldüyünü de; filiala yaxınlaşmasını və ya *5665 zəng mərkəzi ilə əlaqə saxlamasını xahiş et, hansını seçdiyini soruş.
+5. "Rədd edilib" statusu ilə zəng edilmir; təsadüfən belə müştəriyə düşsən, nəzakətlə təşəkkür et və zəngi bitir.
+
+Zəngin sonunda, sağollaşmadan əvvəl, MÜTLƏQ record_application_feedback alətini çağır: nəticəni (outcome) və müştərinin öz sözləri ilə səbəbini/qeydini (reason) yaz. Müştəri imtina edibsə, səbəb boş qalmamalıdır.`,
   },
   {
     key: 'payment_reminder',
@@ -254,11 +267,11 @@ export const SEGMENT_CAMPAIGN_PRESETS: Record<SegmentKey, SegmentCampaignPreset>
 };
 
 // Per-segment campaign parameters. Saved on the campaign (segment_params) and given to the
-// bot at call time as {DYNAMIC_CONTEXT}. Keys and option values mirror
+// bot at call time as {DYNAMIC_CONTEXT}. A multiselect is stored as comma-separated values. Keys and option values mirror
 // apps/callbot-backend/src/campaign-segments.ts.
 export interface SegmentField {
   key: string;
-  type: 'text' | 'textarea' | 'date' | 'number' | 'select';
+  type: 'text' | 'textarea' | 'date' | 'number' | 'select' | 'multiselect';
   label: Record<Locale, string>;
   placeholder?: Record<Locale, string>;
   options?: Array<{ value: string; label: Record<Locale, string> }>;
@@ -296,28 +309,27 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
   ],
   application_status: [
     {
-      key: 'result', type: 'select',
-      label: { az: 'Müraciətin nəticəsi', en: 'Application result' },
+      key: 'statuses', type: 'multiselect',
+      label: { az: 'Zəng ediləcək statuslar (heç biri seçilməsə: rədd edilənlərdən başqa hamısı)', en: 'Statuses to call (none picked: all except rejected)' },
       options: [
-        { value: 'approved', label: { az: 'Təsdiq olunub', en: 'Approved' } },
-        { value: 'conditional', label: { az: 'Şərtlə təsdiq olunub', en: 'Approved with conditions' } },
-        { value: 'needs_documents', label: { az: 'Əlavə sənəd lazımdır', en: 'More documents needed' } },
-        { value: 'in_review', label: { az: 'Hələ baxılır', en: 'Still in review' } },
-        { value: 'rejected', label: { az: 'İmtina olunub', en: 'Rejected' } },
+        { value: 'approved', label: { az: 'Təklif göndərilib', en: 'Offer sent' } },
+        { value: 'needs_documents', label: { az: 'Əlavə sənəd gözlənilir', en: 'Documents awaited' } },
+        { value: 'declined', label: { az: 'Müştəri imtina / ləğv etdi', en: 'Customer declined / cancelled' } },
+        { value: 'sent_to_sales', label: { az: 'Satışa ötürülüb', en: 'Handed to sales' } },
+        { value: 'in_review', label: { az: 'Baxılır', en: 'In review' } },
       ],
     },
     {
-      key: 'documents', type: 'textarea',
-      label: { az: 'Tələb olunan sənədlər', en: 'Required documents' },
-      placeholder: { az: 'Məs. şəxsiyyət vəsiqəsi, iş yerindən arayış', en: 'E.g. ID card, employment certificate' },
-    },
-    {
-      key: 'nextStep', type: 'text',
-      label: { az: 'Növbəti addım', en: 'Next step' },
-      placeholder: { az: 'Məs. filiala gəlib müqaviləni imzalamaq', en: 'E.g. come to the branch and sign the contract' },
+      key: 'callCenter', type: 'text',
+      label: { az: 'Zəng mərkəzi nömrəsi', en: 'Call center number' },
+      placeholder: { az: '*5665', en: '*5665' },
     },
     { key: 'location', type: 'text', label: { az: 'Filial ünvanı və iş saatları', en: 'Branch address and hours' } },
-    { key: 'deadline', type: 'date', label: { az: 'Təklif bu tarixədək qüvvədədir', en: 'Offer valid until' } },
+    {
+      key: 'note', type: 'textarea',
+      label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' },
+      placeholder: { az: 'Məs. bu həftə filialda test-sürüş də mümkündür', en: 'E.g. test drives at the branch this week' },
+    },
   ],
   satisfaction: [
     {

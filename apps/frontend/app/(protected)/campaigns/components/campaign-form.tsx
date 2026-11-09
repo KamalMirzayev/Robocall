@@ -382,9 +382,28 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
                 setForm((prev) => ({ ...prev, segmentParams: { ...(prev.segmentParams ?? {}), [field.key]: next } }));
               const cls = 'w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white';
               return (
-                <div key={field.key} className={field.type === 'textarea' ? 'md:col-span-2' : ''}>
+                <div key={field.key} className={field.type === 'textarea' || field.type === 'multiselect' ? 'md:col-span-2' : ''}>
                   <label className="block text-sm text-gray-300 mb-1">{field.label[locale]}</label>
-                  {field.type === 'textarea' ? (
+                  {field.type === 'multiselect' ? (
+                    <div className="flex flex-wrap gap-2">
+                      {field.options?.map((opt) => {
+                        const picked = value ? value.split(',') : [];
+                        const on = picked.includes(opt.value);
+                        return (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => set((on ? picked.filter((v) => v !== opt.value) : [...picked, opt.value]).join(','))}
+                            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition ${
+                              on ? 'border-blue-500 bg-blue-50 text-blue-300' : 'border-slate-600 text-gray-300 hover:bg-slate-700'
+                            }`}
+                          >
+                            {opt.label[locale]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : field.type === 'textarea' ? (
                     <textarea value={value} onChange={(e) => set(e.target.value)} placeholder={field.placeholder?.[locale]} className={`${cls} min-h-20`} />
                   ) : field.type === 'select' ? (
                     <select value={value} onChange={(e) => set(e.target.value)} className={cls}>
