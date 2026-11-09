@@ -14,7 +14,7 @@
     "loggingIn": "Logging in...",
     "loginButton": "Login",
     "loginFailed": "Login failed",
-    "engineEyebrow": "Arzoom AI calls",
+    "engineEyebrow": "ArzoomCall",
     "engineTitle": "AI runs your calls, from campaign to sale",
     "engineText": "Customer satisfaction surveys, payment reminders, telesales and marketing calls in one panel.",
     "chipCalls": "campaigns",
@@ -43,7 +43,7 @@
   "protectedLayout": {
     "loading": "Loading...",
     "openMenu": "Open menu",
-    "appName": "Arzoom AI",
+    "appName": "ArzoomCall",
     "closeMenu": "Close menu",
     "role": "Role",
     "navCalls": "Calls",
@@ -108,7 +108,7 @@
   },
   "aiBotResponses": {
     "heading": "AI BOT - Responses",
-    "description": "Response templates area is now available in robocall frontend routing.",
+    "description": "Response templates area is now available in ArzoomCall frontend routing.",
     "note": "Backend save/load functionality can be integrated next."
   },
   "aiBotScenarios": {
@@ -1126,7 +1126,7 @@
       },
       "arzoom": {
         "title": "Arzoom leasing applications",
-        "text": "Applications in Arzoom are pulled into robocall as customers every 5 minutes. Create the token in the Arzoom panel (Users → Robocall integration) and paste it here."
+        "text": "Applications in Arzoom are pulled into ArzoomCall as customers every minute. Create the token in the Arzoom panel (Users → ArzoomCall integration) and paste it here."
       }
     },
     "keys": {

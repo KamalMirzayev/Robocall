@@ -4,8 +4,8 @@ import { AuthProvider } from "@/lib/auth";
 import { LanguageProvider } from "@/lib/language";
 
 export const metadata: Metadata = {
-  title: "Arzoom AI",
-  description: "Arzoom AI call center: voice calls and telephony",
+  title: "ArzoomCall",
+  description: "ArzoomCall call center: voice calls and telephony",
 };
 
 // Applies the saved light/dark choice before first paint so the page doesn't flash.

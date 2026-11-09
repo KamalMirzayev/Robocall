@@ -14,7 +14,7 @@
     "loggingIn": "Daxil olunur...",
     "loginButton": "Daxil ol",
     "loginFailed": "Daxil olma uğursuz oldu",
-    "engineEyebrow": "Arzoom AI zəng",
+    "engineEyebrow": "ArzoomCall",
     "engineTitle": "Kampaniyadan satışa qədər zəngləri süni intellekt aparır",
     "engineText": "Müştəri məmnuniyyəti sorğuları, ödəniş xatırlatmaları, telesales və marketinq zəngləri bir paneldə.",
     "chipCalls": "kampaniyalar",
@@ -43,7 +43,7 @@
   "protectedLayout": {
     "loading": "Yüklənir...",
     "openMenu": "Menyunu aç",
-    "appName": "Arzoom AI",
+    "appName": "ArzoomCall",
     "closeMenu": "Menyunu bağla",
     "role": "Rol",
     "navCalls": "Zənglər",
@@ -108,7 +108,7 @@
   },
   "aiBotResponses": {
     "heading": "AI BOT - Cavablar",
-    "description": "Cavab şablonları bölməsi artıq robocall frontend marşrutlaşdırmasında mövcuddur.",
+    "description": "Cavab şablonları bölməsi artıq ArzoomCall frontend marşrutlaşdırmasında mövcuddur.",
     "note": "Backend saxlama/yükləmə funksionallığı növbəti mərhələdə əlavə oluna bilər."
   },
   "aiBotScenarios": {
@@ -219,7 +219,7 @@
   },
   "dynamicContextCodes": {
     "heading": "Dinamik Kontekst Kodları",
-    "description": "Zəng başlatarkən xarici müraciət edənlərin (məsələn, mobil tətbiq backend-i) dynamicContext kimi göndərə biləcəyi kodların reyestri — hər biri sərbəst mətn əvəzinə şablonun {DYNAMIC_CONTEXT} yerinə qoyulan, Robocall tərəfindən yazılmış ifadəyə uyğun gəlir.",
+    "description": "Zəng başlatarkən xarici müraciət edənlərin (məsələn, mobil tətbiq backend-i) dynamicContext kimi göndərə biləcəyi kodların reyestri — hər biri sərbəst mətn əvəzinə şablonun {DYNAMIC_CONTEXT} yerinə qoyulan, ArzoomCall tərəfindən yazılmış ifadəyə uyğun gəlir.",
     "newCode": "Yeni Kod",
     "newCodeTitle": "Yeni Dinamik Kontekst Kodu",
     "editCodeTitle": "Dinamik Kontekst Kodunu Redaktə Et",
@@ -1126,7 +1126,7 @@
       },
       "arzoom": {
         "title": "Arzoom kredit müraciətləri",
-        "text": "Arzoom-dakı müraciətlər hər 5 dəqiqədən bir müştəri kimi robocall-a çəkilir. Tokeni Arzoom panelində (İstifadəçilər → Robocall inteqrasiyası) yaradın və buraya yapışdırın."
+        "text": "Arzoom-dakı müraciətlər hər dəqiqə müştəri kimi ArzoomCall-a çəkilir. Tokeni Arzoom panelində (İstifadəçilər → ArzoomCall inteqrasiyası) yaradın və buraya yapışdırın."
       }
     },
     "keys": {
