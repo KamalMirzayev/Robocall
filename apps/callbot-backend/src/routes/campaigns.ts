@@ -1932,7 +1932,8 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
 });
 
 // DELETE campaign
-campaignsRouter.delete('/:id', requireRole('admin', 'campaign_manager'), async (req, res) => {
+// Deleting a campaign removes its queue and history: admins only.
+campaignsRouter.delete('/:id', requireRole('admin'), async (req, res) => {
   const campaignId = Number(req.params.id);
   if (!Number.isInteger(campaignId) || campaignId <= 0) {
     res.status(400).json({ error: 'invalid campaign id' });

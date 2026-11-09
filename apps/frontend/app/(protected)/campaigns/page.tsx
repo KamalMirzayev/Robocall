@@ -6,6 +6,7 @@ import { CampaignForm, type CampaignInput, type CampaignStatus, type CampaignWee
 import { useCampaignPksImport } from '@/hooks/useCallbot';
 import callbotApi from '@/lib/callbot-api';
 import { useLanguage } from '@/lib/language';
+import { useAuth } from '@/lib/auth';
 import SearchableSelect from '@/components/SearchableSelect';
 import ArzoomImportPanel from '@/components/ArzoomImportPanel';
 import { SEGMENT_TONE_CLASSES, getSegment, type Segment } from '@/lib/segments';
@@ -85,6 +86,9 @@ export default function CampaignsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  // Only admins may delete a campaign (the API enforces it too).
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'admin';
   const [importCampaign, setImportCampaign] = useState<CampaignRow | null>(null);
   const [importMode, setImportMode] = useState<'pks' | 'database' | 'arzoom'>('pks');
   const [conditions, setConditions] = useState<FilterCondition[]>([
@@ -617,15 +621,17 @@ export default function CampaignsPage() {
                       >
                         {t('campaigns.actions.edit')}
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteCampaign(campaign.id);
-                        }}
-                        className="px-3 py-1.5 rounded border border-red-700 text-red-300 hover:bg-red-900/40"
-                      >
-                        {t('campaigns.actions.delete')}
-                      </button>
+                      {isAdmin && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteCampaign(campaign.id);
+                          }}
+                          className="px-3 py-1.5 rounded border border-red-700 text-red-300 hover:bg-red-900/40"
+                        >
+                          {t('campaigns.actions.delete')}
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
