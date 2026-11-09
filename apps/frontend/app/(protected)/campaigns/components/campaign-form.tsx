@@ -157,8 +157,16 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
 
   // With a segment picked, only the settings that make sense for it are shown.
   const segmentFlags = segmentKey ? SEGMENT_CAMPAIGN_PRESETS[segmentKey as SegmentKey]?.flags : undefined;
-  const showFlag = (flag: CampaignFlag) => !segmentFlags || segmentFlags.includes(flag) || Boolean(form[flag]);
-  const anyFlagShown = (['orderByMonthlyPaymentDesc', 'skipNextDayAfterSuccess', 'dailyCustomerRefresh'] as CampaignFlag[]).some(showFlag);
+  // PKS-only settings (payment priority, daily PKS refresh) show up only for debt and
+  // payment segments, or when a campaign already has them switched on.
+  const showFlag = (flag: CampaignFlag) => (segmentFlags ?? ['skipNextDayAfterSuccess']).includes(flag) || Boolean(form[flag]);
+  const isArzoomCampaign = segmentKey === 'application_status';
+  // ARZOOM switches live in segmentParams; a missing value means "on".
+  const arzoomOn = (key: 'autoAdd' | 'requeue') => form.segmentParams?.[key] !== 'off';
+  const setArzoom = (key: 'autoAdd' | 'requeue', on: boolean) =>
+    setForm((prev) => ({ ...prev, segmentParams: { ...(prev.segmentParams ?? {}), [key]: on ? 'on' : 'off' } }));
+  const anyFlagShown =
+    isArzoomCampaign || (['orderByMonthlyPaymentDesc', 'skipNextDayAfterSuccess', 'dailyCustomerRefresh'] as CampaignFlag[]).some(showFlag);
 
   const isDateRangeValid = !form.runStartDate || !form.runEndDate || form.runStartDate <= form.runEndDate;
   const isScheduleValid = form.runWeekdays.length > 0 && form.runWindowStart < form.runWindowEnd && isDateRangeValid;
@@ -471,6 +479,22 @@ export function CampaignForm({ initialValue, submitting = false, onSubmit, onCan
       {anyFlagShown && (
       <div className="space-y-3 border border-slate-700 rounded-lg p-3 bg-slate-900/30">
         <p className="text-sm text-gray-300">{t('campaignForm.settingsHeading')}</p>
+
+        {isArzoomCampaign &&
+          (['autoAdd', 'requeue'] as const).map((key) => (
+            <label key={key} className="flex items-start gap-3 rounded border border-slate-700 bg-slate-900/30 p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={arzoomOn(key)}
+                onChange={(e) => setArzoom(key, e.target.checked)}
+                className="mt-1 h-4 w-4"
+              />
+              <span>
+                <span className="block text-sm text-white">{t(`campaignForm.arzoom.${key}Title`)}</span>
+                <span className="block text-xs text-gray-400 mt-1">{t(`campaignForm.arzoom.${key}Desc`)}</span>
+              </span>
+            </label>
+          ))}
 
         {showFlag('orderByMonthlyPaymentDesc') && (
         <label className="flex items-start gap-3 rounded border border-slate-700 bg-slate-900/30 p-3 cursor-pointer">

@@ -1741,7 +1741,7 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
     }
     const c = inserted[0];
     // A "loan application result" campaign starts with the ARZOOM applications that fit it.
-    if (c.segment === 'application_status') {
+    if (c.segment === 'application_status' && (c.segment_params as { autoAdd?: string } | null)?.autoAdd !== 'off') {
       await importArzoomToCampaign(Number(c.id)).catch((err) => console.error('ARZOOM import failed', err));
     }
     res.status(201).json({
@@ -1896,7 +1896,7 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
     }
 
     const c = updated[0];
-    if (segmentGiven && c.segment === 'application_status') {
+    if (segmentGiven && c.segment === 'application_status' && (c.segment_params as { autoAdd?: string } | null)?.autoAdd !== 'off') {
       await importArzoomToCampaign(Number(c.id)).catch((err) => console.error('ARZOOM import failed', err));
     }
     res.json({

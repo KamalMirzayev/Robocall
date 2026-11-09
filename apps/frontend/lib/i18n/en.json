@@ -349,6 +349,12 @@
       "fri": "Fri",
       "sat": "Sat",
       "sun": "Sun"
+    },
+    "arzoom": {
+      "autoAddTitle": "Add new Arzoom applications automatically",
+      "autoAddDesc": "New applications with the selected statuses join the campaign as soon as they arrive from Arzoom.",
+      "requeueTitle": "Call again when the application status changes",
+      "requeueDesc": "E.g. when an offer is sent for an application that was waiting for documents, the customer is called again about the new status."
     }
   },
   "dialplan": {

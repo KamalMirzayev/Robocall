@@ -12,6 +12,8 @@ interface FieldDef {
   options?: Record<string, string>;
   // Comma-separated list of option values.
   multi?: boolean;
+  // Saved with the campaign but left out of the bot's context.
+  hidden?: boolean;
 }
 
 const SEGMENT_FIELDS: Record<string, FieldDef[]> = {
@@ -48,6 +50,9 @@ const SEGMENT_FIELDS: Record<string, FieldDef[]> = {
     { key: 'callCenter', label: 'Zəng mərkəzi nömrəsi' },
     { key: 'location', label: 'Filial ünvanı və iş saatları' },
     { key: 'note', label: 'Əlavə qeyd' },
+    // Campaign switches, not shown to the bot (arzoom-sync.ts reads them).
+    { key: 'autoAdd', label: '', options: { on: 'on', off: 'off' }, hidden: true },
+    { key: 'requeue', label: '', options: { on: 'on', off: 'off' }, hidden: true },
   ],
   satisfaction: [
     {
@@ -99,6 +104,7 @@ export function segmentContext(segment: string | null | undefined, params: unkno
   if (!fields || !params || typeof params !== 'object') return null;
   const lines: string[] = [];
   for (const f of fields) {
+    if (f.hidden) continue;
     const v = (params as Record<string, unknown>)[f.key];
     if (v === undefined || v === null || String(v).trim() === '') continue;
     const s = String(v).trim();

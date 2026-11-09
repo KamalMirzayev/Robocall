@@ -245,8 +245,8 @@ export const SEGMENT_CAMPAIGN_PRESETS: Record<SegmentKey, SegmentCampaignPreset>
   // Time-sensitive news: retry the same day a few hours later.
   application_status: {
     maxAttempts: 3, retryIntervalHours: 4, runWeekdays: WORKDAYS, runWindowStart: '09:00', runWindowEnd: '18:00',
-    flags: [],
-    defaults: {},
+    flags: ['skipNextDayAfterSuccess'],
+    defaults: { skipNextDayAfterSuccess: true },
   },
   payment_reminder: {
     maxAttempts: 2, retryIntervalHours: 24, runWeekdays: WORKDAYS, runWindowStart: '10:00', runWindowEnd: '18:00',

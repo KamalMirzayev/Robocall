@@ -134,11 +134,11 @@ function noteFor(item: ArzoomItem): string | null {
   return null;
 }
 
-async function upsertItem(item: ArzoomItem): Promise<number | null> {
+async function upsertItem(item: ArzoomItem): Promise<{ id: number; statusChanged: boolean } | null> {
   const key = String(item.id || '').trim();
   if (!key) return null;
   const [existing] = rowsFrom(await db.execute(sql`
-    SELECT id FROM customers WHERE source_system = ${ARZOOM_SOURCE} AND source_record_key = ${key} LIMIT 1
+    SELECT id, application_status FROM customers WHERE source_system = ${ARZOOM_SOURCE} AND source_record_key = ${key} LIMIT 1
   `));
 
   if (item.deleted) {
@@ -184,7 +184,7 @@ async function upsertItem(item: ArzoomItem): Promise<number | null> {
         application_status = ${values.status}, arzoom_data = ${values.data}::jsonb, last_synced_at = now()
       WHERE id = ${existing.id as number}
     `);
-    return Number(existing.id);
+    return { id: Number(existing.id), statusChanged: existing.application_status !== (item.status || null) };
   }
 
   const [created] = rowsFrom(await db.execute(sql`
@@ -199,16 +199,18 @@ async function upsertItem(item: ArzoomItem): Promise<number | null> {
     )
     RETURNING id
   `));
-  return created ? Number(created.id) : null;
+  return created ? { id: Number(created.id), statusChanged: true } : null;
 }
 
 // Puts the customer into every active "loan application result" campaign whose result
 // parameter matches the application's status (or that has no result set), and takes them
 // out of the pending queue of campaigns whose result no longer matches.
-async function attachToCampaigns(customerId: number, status: string | undefined): Promise<void> {
+async function attachToCampaigns(customerId: number, status: string | undefined, statusChanged: boolean): Promise<void> {
   const result = status ? STATUS_TO_RESULT[status] : undefined;
   const campaigns = rowsFrom(await db.execute(sql`
-    SELECT id, coalesce(segment_params->>'statuses', segment_params->>'result') AS result FROM campaigns
+    SELECT id, coalesce(segment_params->>'statuses', segment_params->>'result') AS result,
+           coalesce(segment_params->>'autoAdd', 'on') AS auto_add, coalesce(segment_params->>'requeue', 'on') AS requeue
+    FROM campaigns
     WHERE segment = 'application_status' AND status IN ('active', 'draft', 'paused')
   `));
   for (const c of campaigns) {
@@ -219,6 +221,12 @@ async function attachToCampaigns(customerId: number, status: string | undefined)
     const [link] = rowsFrom(await db.execute(sql`
       SELECT id, status FROM campaign_calls WHERE campaign_id = ${campaignId} AND customer_id = ${customerId} LIMIT 1
     `));
+    if (wanted && !link && c.auto_add === 'off') continue;
+    if (wanted && link && statusChanged && c.requeue !== 'off' && ['completed', 'failed', 'answered', 'no_answer'].includes(String(link.status))) {
+      // New status, new conversation: queue the customer again.
+      await db.execute(sql`UPDATE campaign_calls SET status = 'pending', attempt_number = 0, updated_at = now() WHERE id = ${link.id as number}`);
+      continue;
+    }
     if (wanted && !link) {
       await db.execute(sql`
         INSERT INTO campaign_calls (campaign_id, customer_id, status, attempt_number, created_at, updated_at)
@@ -252,8 +260,8 @@ async function runSync(): Promise<void> {
     const items = Array.isArray(body.items) ? body.items : [];
     // In order: a later live row for the same id must win over an earlier delete.
     for (const item of items) {
-      const customerId = await upsertItem(item);
-      if (customerId) await attachToCampaigns(customerId, item.status);
+      const upserted = await upsertItem(item);
+      if (upserted) await attachToCampaigns(upserted.id, item.status, upserted.statusChanged);
       count++;
     }
     if (body.next_since && body.next_since !== since) {

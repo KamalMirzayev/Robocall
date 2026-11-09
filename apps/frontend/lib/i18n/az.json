@@ -349,6 +349,12 @@
       "fri": "C",
       "sat": "Ş",
       "sun": "B"
+    },
+    "arzoom": {
+      "autoAddTitle": "Arzoom-dan gələn yeni müraciətləri avtomatik əlavə et",
+      "autoAddDesc": "Seçilmiş statuslara uyğun yeni müraciətlər Arzoom-dan gələn kimi kampaniyaya düşür.",
+      "requeueTitle": "Müraciətin statusu dəyişəndə yenidən zəng et",
+      "requeueDesc": "Məsələn, əlavə sənəd gözlənilən müraciətə təklif göndəriləndə müştəriyə yeni statusla yenidən zəng edilir."
     }
   },
   "dialplan": {
