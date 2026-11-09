@@ -4,6 +4,7 @@ import {
   Call,
   Agent,
   Customer,
+  ContactHistory,
   Recording,
   Campaign,
   CampaignCallsResponse,
@@ -334,6 +335,16 @@ export const callbotApi = {
     } catch (error) {
       console.error(`Failed to fetch customer ${customerId}:`, error);
       return null;
+    }
+  },
+
+  async getContactHistory(customerId: number): Promise<ContactHistory> {
+    try {
+      const response = await apiClient.get<ContactHistory>(`/callbot/customers/${customerId}/contact-history`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to fetch contact history ${customerId}:`, error);
+      return { calls: [], feedback: [] };
     }
   },
 

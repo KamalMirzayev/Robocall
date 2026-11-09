@@ -525,7 +525,7 @@ export async function ensureArzoomFeedbackFromTranscript(params: {
       const prompt = `Bu, kredit müraciəti ilə bağlı telefon zənginin transkriptidir (A: bot, C: müştəri).
 Müştərinin son fikrini müəyyən et və YALNIZ JSON qaytar: {"outcome": "...", "reason": "..."}
 outcome bunlardan biri olmalıdır: ${Object.entries(FEEDBACK_OUTCOMES).map(([k, v]) => `${k} (${v})`).join(', ')}.
-reason: müştərinin dediyi səbəb və ya qısa qeyd, Azərbaycan dilində, 1-2 cümlə. Müştəri cavab verməyibsə və ya danışıq alınmayıbsa outcome "other" olsun.
+reason: ətraflı qeyd, Azərbaycan dilində, 2-4 cümlə: müştəri nə dedi, səbəbi, qeyd etdiyi tarix/vaxt, filial və ya sənədlər, və razılaşdırılan növbəti addım. Müştəri cavab verməyibsə və ya danışıq alınmayıbsa outcome "other" olsun.
 
 Transkript:
 ${transcript.slice(-8000)}`;

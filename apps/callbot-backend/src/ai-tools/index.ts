@@ -312,7 +312,7 @@ export const aiToolDeclarations = [
   {
     name: 'record_application_feedback',
     description:
-      "Save the customer's final word about their leasing application at the end of the call (before saying goodbye). Use it for every application call. When the customer declines, reason must say why, in the customer's words.",
+      "Save the customer's final word about their credit application at the end of the call (before saying goodbye). Use it for every application call. When the customer declines, reason must say why, in the customer's words.",
     parameters: {
       type: Type.OBJECT,
       properties: {
@@ -320,7 +320,7 @@ export const aiToolDeclarations = [
           type: Type.STRING,
           description: `One of: ${Object.entries(FEEDBACK_OUTCOMES).map(([k, v]) => `${k} (${v})`).join(', ')}`,
         },
-        reason: { type: Type.STRING, description: 'Reason or short note in Azerbaijani, in the customer’s own words' },
+        reason: { type: Type.STRING, description: 'Detailed note in Azerbaijani (2-4 sentences): what the customer said, their reason, any date/time, branch or document they mentioned, and the agreed next step' },
       },
       required: ['outcome'],
     },

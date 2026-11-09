@@ -23,6 +23,34 @@ export interface ArzoomTerms {
   monthly_payment?: number | null;
 }
 
+export interface ContactHistoryCall {
+  id: number;
+  telephonyJobId: number | null;
+  startedAt: string;
+  endedAt: string | null;
+  durationSeconds: number | null;
+  summary: string | null;
+  transcript: string | null;
+  jobStatus: string | null;
+  phone: string | null;
+}
+
+export interface ContactHistoryFeedback {
+  id: number;
+  telephonyJobId: number | null;
+  outcome: string;
+  outcomeLabel: string;
+  reason: string | null;
+  createdAt: string;
+  pushedAt: string | null;
+  pushError: string | null;
+}
+
+export interface ContactHistory {
+  calls: ContactHistoryCall[];
+  feedback: ContactHistoryFeedback[];
+}
+
 export interface ArzoomApplication {
   id: string;
   status?: string;

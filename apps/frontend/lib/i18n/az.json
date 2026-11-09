@@ -695,7 +695,23 @@
       "no": "Yox",
       "down": "ilkin",
       "months": "ay",
-      "perMonth": "ay"
+      "perMonth": "ay",
+      "history": {
+        "details": "Ətraflı",
+        "historyTitle": "Əlaqə tarixçəsi",
+        "result": "Nəticə",
+        "reason": "Səbəb / qeyd",
+        "calls": "Zənglər",
+        "noHistory": "Hələ zəng və ya nəticə yoxdur.",
+        "summary": "Xülasə",
+        "transcript": "Transkript",
+        "duration": "Müddət",
+        "sentToArzoom": "Arzoom-a göndərilib",
+        "notSent": "Arzoom-a göndərilməyib",
+        "loading": "Yüklənir...",
+        "close": "Bağla",
+        "sec": "san"
+      }
     }
   },
   "admin": {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useCustomersPage } from '@/hooks/useCallbot';
 import AddCustomerForm from '@/components/AddCustomerForm';
+import ContactHistoryDialog from '@/components/ContactHistoryDialog';
 import callbotApi from '@/lib/callbot-api';
 import { useLanguage } from '@/lib/language';
 import type { ArzoomTerms, Customer } from '@/types/callbot';
@@ -23,6 +24,7 @@ export default function CustomersPage() {
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [view, setView] = useState<CustomerView>('arzoom');
+  const [historyFor, setHistoryFor] = useState<{ id: number; title: string } | null>(null);
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(VIEW_KEY);
@@ -150,7 +152,22 @@ export default function CustomersPage() {
     {
       key: 'lastCall',
       label: t('customers.arzoom.lastCall'),
-      render: (c) => <span className="block max-w-xs truncate" title={c.pksComment || ''}>{formatValue(c.pksStatus)}</span>,
+      render: (c) => (
+        <div className="min-w-[14rem] max-w-sm space-y-1">
+          {c.pksStatus ? (
+            <span className="inline-flex px-2 py-0.5 rounded text-[11px] bg-blue-500/20 text-blue-300">{c.pksStatus}</span>
+          ) : (
+            <span>-</span>
+          )}
+          {c.pksComment && <p className="text-xs text-gray-300 whitespace-pre-wrap line-clamp-3" title={c.pksComment}>{c.pksComment}</p>}
+          <button
+            className="block text-xs text-blue-400 hover:underline"
+            onClick={() => setHistoryFor({ id: Number(c.id), title: `${c.arzoomData?.id ?? c.contractNo ?? c.id} · ${c.phone || ''}` })}
+          >
+            {t('customers.arzoom.history.details')}
+          </button>
+        </div>
+      ),
     },
     { key: 'sourceSystem', label: t('customers.columns.sourceSystem'), render: () => 'ARZOOM' },
     { key: 'importedAt', label: t('customers.columns.importedAt'), render: (c) => formatDate(c.importedAt) },
@@ -418,6 +435,10 @@ export default function CustomersPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {historyFor && (
+        <ContactHistoryDialog customerId={historyFor.id} title={historyFor.title} onClose={() => setHistoryFor(null)} />
       )}
 
       {showForm && (

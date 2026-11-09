@@ -695,7 +695,23 @@
       "no": "No",
       "down": "down",
       "months": "mo",
-      "perMonth": "mo"
+      "perMonth": "mo",
+      "history": {
+        "details": "Details",
+        "historyTitle": "Contact history",
+        "result": "Result",
+        "reason": "Reason / note",
+        "calls": "Calls",
+        "noHistory": "No calls or results yet.",
+        "summary": "Summary",
+        "transcript": "Transcript",
+        "duration": "Duration",
+        "sentToArzoom": "Sent to Arzoom",
+        "notSent": "Not sent to Arzoom",
+        "loading": "Loading...",
+        "close": "Close",
+        "sec": "s"
+      }
     }
   },
   "admin": {
