@@ -411,6 +411,11 @@ export function pushPendingFeedback(): Promise<void> {
           }),
           signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
+        // 400/404 (bad payload, unknown application) will never succeed: stop retrying.
+        if (res.status === 400 || res.status === 404) {
+          await db.execute(sql`UPDATE arzoom_feedback SET pushed_at = now(), push_error = ${`HTTP ${res.status}`} WHERE id = ${row.id as number}`);
+          continue;
+        }
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         await db.execute(sql`UPDATE arzoom_feedback SET pushed_at = now(), push_error = NULL WHERE id = ${row.id as number}`);
       } catch (err) {
