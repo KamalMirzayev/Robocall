@@ -186,7 +186,11 @@ async function upsertItem(item: ArzoomItem): Promise<{ id: number; statusChanged
         source_organization = ${values.sourceOrganization}, category = ${values.category},
         pks_status_category = ${values.statusCategory}, comment_template_name = ${values.note},
         pks_status = ${values.callStatus}, pks_comment = ${values.callComment},
-        application_status = ${values.status}, arzoom_data = ${values.data}::jsonb || coalesce(jsonb_strip_nulls(jsonb_build_object('sales_ext', arzoom_data->'sales_ext')), '{}'::jsonb), last_synced_at = now()
+        application_status = ${values.status}, arzoom_data = ${values.data}::jsonb || coalesce(jsonb_strip_nulls(jsonb_build_object(
+          'sales_ext', arzoom_data->'sales_ext',
+          -- An offer that follows a re-offer is the final one; it stays final while the status stays offer.
+          'final_offer', CASE WHEN ${item.status ?? null} = 'offer' AND (application_status = 'reoffer' OR (application_status = 'offer' AND (arzoom_data->>'final_offer') = 'true')) THEN to_jsonb(true) END
+        )), '{}'::jsonb), last_synced_at = now()
       WHERE id = ${existing.id as number}
     `);
     // A new offer after a re-offer request counts as a change too, so the customer is called again.
@@ -370,13 +374,17 @@ export function arzoomCustomerLines(data: unknown): string[] {
   if (item.status === 'rejected' && item.reject_reason) lines.push(`- İmtina səbəbi (müştəriyə deyilə bilər): ${item.reject_reason}`);
   if (item.guarantor === true) lines.push('- Zamin: var');
   if (item.cabinet_url) lines.push(`- Şəxsi kabinet linki: ${item.cabinet_url}`);
-  if (['offer', 'accepted', 'declined', 'cancelled'].includes(String(item.status))) {
+  const finalOffer = item.status === 'offer' && ((item as { final_offer?: boolean }).final_offer === true || TERMS_OBJECTIONS.has(String(item.last_call?.outcome || '')));
+  if (finalOffer) {
+    lines.push('- DİQQƏT: Bu, TƏKRAR TƏKLİFDİR. Müştəri əvvəlki zəngdə şərtlərə etiraz edib və müraciətinə yenidən baxılıb. Söhbətin əvvəlində mütləq de: "Müraciətinizə təkrar baxıldı və sizin üçün son təklifimiz budur", sonra yeni şərtləri (aylıq ödəniş, ilkin ödəniş, müddət) aydın səsləndir. Bu son təklifdir: yenidən endirim və ya başqa şərt təklif etmə, danışıqlara girmə. Müştəri razıdırsa, aşağıdakı satışa qoşma qaydasını tətbiq et. Müştəri yenə razı deyilsə, hörmətlə qəbul et, record_application_feedback alətini outcome=declined ilə çağır, reason-a "Son təkliflə razılaşmadı" və müştərinin sözlərini yaz, sonra sağollaş.');
+  }
+  if (!finalOffer && ['offer', 'accepted', 'declined', 'cancelled'].includes(String(item.status))) {
     lines.push('- Müştəri ilkin ödəniş (faiz və ya məbləğ), aylıq ödəniş və ya müddətlə razı deyilsə: hansı ilkin ödəniş faizini/məbləğini, aylıq ödənişi və ya müddəti istədiyini dəqiq soruş. Sonra record_application_feedback alətini çağır: aylıq ödəniş üçün outcome=wants_lower_monthly, ilkin ödəniş üçün wants_lower_down, müddət/məbləğ üçün wants_other_terms; reason-a müştərinin öz sözlərini yaz (məs. "aylıq 800-dən çox ola bilməz") və istədiyi rəqəmləri requested_* sahələrinə ver. Müştəriyə de ki, istəyi nəzərə alınaraq ona son təklif hazırlanacaq və tezliklə onunla yenidən əlaqə saxlanılacaq. Özündən yeni şərt və ya endirim vəd etmə.');
   }
   // Monthly payment can come down by at most ~20%: give the bot the exact floor so it never
   // has to calculate, and have it steer the customer towards it.
   const monthly = num((item.final_terms || item.offer)?.monthly_payment);
-  if (monthly && ['offer', 'accepted', 'declined', 'cancelled'].includes(String(item.status))) {
+  if (monthly && !finalOffer && ['offer', 'accepted', 'declined', 'cancelled'].includes(String(item.status))) {
     const floor = Math.ceil((monthly * 0.8) / 10) * 10;
     lines.push(`- Aylıq ödənişin aşağı salınma həddi: ən çox ${money(floor)} səviyyəsinədək (indiki ${money(monthly)}-dan təxminən 20% az). Müştəri bundan da aşağı rəqəm istəsə (məsələn, ${money(Math.round(floor * 0.9 / 10) * 10)}), nəzakətlə izah et ki, belə böyük endirim mümkün deyil və onu ${money(floor)}-a yaxın rəqəmə razılaşdırmağa çalış: "Sizin üçün təxminən ${money(floor)} aylıq ödənişlə təklif hazırlamağa çalışa bilərik, bu sizə uyğun olarmı?" Müştərinin son razılaşdığı rəqəmi requested_monthly_payment-ə yaz. Bu həddi və ya 20% rəqəmini özün təklif kimi vəd etmə, yalnız "çalışa bilərik" de. Müştəri ${money(floor)}-dan yuxarı rəqəm istəyirsə, olduğu kimi qəbul et.`);
   }
