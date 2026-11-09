@@ -20,6 +20,7 @@ const INTERVAL_MS = Math.max(1, Number(process.env.ARZOOM_SYNC_MINUTES || 5)) * 
 // ARZOOM status -> application_status segment's "result" value, used to auto-attach
 // customers to active campaigns of that segment. A campaign without a result takes every
 // status in DEFAULT_RESULTS. Rejected applications are never called.
+// "rejected" and "reoffer" (a new offer is being prepared) are never called.
 const STATUS_TO_RESULT: Record<string, string> = {
   review: 'in_review',
   info: 'needs_documents',
@@ -111,6 +112,7 @@ export async function ensureArzoomSchema(): Promise<void> {
       push_error text
     )
   `);
+  await db.execute(sql`ALTER TABLE arzoom_feedback ADD COLUMN IF NOT EXISTS requested_terms jsonb`);
 }
 
 async function readCursor(): Promise<string> {
@@ -140,7 +142,7 @@ async function upsertItem(item: ArzoomItem): Promise<{ id: number; statusChanged
   const key = String(item.id || '').trim();
   if (!key) return null;
   const [existing] = rowsFrom(await db.execute(sql`
-    SELECT id, application_status FROM customers WHERE source_system = ${ARZOOM_SOURCE} AND source_record_key = ${key} LIMIT 1
+    SELECT id, application_status, coalesce(arzoom_data->'final_terms', arzoom_data->'offer') AS terms FROM customers WHERE source_system = ${ARZOOM_SOURCE} AND source_record_key = ${key} LIMIT 1
   `));
 
   if (item.deleted) {
@@ -186,7 +188,11 @@ async function upsertItem(item: ArzoomItem): Promise<{ id: number; statusChanged
         application_status = ${values.status}, arzoom_data = ${values.data}::jsonb, last_synced_at = now()
       WHERE id = ${existing.id as number}
     `);
-    return { id: Number(existing.id), statusChanged: existing.application_status !== (item.status || null) };
+    // A new offer after a re-offer request counts as a change too, so the customer is called again.
+    const newTerms = JSON.stringify(item.final_terms || item.offer || null);
+    const oldTerms = JSON.stringify(existing.terms ?? null);
+    const termsChanged = item.status === 'offer' && existing.terms != null && newTerms !== oldTerms;
+    return { id: Number(existing.id), statusChanged: existing.application_status !== (item.status || null) || termsChanged };
   }
 
   const [created] = rowsFrom(await db.execute(sql`
@@ -348,6 +354,12 @@ export function arzoomCustomerLines(data: unknown): string[] {
   if (item.status === 'rejected' && item.reject_reason) lines.push(`- İmtina səbəbi (müştəriyə deyilə bilər): ${item.reject_reason}`);
   if (item.guarantor === true) lines.push('- Zamin: var');
   if (item.cabinet_url) lines.push(`- Şəxsi kabinet linki: ${item.cabinet_url}`);
+  if (['offer', 'accepted', 'declined', 'cancelled'].includes(String(item.status))) {
+    lines.push('- Müştəri ilkin ödəniş (faiz və ya məbləğ), aylıq ödəniş və ya müddətlə razı deyilsə: hansı ilkin ödəniş faizini/məbləğini, aylıq ödənişi və ya müddəti istədiyini dəqiq soruş. Sonra record_application_feedback alətini çağır: aylıq ödəniş üçün outcome=wants_lower_monthly, ilkin ödəniş üçün wants_lower_down, müddət/məbləğ üçün wants_other_terms; reason-a müştərinin öz sözlərini yaz (məs. "aylıq 800-dən çox ola bilməz") və istədiyi rəqəmləri requested_* sahələrinə ver. Müştəriyə de ki, istəyi nəzərə alınaraq ona son təklif hazırlanacaq və tezliklə onunla yenidən əlaqə saxlanılacaq. Özündən yeni şərt və ya endirim vəd etmə.');
+  }
+  if (item.status === 'offer' || item.status === 'accepted') {
+    lines.push('- Müştəri şərtlərlə razıdırsa və ya "razıyam, necə edək" kimi davam etmək istəyirsə: əvvəl record_application_feedback alətini outcome=agrees_will_visit ilə çağır, sonra "Zəhmət olmasa bir neçə saniyə xətdə qalın, sizi satış təmsilçisinə qoşuram" de və dərhal transfer_to_sales alətini çağır. Bundan sonra heç nə demə və end_call çağırma. Alət uğursuz olarsa, üzr istə, filiala yaxınlaşa və ya *5665 nömrəsinə zəng edə biləcəyini de.');
+  }
   lines.push('- Zəngin sonunda, sağollaşmadan əvvəl, record_application_feedback alətini MÜTLƏQ çağır (nəticə və müştərinin səbəbi).');
   if (item.last_call?.outcome_label) {
     lines.push(`- Əvvəlki əlaqə: ${item.last_call.outcome_label}${item.last_call.text ? ` — ${item.last_call.text}` : ''}`);
@@ -369,29 +381,63 @@ export const FEEDBACK_OUTCOMES: Record<string, string> = {
   declined: 'İmtina edir',
   callback: 'Sonra zəng edilməsini istədi',
   wrong_person: 'Səhv nömrə / başqa şəxs',
+  wants_lower_monthly: 'Aylıq ödənişi çox hesab edir',
+  wants_lower_down: 'İlkin ödənişdə endirim istəyir',
+  wants_other_terms: 'Başqa şərt istəyir (müddət, məbləğ)',
+  transferred_to_sales: 'Satış təmsilçisinə qoşuldu',
   other: 'Digər',
 };
+
+// Objections to the offered terms. ARZOOM sends such an application back for a new offer
+// (status "reoffer"), and robocall calls again once it is "offer" again.
+export const TERMS_OBJECTIONS = new Set(['wants_lower_monthly', 'wants_lower_down', 'wants_other_terms']);
+// Outcomes added after ARZOOM's first feedback endpoint: until ARZOOM accepts them a 400 is
+// retried on every sync instead of being dropped.
+const NEWER_OUTCOMES = new Set([...TERMS_OBJECTIONS, 'transferred_to_sales']);
+
+export interface RequestedTerms {
+  down_payment_pct?: number | null;
+  down_payment?: number | null;
+  monthly_payment?: number | null;
+  months?: number | null;
+}
+
+export function termsText(t: RequestedTerms | null | undefined): string {
+  if (!t) return '';
+  const parts = [
+    t.down_payment_pct != null ? `ilkin ödəniş ${t.down_payment_pct}%` : null,
+    t.down_payment != null ? `ilkin ödəniş ${money(t.down_payment)}` : null,
+    t.monthly_payment != null ? `aylıq ödəniş ${money(t.monthly_payment)}` : null,
+    t.months != null ? `müddət ${t.months} ay` : null,
+  ].filter(Boolean);
+  return parts.length ? `Müştərinin istədiyi: ${parts.join(', ')}` : '';
+}
 
 export async function recordArzoomFeedback(params: {
   customerId: number;
   telephonyJobId: number | null;
   outcome: string;
   reason: string;
+  requestedTerms?: RequestedTerms | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const label = FEEDBACK_OUTCOMES[params.outcome];
   if (!label) return { ok: false, error: `outcome must be one of: ${Object.keys(FEEDBACK_OUTCOMES).join(', ')}` };
   if (params.outcome === 'declined' && !params.reason) return { ok: false, error: 'reason is required when the customer declines' };
+  const terms = params.requestedTerms && Object.values(params.requestedTerms).some((v) => v != null) ? params.requestedTerms : null;
+  if (TERMS_OBJECTIONS.has(params.outcome) && !terms && !params.reason) {
+    return { ok: false, error: 'ask which down payment or monthly payment the customer wants and pass it' };
+  }
   const [customer] = rowsFrom(await db.execute(sql`
     SELECT source_record_key FROM customers WHERE id = ${params.customerId} AND source_system = ${ARZOOM_SOURCE} LIMIT 1
   `));
   if (!customer) return { ok: false, error: 'not an ARZOOM application customer' };
   await db.execute(sql`
-    INSERT INTO arzoom_feedback (application_id, customer_id, telephony_job_id, outcome, outcome_label, reason)
-    VALUES (${String(customer.source_record_key)}, ${params.customerId}, ${params.telephonyJobId}, ${params.outcome}, ${label}, ${params.reason || null})
+    INSERT INTO arzoom_feedback (application_id, customer_id, telephony_job_id, outcome, outcome_label, reason, requested_terms)
+    VALUES (${String(customer.source_record_key)}, ${params.customerId}, ${params.telephonyJobId}, ${params.outcome}, ${label}, ${params.reason || null}, ${terms ? JSON.stringify(terms) : null}::jsonb)
   `);
   // Shown right away on the customers page (Son əlaqə), before ARZOOM echoes it back.
   await db.execute(sql`
-    UPDATE customers SET pks_status = ${label}, pks_comment = ${params.reason || null} WHERE id = ${params.customerId}
+    UPDATE customers SET pks_status = ${label}, pks_comment = ${[params.reason, termsText(terms)].filter(Boolean).join(' — ') || null} WHERE id = ${params.customerId}
   `);
   void pushPendingFeedback().catch((err) => console.error('[arzoom-sync] feedback push failed', err));
   return { ok: true };
@@ -405,7 +451,7 @@ export function pushPendingFeedback(): Promise<void> {
     const ep = endpoint();
     if (!ep) return;
     const rows = rowsFrom(await db.execute(sql`
-      SELECT id, application_id, telephony_job_id, outcome, outcome_label, reason, created_at
+      SELECT id, application_id, telephony_job_id, outcome, outcome_label, reason, requested_terms, created_at
       FROM arzoom_feedback WHERE pushed_at IS NULL ORDER BY id LIMIT 200
     `));
     for (const row of rows) {
@@ -419,11 +465,13 @@ export function pushPendingFeedback(): Promise<void> {
             at: new Date(row.created_at as string).toISOString(),
             outcome: row.outcome,
             outcome_label: row.outcome_label,
-            reason: row.reason ?? null,
+            reason: [row.reason, termsText(row.requested_terms as RequestedTerms | null)].filter(Boolean).join(' — ') || null,
+            requested_terms: row.requested_terms ?? null,
           }),
           signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         });
         // 400/404 (bad payload, unknown application) will never succeed: stop retrying.
+        if (res.status === 400 && NEWER_OUTCOMES.has(String(row.outcome))) throw new Error('HTTP 400 (Arzoom bu nəticəni hələ qəbul etmir)');
         if (res.status === 400 || res.status === 404) {
           await db.execute(sql`UPDATE arzoom_feedback SET pushed_at = now(), push_error = ${`HTTP ${res.status}`} WHERE id = ${row.id as number}`);
           continue;
@@ -524,7 +572,7 @@ export async function ensureArzoomFeedbackFromTranscript(params: {
       const ai = new GoogleGenAI({ apiKey: key });
       const prompt = `Bu, kredit müraciəti ilə bağlı telefon zənginin transkriptidir (A: bot, C: müştəri).
 Müştərinin son fikrini müəyyən et və YALNIZ JSON qaytar: {"outcome": "...", "reason": "..."}
-outcome bunlardan biri olmalıdır: ${Object.entries(FEEDBACK_OUTCOMES).map(([k, v]) => `${k} (${v})`).join(', ')}.
+outcome bunlardan biri olmalıdır: ${Object.entries(FEEDBACK_OUTCOMES).filter(([k]) => k !== 'transferred_to_sales').map(([k, v]) => `${k} (${v})`).join(', ')}.
 reason: ətraflı qeyd, Azərbaycan dilində, 2-4 cümlə: müştəri nə dedi, səbəbi, qeyd etdiyi tarix/vaxt, filial və ya sənədlər, və razılaşdırılan növbəti addım. Müştəri cavab verməyibsə və ya danışıq alınmayıbsa outcome "other" olsun.
 
 Transkript:
@@ -540,7 +588,7 @@ ${transcript.slice(-8000)}`;
         usageMetadata: (response as { usageMetadata?: unknown }).usageMetadata as never,
       }).catch(() => undefined);
       const parsed = JSON.parse(String(response.text || '{}').replace(/^```json|```$/g, '').trim()) as { outcome?: string; reason?: string };
-      if (parsed.outcome && parsed.outcome in FEEDBACK_OUTCOMES) outcome = parsed.outcome;
+      if (parsed.outcome && parsed.outcome in FEEDBACK_OUTCOMES && parsed.outcome !== 'transferred_to_sales') outcome = parsed.outcome;
       reason = String(parsed.reason || '').trim().slice(0, 1000);
     } catch (err) {
       console.error('[arzoom-sync] transcript feedback failed', err);

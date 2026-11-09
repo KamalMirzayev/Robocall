@@ -303,7 +303,17 @@ async function recordApplicationFeedbackTool(args: Record<string, unknown>, ctx:
   const outcome = cleanText(args.outcome);
   const reason = cleanText(args.reason);
   if (ctx.dryRun) return { ok: true, dryRun: true, outcome, reason };
-  const result = await recordArzoomFeedback({ customerId: ctx.customer.id, telephonyJobId: ctx.telephonyJobId, outcome, reason });
+  const num = (v: unknown) => {
+    const n = Number(String(v ?? '').replace(',', '.').replace(/[^0-9.]/g, ''));
+    return v == null || v === '' || !Number.isFinite(n) || n <= 0 ? null : n;
+  };
+  const requestedTerms = {
+    down_payment_pct: num(args.requested_down_payment_pct),
+    down_payment: num(args.requested_down_payment),
+    monthly_payment: num(args.requested_monthly_payment),
+    months: num(args.requested_months),
+  };
+  const result = await recordArzoomFeedback({ customerId: ctx.customer.id, telephonyJobId: ctx.telephonyJobId, outcome, reason, requestedTerms });
   if (!result.ok) throw new Error(result.error);
   return { ok: true, message: 'Feedback saved' };
 }
@@ -321,6 +331,10 @@ export const aiToolDeclarations = [
           description: `One of: ${Object.entries(FEEDBACK_OUTCOMES).map(([k, v]) => `${k} (${v})`).join(', ')}`,
         },
         reason: { type: Type.STRING, description: 'Detailed note in Azerbaijani (2-4 sentences): what the customer said, their reason, any date/time, branch or document they mentioned, and the agreed next step' },
+        requested_down_payment_pct: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): down payment percent the customer wants' },
+        requested_down_payment: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): down payment amount in AZN the customer wants' },
+        requested_monthly_payment: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): monthly payment in AZN the customer wants' },
+        requested_months: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): term in months the customer wants' },
       },
       required: ['outcome'],
     },

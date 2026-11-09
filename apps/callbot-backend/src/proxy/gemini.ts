@@ -15,7 +15,8 @@ import { aiToolDeclarations, executeAiTool, isAiToolName } from '../ai-tools/ind
 import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, loadToneInstructionById } from '../templates.js';
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
-import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript } from '../arzoom-sync.js';
+import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
+import { salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
 type Customer = InferSelectModel<typeof customers>;
 type Agent = InferSelectModel<typeof agents>;
@@ -183,6 +184,12 @@ const endCallFunctionDeclaration = {
   },
 };
 
+const transferFunctionDeclaration = {
+  name: 'transfer_to_sales',
+  description: 'Connect the customer to a live sales representative. Call it only after the customer agreed to the offer and you have told them to stay on the line for a few seconds. Say nothing after calling it.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
 async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null): Promise<string> {
   // New approach: use toneTemplateId if available, else fall back to legacy tone
   let toneInstruction = '';
@@ -319,6 +326,16 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   // to a dead socket (which would otherwise crash the process with EPIPE).
   let sessionClosed = false;
   const pendingAudio: string[] = [];
+  // Sales transfer: 'pending' waits for the hold sentence to finish, 'dialing' plays hold music
+  // while reps ring, 'connected' means the rep is in the call and the bot is out.
+  let transferState: 'idle' | 'pending' | 'dialing' | 'connected' = 'idle';
+  let transferHandle: TransferHandle | null = null;
+  let transferStartTimer: NodeJS.Timeout | null = null;
+  let transferConnectedAt: Date | null = null;
+  const brand = (customer as { arzoomData?: { brand?: string } | null }).arzoomData?.brand ?? null;
+  const rawSend = (msg: ServerMessage) => {
+    if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(msg));
+  };
 
   const suppressMonitorAgent = (holdMs = monitorBargeInHoldMs) => {
     const boundedHoldMs = Math.max(200, Math.min(Number(holdMs) || monitorBargeInHoldMs, 3000));
@@ -370,11 +387,69 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   };
 
 
+  const beginTransfer = async () => {
+    if (transferState !== 'pending') return;
+    if (transferStartTimer) clearTimeout(transferStartTimer);
+    transferStartTimer = null;
+    transferState = 'dialing';
+    clearFinalSilenceEndTimer();
+    console.log(`Sales transfer started for telephony job ${telephonyJobId ?? 'none'} brand=${brand ?? '-'}`);
+    transferHandle = await startSalesTransfer(
+      { telephonyJobId, customerId: customer.id, brand, callerId: customer.phone || null },
+      {
+        onConnected: (ext) => {
+          transferState = 'connected';
+          transferConnectedAt = new Date();
+          transcriptLines.push(`[Satış təmsilçisinə qoşuldu: ${ext}]`);
+          void recordArzoomFeedback({
+            customerId: customer.id,
+            telephonyJobId,
+            outcome: 'transferred_to_sales',
+            reason: `Müştəri şərtlərlə razılaşdı və ${ext} daxili nömrəli satış təmsilçisinə qoşuldu.`,
+          }).catch(() => {});
+          // The bot is done; the call itself stays up until the customer or the rep hangs up.
+          if (!sessionClosed && session) {
+            try {
+              session.close();
+            } catch {}
+          }
+        },
+        onFailed: (reason) => {
+          console.warn(`Sales transfer failed for telephony job ${telephonyJobId ?? 'none'}: ${reason}`);
+          transferState = 'idle';
+          transcriptLines.push('[Satış təmsilçisinə qoşmaq alınmadı]');
+          if (sessionClosed || !session) {
+            rawSend({ type: 'end_call', reason: 'transfer_failed' });
+            return;
+          }
+          try {
+            session.sendClientContent({
+              turns: '[Sistem] Satış təmsilçiləri hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, filiala yaxınlaşa və ya *5665 nömrəsinə zəng edə biləcəyini, ya da təmsilçinin ona tezliklə geri zəng edəcəyini de. Sonra qısa sağollaş və end_call çağır.',
+              turnComplete: true,
+            });
+          } catch {
+            rawSend({ type: 'end_call', reason: 'transfer_failed' });
+          }
+        },
+        onRepHangup: () => {
+          console.log(`Sales rep hung up, ending telephony job ${telephonyJobId ?? 'none'}`);
+          rawSend({ type: 'end_call', reason: 'sales_rep_hangup' });
+        },
+      }
+    );
+  };
+
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
   let session: Awaited<ReturnType<typeof ai.live.connect>> | null = null;
   const callMemoryContext = await buildCallMemoryContextBounded(customer, agent);
 
   const forwardCustomerAudio = (data: string) => {
+    if (transferState === 'dialing' || transferState === 'connected') {
+      // Hold music and the rep conversation: keep recording, keep the bot out of it.
+      broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'customer', rate: 16000, data });
+      recording?.add('customer', 16000, data);
+      return;
+    }
     if (sessionClosed) return;
     if (finalSilenceEndTimer) {
       if (pcm16RmsFromBase64(data) >= finalSilenceSpeechRms) {
@@ -503,6 +578,32 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               continue;
             }
 
+            if (functionName === 'transfer_to_sales') {
+              const exts = salesExtensionsFor(brand);
+              const ok = transferState === 'idle' && !endCallRequested && exts.length > 0 && Boolean(telephonyJobId);
+              if (ok) {
+                transferState = 'pending';
+                // Start once the hold sentence has been spoken (turnComplete); fallback after 4s.
+                transferStartTimer = setTimeout(() => void beginTransfer(), 4000);
+              }
+              try {
+                session?.sendToolResponse({
+                  functionResponses: [{
+                    id: functionCall.id,
+                    name: functionName,
+                    response: {
+                      output: ok
+                        ? { ok: true, message: 'Connecting the customer now. Say nothing more.' }
+                        : { ok: false, error: 'Transfer is not available for this customer. Offer the branch visit or the *5665 call centre instead.' },
+                    },
+                  }],
+                });
+              } catch (err) {
+                console.warn('Gemini tool response send failed', (err as Error)?.message);
+              }
+              continue;
+            }
+
             if (isAiToolName(functionName)) {
               const toolName = functionName;
               void (async () => {
@@ -557,7 +658,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             }
           }
           const part = message.serverContent?.modelTurn?.parts?.[0];
-          if (part?.inlineData?.data) {
+          if (part?.inlineData?.data && (transferState === 'dialing' || transferState === 'connected')) {
+            // Bot is muted while the customer is on hold or talking to the rep.
+          } else if (part?.inlineData?.data) {
             send({ type: 'audio', data: part.inlineData.data });
             if (!telephonyJobId && shouldForwardAgentToMonitor()) {
               broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'agent', rate: 24000, data: part.inlineData.data });
@@ -580,6 +683,11 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               send({ type: 'transcription', role: 'model', text: currentAgentTurn });
             }
           }
+          if (message.serverContent?.turnComplete && transferState === 'pending') {
+            if (transferStartTimer) clearTimeout(transferStartTimer);
+            // Let the queued hold sentence finish playing before the hold music starts.
+            transferStartTimer = setTimeout(() => void beginTransfer(), 1500);
+          }
           if (message.serverContent?.turnComplete && currentAgentTurn) {
             const completedAgentTurn = currentAgentTurn.trim();
             transcriptLines.push(`A: ${completedAgentTurn}`);
@@ -599,6 +707,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         onclose: (event) => {
           console.warn('Gemini session closed', (event as any)?.code, (event as any)?.reason);
           sessionClosed = true;
+          // During a transfer the call continues without the bot.
+          if (transferState === 'dialing' || transferState === 'connected' || transferState === 'pending') return;
           if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
         },
         onerror: (err) => {
@@ -626,7 +736,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             silenceDurationMs: Math.max(150, Math.min(geminiVadSilenceDurationMs, 1000)),
           },
         },
-        tools: [{ functionDeclarations: [endCallFunctionDeclaration, ...(aiToolDeclarations as any[])] }],
+        tools: [{ functionDeclarations: [endCallFunctionDeclaration, ...(customer.sourceSystem === 'arzoom' ? [transferFunctionDeclaration] : []), ...(aiToolDeclarations as any[])] }],
       },
     });
     flushPendingAudio();
@@ -639,6 +749,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
 
   clientWs.on('close', async () => {
     broadcastMonitorEvent(telephonyJobId, { type: 'ended' });
+    if (transferStartTimer) clearTimeout(transferStartTimer);
+    if (transferHandle) await transferHandle.cancel().catch(() => {});
     if (endCallTimer) clearTimeout(endCallTimer);
     clearFinalSilenceEndTimer();
     if (!sessionClosed && session) {
@@ -659,7 +771,11 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
       try {
         const endedAt = new Date();
         const durationSeconds = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
-        await recordLiveEstimatedUsage({ callId, durationSeconds });
+        // Gemini is billed only until the rep took over.
+        const botSeconds = transferConnectedAt
+          ? Math.round((transferConnectedAt.getTime() - startedAt.getTime()) / 1000)
+          : durationSeconds;
+        await recordLiveEstimatedUsage({ callId, durationSeconds: botSeconds });
         const liveTranscript = transcriptLines.length > 0 ? transcriptLines.join('\n') : null;
         let finalTranscript = liveTranscript;
         try {

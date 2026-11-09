@@ -113,6 +113,7 @@ export default function CustomersPage() {
     review: 'bg-slate-600/40 text-gray-300',
     info: 'bg-amber-500/20 text-amber-300',
     offer: 'bg-blue-500/20 text-blue-300',
+    reoffer: 'bg-purple-500/20 text-purple-300',
     accepted: 'bg-green-500/20 text-green-300',
     rejected: 'bg-red-500/20 text-red-300',
     declined: 'bg-red-500/20 text-red-300',

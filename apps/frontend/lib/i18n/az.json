@@ -1142,7 +1142,8 @@
       "PKS_DB_QUERY_URL": "Sorğu ünvanı",
       "PKS_DB_QUERY_API_KEY": "API açarı",
       "ARZOOM_API_URL": "Arzoom sayt ünvanı",
-      "ARZOOM_API_TOKEN": "İnteqrasiya tokeni"
+      "ARZOOM_API_TOKEN": "İnteqrasiya tokeni",
+      "SALES_TRANSFER_GROUPS": "Satış təmsilçiləri (marka: daxili nömrələr)"
     },
     "arzoomOff": "Qoşulmayıb",
     "arzoomApplications": "müraciət",

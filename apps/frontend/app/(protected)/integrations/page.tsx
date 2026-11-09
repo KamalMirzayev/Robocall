@@ -13,6 +13,7 @@ interface SettingRow {
   key: string;
   group: Group;
   secret: boolean;
+  placeholder?: string | null;
   set: boolean;
   source: 'panel' | 'env' | null;
   value: string | null;
@@ -96,7 +97,7 @@ function SettingField({ row, onSaved }: { row: SettingRow; onSaved: (data: { set
               setValue(e.target.value);
               setSaved(false);
             }}
-            placeholder={row.secret ? (row.set ? t('integrations.replacePlaceholder') : t('integrations.pastePlaceholder')) : 'https://'}
+            placeholder={row.secret ? (row.set ? t('integrations.replacePlaceholder') : t('integrations.pastePlaceholder')) : row.placeholder || 'https://'}
             autoComplete="off"
             spellCheck={false}
             className="w-full px-3 py-2 pr-10 bg-slate-700 border border-slate-600 rounded-lg text-white font-mono text-sm"

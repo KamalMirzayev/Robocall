@@ -1142,7 +1142,8 @@
       "PKS_DB_QUERY_URL": "Query URL",
       "PKS_DB_QUERY_API_KEY": "API key",
       "ARZOOM_API_URL": "Arzoom site address",
-      "ARZOOM_API_TOKEN": "Integration token"
+      "ARZOOM_API_TOKEN": "Integration token",
+      "SALES_TRANSFER_GROUPS": "Sales reps (brand: extensions)"
     },
     "arzoomOff": "Not connected",
     "arzoomApplications": "applications",

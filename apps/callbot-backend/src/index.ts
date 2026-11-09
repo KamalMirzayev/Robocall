@@ -32,6 +32,7 @@ import { loadSettings } from './settings.js';
 import { settingsRouter } from './routes/settings.js';
 import { ensureCampaignSegmentSchema, segmentContext } from './campaign-segments.js';
 import { ensureArzoomSchema, startArzoomSync } from './arzoom-sync.js';
+import { ensureSalesTransferSchema, startSalesTransferApp } from './sales-transfer.js';
 
 // Stopgap: a single socket error (e.g. EPIPE when a client disconnects
 // mid-stream) must not take down the whole API. Log and keep serving.
@@ -47,6 +48,7 @@ await ensureAuthSchema();
 await loadSettings();
 await ensureCampaignSegmentSchema();
 await ensureArzoomSchema();
+await ensureSalesTransferSchema();
 
 const app = express();
 app.use(cors({ origin: true, credentials: true }));
@@ -223,4 +225,5 @@ server.listen(PORT, () => {
   startPksImportJobProcessor();
   startPartnerKbRefresher();
   startArzoomSync();
+  startSalesTransferApp();
 });
