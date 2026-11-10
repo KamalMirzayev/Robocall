@@ -578,6 +578,12 @@ export async function importArzoomToCampaign(
 
 // Safety net: if the bot ended an ARZOOM call without calling record_application_feedback,
 // the outcome and reason are taken from the transcript after the call.
+function fallbackReason(transcript: string): string {
+  const said = transcript.split(/\r?\n/).filter((l) => /^\s*C\s*:/.test(l)).map((l) => l.replace(/^\s*C\s*:\s*/, '').trim()).filter(Boolean);
+  if (!said.length) return 'Bot zəng zamanı nəticəni qeyd etməyib; müştəri danışmayıb (cavab verən olmayıb və ya xətt kəsilib).';
+  return `Bot zəng zamanı nəticəni qeyd etməyib. Müştərinin son sözləri: "${said.slice(-3).join(' / ').slice(0, 600)}"`;
+}
+
 export async function ensureArzoomFeedbackFromTranscript(params: {
   customerId: number;
   telephonyJobId: number | null;
@@ -633,6 +639,6 @@ ${transcript.slice(-8000)}`;
     customerId: params.customerId,
     telephonyJobId: params.telephonyJobId,
     outcome,
-    reason: reason || 'Zəngdən avtomatik çıxarılıb',
+    reason: reason || fallbackReason(transcript),
   });
 }
