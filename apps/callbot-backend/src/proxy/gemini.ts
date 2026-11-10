@@ -800,19 +800,30 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         } catch (err) {
           console.error('Failed to build post-call transcript', err);
         }
+        const isArzoom = customer.sourceSystem === 'arzoom';
         await db.update(calls).set({
           endedAt,
           durationSeconds,
           transcript: finalTranscript,
-          summary: await summarizeTranscriptWithAi(finalTranscript),
+          // The generic summary uses debt-collection categories; ARZOOM calls get the
+          // recorded application result instead (below).
+          summary: isArzoom ? null : await summarizeTranscriptWithAi(finalTranscript),
         }).where(eq(calls.id, callId));
-        if (customer.sourceSystem === 'arzoom') {
+        if (isArzoom) {
           await ensureArzoomFeedbackFromTranscript({
             customerId: customer.id,
             telephonyJobId,
             startedAt,
             transcript: finalTranscript,
           }).catch((err) => console.error('Failed to save ARZOOM feedback', err));
+          if (telephonyJobId) {
+            await db.execute(sql`
+              UPDATE calls SET summary = (
+                SELECT concat_ws(' — ', outcome_label, nullif(reason, '')) FROM arzoom_feedback
+                WHERE telephony_job_id = ${telephonyJobId} ORDER BY id DESC LIMIT 1
+              ) WHERE id = ${callId}
+            `).catch((err) => console.error('Failed to set ARZOOM call summary', err));
+          }
         }
       } catch (err) {
         console.error('Failed to update call record', err);

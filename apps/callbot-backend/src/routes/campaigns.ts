@@ -1535,7 +1535,7 @@ campaignsRouter.get('/:id/calls', async (req, res) => {
       SELECT
         cc.id,
         cc.customer_id AS "customerId",
-        concat_ws(' ', c.name, c.surname, c.father_name) AS "customerName",
+        nullif(trim(concat_ws(' ', c.name, c.surname, c.father_name)), '') AS "customerName",
         c.fin AS "fin",
         coalesce(c.mobile_phone, c.phone) AS phone,
         cc.status,
@@ -1545,17 +1545,26 @@ campaignsRouter.get('/:id/calls', async (req, res) => {
         lc.started_at AS "lastCallStartedAt",
         lc.ended_at AS "lastCallEndedAt",
         lc.duration_seconds AS "lastCallDurationSeconds",
-        lc.summary AS "lastCallSummary",
+        -- ARZOOM application calls: the result the bot recorded for that very call, not the
+        -- generic (debt-collection) transcript summary.
+        CASE WHEN c.source_system = 'arzoom' THEN fb.text ELSE lc.summary END AS "lastCallSummary",
         lc.description AS "lastCallDescription"
       FROM campaign_calls cc
       LEFT JOIN customers c ON c.id = cc.customer_id
       LEFT JOIN LATERAL (
-        SELECT ca.id, ca.started_at, ca.ended_at, ca.duration_seconds, ca.summary, ca.description
+        SELECT ca.id, ca.started_at, ca.ended_at, ca.duration_seconds, ca.summary, ca.description, ca.telephony_job_id
         FROM calls ca
         WHERE ca.customer_id = cc.customer_id
         ORDER BY ca.started_at DESC, ca.id DESC
         LIMIT 1
       ) lc ON true
+      LEFT JOIN LATERAL (
+        SELECT concat_ws(' — ', f.outcome_label, nullif(f.reason, '')) AS text
+        FROM arzoom_feedback f
+        WHERE lc.telephony_job_id IS NOT NULL AND f.telephony_job_id = lc.telephony_job_id
+        ORDER BY f.id DESC
+        LIMIT 1
+      ) fb ON true
       WHERE cc.campaign_id = ${campaignId}
       ORDER BY cc.updated_at DESC, cc.id DESC
     `));
