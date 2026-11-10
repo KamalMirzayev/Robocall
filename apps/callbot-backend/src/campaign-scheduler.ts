@@ -135,7 +135,7 @@ function isWithinDateRange(runStartDate: string | Date | null, runEndDate: strin
 /**
  * Check if enough time has passed since the last attempt based on retryIntervalHours.
  */
-function shouldRetry(createdAt: string | Date, attemptNumber: number, retryIntervalHours: number): boolean {
+export function shouldRetry(createdAt: string | Date, attemptNumber: number, retryIntervalHours: number): boolean {
   if (attemptNumber === 0) {
     // First attempt, always allowed
     return true;
@@ -303,7 +303,7 @@ export async function campaignSchedulerTick() {
           // Find next eligible call for this trunk
           let callPlaced = false;
           for (const call of callRows) {
-            if (!shouldRetry(call.createdAt, call.attemptNumber, campaign.retryIntervalHours)) continue;
+            // Retry spacing is enforced by call_after (set when an attempt goes unanswered).
 
             // Check this specific customer doesn't already have an active job
             const customerBusy = rowsFrom(await db.execute(sql`
@@ -383,7 +383,7 @@ export async function campaignSchedulerTick() {
         }
 
         for (const call of callRows) {
-          if (!shouldRetry(call.createdAt, call.attemptNumber, campaign.retryIntervalHours)) continue;
+          // Retry spacing is enforced by call_after (set when an attempt goes unanswered).
 
           const customerRows = rowsFrom(await db.execute(sql`
             SELECT id, phone, name FROM customers WHERE id = ${call.customerId} LIMIT 1

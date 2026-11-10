@@ -248,7 +248,7 @@ async function attachToCampaigns(customerId: number, item: ArzoomItem, statusCha
     `));
     // Only campaigns that opted in get new applications on their own.
     if (wanted && !link && c.auto_add !== 'on') continue;
-    if (wanted && link && statusChanged && c.requeue !== 'off' && ['completed', 'failed', 'answered', 'no_answer'].includes(String(link.status))) {
+    if (wanted && link && statusChanged && c.requeue !== 'off' && ['completed', 'failed', 'answered', 'no_answer', 'retrying'].includes(String(link.status))) {
       // New status, new conversation: queue the customer again.
       await db.execute(sql`UPDATE campaign_calls SET status = 'pending', attempt_number = 0, call_after = ${callAfter}, updated_at = now() WHERE id = ${link.id as number}`);
       continue;
@@ -265,7 +265,7 @@ async function attachToCampaigns(customerId: number, item: ArzoomItem, statusCha
     } else if (wanted && link && link.status === 'pending' && statusChanged) {
       // Still waiting, but the status moved on (e.g. info -> accepted): new waiting time.
       await db.execute(sql`UPDATE campaign_calls SET call_after = ${callAfter}, updated_at = now() WHERE id = ${link.id as number}`);
-    } else if (!wanted && link && link.status === 'pending') {
+    } else if (!wanted && link && ['pending', 'retrying'].includes(String(link.status))) {
       await db.execute(sql`UPDATE campaign_calls SET status = 'cancelled', updated_at = now() WHERE id = ${link.id as number}`);
     }
   }

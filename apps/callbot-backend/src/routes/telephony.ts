@@ -255,13 +255,27 @@ async function handleJobCompletion(jobId: number, status: 'ended' | 'failed', an
       const ccId = Number(campaignCall.id);
       const campaignId = Number(campaignCall.campaign_id);
       
-      // Update campaign_call status based on whether call was answered
-      const newStatus = answered && status === 'ended' ? 'completed' : 'failed';
-      await db.execute(sql`
-        UPDATE campaign_calls 
-        SET status = ${newStatus}, updated_at = now()
-        WHERE id = ${ccId}
-      `);
+      // Answered → completed. Not answered (no answer, busy, unreachable) → queue a
+      // retry after the campaign's retry interval while attempts remain; only the
+      // last unanswered attempt is final 'failed'.
+      if (answered && status === 'ended') {
+        await db.execute(sql`
+          UPDATE campaign_calls
+          SET status = 'completed', updated_at = now()
+          WHERE id = ${ccId}
+        `);
+      } else {
+        await db.execute(sql`
+          UPDATE campaign_calls cc
+          SET status = CASE WHEN cc.attempt_number < c.max_attempts THEN 'retrying' ELSE 'failed' END,
+              call_after = CASE WHEN cc.attempt_number < c.max_attempts
+                                THEN now() + make_interval(hours => c.retry_interval_hours)
+                                ELSE cc.call_after END,
+              updated_at = now()
+          FROM campaigns c
+          WHERE cc.id = ${ccId} AND c.id = cc.campaign_id
+        `);
+      }
       
       // Recalculate campaign statistics
       if (campaignId) {
