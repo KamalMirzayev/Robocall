@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { calls, agents, customers } from '../db/schema.js';
+import { computeCallAnalytics } from '../call-analytics.js';
 
 export const callsRouter = Router();
 
@@ -83,6 +84,18 @@ callsRouter.get('/stats', async (_req, res) => {
     });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Call analytics for the dashboard (see call-analytics.ts). Registered before GET /:id.
+callsRouter.get('/analytics', async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(90, Number(req.query.days || 7)));
+    const campaignId = Number(req.query.campaignId || 0) || null;
+    res.json(await computeCallAnalytics({ days, campaignId }));
+  } catch (err) {
+    console.error('[calls/analytics]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });

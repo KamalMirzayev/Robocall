@@ -16,6 +16,8 @@ export interface SettingDef {
 
 export const SETTINGS: SettingDef[] = [
   { key: 'GEMINI_API_KEY', group: 'ai', secret: true },
+  // Balance shown in Google AI Studio billing, in USD; see GET /api/ai-usage/balance.
+  { key: 'GEMINI_BALANCE_USD', group: 'ai', secret: false, placeholder: '250.00' },
   { key: 'PARTNER_KB_URL', group: 'knowledge', secret: false, url: true },
   { key: 'PARTNER_KB_TOKEN', group: 'knowledge', secret: true },
   { key: 'RAG_SEARCH_URL', group: 'knowledge', secret: false, url: true },
@@ -69,6 +71,7 @@ export function validateSetting(key: string, value: string): string | null {
   const def = byKey.get(key);
   if (!def) return 'unknown setting';
   if (value.length > 2000) return 'value is too long';
+  if (key === 'GEMINI_BALANCE_USD' && value && !Number.isFinite(Number(value.replace(',', '.')))) return 'enter a number, e.g. 250.00';
   if (def.url && value) {
     try {
       const u = new URL(value);

@@ -29,12 +29,14 @@ import { useIdleTimeout } from '@/lib/use-idle-timeout';
 import { useLanguage } from '@/lib/language';
 import { LanguageSwitcher } from '@/components/LanguageSwitcher';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import GeminiBalance from '@/components/GeminiBalance';
 
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes
 
 type NavItem = { href: string; label: string; icon: typeof Phone };
 
 const mainNav: NavItem[] = [
+  { href: '/analytics', label: 'protectedLayout.navAnalytics', icon: BarChart3 },
   { href: '/calls', label: 'protectedLayout.navCalls', icon: Phone },
   { href: '/campaigns', label: 'protectedLayout.navCampaigns', icon: Megaphone },
   { href: '/agents', label: 'protectedLayout.navAgents', icon: Bot },
@@ -189,6 +191,7 @@ export default function ProtectedLayout({
         </nav>
 
         <div className="p-3 space-y-3">
+          {user?.role === 'admin' && <GeminiBalance />}
           <div className="flex items-center justify-between px-1">
             <LanguageSwitcher />
             <div className="flex items-center gap-2">

@@ -68,7 +68,8 @@
     "brandSub": "AI call center",
     "mainSection": "Panel",
     "themeToggle": "Toggle theme",
-    "integrations": "Integrations"
+    "integrations": "Integrations",
+    "navAnalytics": "Analytics"
   },
   "authLayout": {
     "loading": "Loading..."
@@ -1143,11 +1144,94 @@
       "PKS_DB_QUERY_API_KEY": "API key",
       "ARZOOM_API_URL": "Arzoom site address",
       "ARZOOM_API_TOKEN": "Integration token",
-      "SALES_TRANSFER_GROUPS": "Sales reps (brand: extensions)"
+      "SALES_TRANSFER_GROUPS": "Sales reps (brand: extensions)",
+      "GEMINI_BALANCE_USD": "Gemini balance (USD)"
     },
     "arzoomOff": "Not connected",
     "arzoomApplications": "applications",
     "arzoomLastSync": "last sync",
     "syncNow": "Sync now"
+  },
+  "analytics": {
+    "title": "Call analytics",
+    "subtitle": "Calls, conversation outcomes and the retry queue, refreshed every 30 seconds",
+    "updated": "updated",
+    "today": "Today",
+    "lastDays": "{n} days",
+    "allCampaigns": "All campaigns",
+    "refresh": "Refresh",
+    "loading": "Loading...",
+    "loadError": "Could not load analytics",
+    "empty": "No data yet",
+    "kpi": {
+      "attempts": "Call attempts",
+      "answered": "Answered",
+      "unanswered": "Unanswered",
+      "inProgress": "in progress",
+      "customers": "Customers reached",
+      "customersHint": "talked to / called",
+      "avgDuration": "Avg. talk time",
+      "totalMinutes": "Talk minutes",
+      "transfers": "Sent to sales"
+    },
+    "outcomes": "Conversation outcomes",
+    "queue": "Campaign queue",
+    "retryRule": "unanswered: retry after {h} h, max {n} attempts",
+    "nextRetry": "Next retry",
+    "queueStatus": {
+      "completed": "Talked",
+      "attempting": "Calling",
+      "retrying": "Waiting to retry",
+      "pending": "Queued",
+      "failed": "Not reached",
+      "cancelled": "Cancelled"
+    },
+    "byHour": "By hour (green: answered)",
+    "byDay": "By day (green: answered)",
+    "failures": "Why calls went unanswered",
+    "failure": {
+      "no_answer": "No answer",
+      "busy": "Busy",
+      "congestion": "Network / unreachable",
+      "stale": "Call cut off",
+      "unknown": "Unknown",
+      "other": "Other"
+    },
+    "transfers": "Transfers to sales reps",
+    "rep": "Rep",
+    "brand": "Brand",
+    "connected": "Connected",
+    "missed": "No answer",
+    "recent": "Latest conversations",
+    "col": {
+      "time": "Time",
+      "customer": "Customer",
+      "status": "Application status",
+      "call": "Call",
+      "outcome": "Outcome",
+      "analysis": "Conversation analysis"
+    },
+    "appStatus": {
+      "offer": "Offer sent",
+      "info": "Documents needed",
+      "accepted": "Sent to sales",
+      "declined": "Declined",
+      "cancelled": "Cancelled",
+      "review": "In review",
+      "rejected": "Rejected",
+      "reoffer": "Re-offer",
+      "guarantor": "Guarantor"
+    }
+  },
+  "geminiBalance": {
+    "title": "Gemini balance",
+    "notSet": "Not set",
+    "today": "Spent today",
+    "starting": "Entered balance",
+    "spentSince": "Spent since",
+    "lastHour": "Last hour",
+    "hoursLeft": "At the current rate it lasts about {h} hours",
+    "setAt": "Balance entered:",
+    "hint": "Google gives no balance API. Enter the balance from Google AI Studio in Integrations → Gemini balance (USD); spend since then is taken off every minute."
   }
 }

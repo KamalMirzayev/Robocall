@@ -5,6 +5,8 @@ import {
   Agent,
   Customer,
   ContactHistory,
+  CallAnalytics,
+  GeminiBalance,
   Recording,
   Campaign,
   CampaignCallsResponse,
@@ -334,6 +336,28 @@ export const callbotApi = {
       return response.data;
     } catch (error) {
       console.error(`Failed to fetch customer ${customerId}:`, error);
+      return null;
+    }
+  },
+
+  async getGeminiBalance(): Promise<GeminiBalance | null> {
+    try {
+      const response = await apiClient.get<GeminiBalance>('/callbot/ai-usage/balance');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch Gemini balance:', error);
+      return null;
+    }
+  },
+
+  async getCallAnalytics(params: { days: number; campaignId?: number | null }): Promise<CallAnalytics | null> {
+    try {
+      const response = await apiClient.get<CallAnalytics>('/callbot/calls/analytics', {
+        params: { days: params.days, ...(params.campaignId ? { campaignId: params.campaignId } : {}) },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch call analytics:', error);
       return null;
     }
   },

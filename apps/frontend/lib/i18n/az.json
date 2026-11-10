@@ -68,7 +68,8 @@
     "brandSub": "AI zəng mərkəzi",
     "mainSection": "Panel",
     "themeToggle": "Tema dəyiş",
-    "integrations": "İnteqrasiyalar"
+    "integrations": "İnteqrasiyalar",
+    "navAnalytics": "Analitika"
   },
   "authLayout": {
     "loading": "Yüklənir..."
@@ -1143,11 +1144,94 @@
       "PKS_DB_QUERY_API_KEY": "API açarı",
       "ARZOOM_API_URL": "Arzoom sayt ünvanı",
       "ARZOOM_API_TOKEN": "İnteqrasiya tokeni",
-      "SALES_TRANSFER_GROUPS": "Satış təmsilçiləri (marka: daxili nömrələr)"
+      "SALES_TRANSFER_GROUPS": "Satış təmsilçiləri (marka: daxili nömrələr)",
+      "GEMINI_BALANCE_USD": "Gemini balansı (USD)"
     },
     "arzoomOff": "Qoşulmayıb",
     "arzoomApplications": "müraciət",
     "arzoomLastSync": "son yeniləmə",
     "syncNow": "İndi yenilə"
+  },
+  "analytics": {
+    "title": "Zəng analitikası",
+    "subtitle": "Zənglər, danışıqların nəticəsi və təkrar cəhd növbəsi, hər 30 saniyədən bir yenilənir",
+    "updated": "yeniləndi",
+    "today": "Bu gün",
+    "lastDays": "{n} gün",
+    "allCampaigns": "Bütün kampaniyalar",
+    "refresh": "Yenilə",
+    "loading": "Yüklənir...",
+    "loadError": "Analitikanı yükləmək olmadı",
+    "empty": "Hələ məlumat yoxdur",
+    "kpi": {
+      "attempts": "Zəng cəhdi",
+      "answered": "Cavablandı",
+      "unanswered": "Cavabsız",
+      "inProgress": "davam edir",
+      "customers": "Əlaqə saxlanılan müştəri",
+      "customersHint": "danışılan / zəng edilən",
+      "avgDuration": "Orta danışıq",
+      "totalMinutes": "Danışıq dəqiqəsi",
+      "transfers": "Satışa qoşuldu"
+    },
+    "outcomes": "Danışıqların nəticəsi",
+    "queue": "Kampaniya növbəsi",
+    "retryRule": "cavabsız: {h} saatdan sonra, maks. {n} cəhd",
+    "nextRetry": "Növbəti təkrar zəng",
+    "queueStatus": {
+      "completed": "Danışılıb",
+      "attempting": "Zəng gedir",
+      "retrying": "Təkrar gözləyir",
+      "pending": "Növbədə",
+      "failed": "Əlaqə alınmadı",
+      "cancelled": "Ləğv"
+    },
+    "byHour": "Saatlar üzrə (yaşıl: cavablanan)",
+    "byDay": "Günlər üzrə (yaşıl: cavablanan)",
+    "failures": "Cavabsız zənglərin səbəbi",
+    "failure": {
+      "no_answer": "Cavab vermədi",
+      "busy": "Məşğul",
+      "congestion": "Şəbəkə / nömrə əlçatmaz",
+      "stale": "Zəng yarımçıq qaldı",
+      "unknown": "Naməlum",
+      "other": "Digər"
+    },
+    "transfers": "Satış təmsilçilərinə ötürmələr",
+    "rep": "Təmsilçi",
+    "brand": "Marka",
+    "connected": "Qoşuldu",
+    "missed": "Cavab vermədi",
+    "recent": "Son danışıqlar",
+    "col": {
+      "time": "Vaxt",
+      "customer": "Müştəri",
+      "status": "Müraciət statusu",
+      "call": "Zəng",
+      "outcome": "Nəticə",
+      "analysis": "Danışığın təhlili"
+    },
+    "appStatus": {
+      "offer": "Təklif göndərilib",
+      "info": "Əlavə sənəd",
+      "accepted": "Satışa ötürülüb",
+      "declined": "İmtina",
+      "cancelled": "Ləğv",
+      "review": "Baxılır",
+      "rejected": "Rədd",
+      "reoffer": "Təkrar təklif",
+      "guarantor": "Zamin"
+    }
+  },
+  "geminiBalance": {
+    "title": "Gemini balansı",
+    "notSet": "Daxil edilməyib",
+    "today": "Bu gün xərc",
+    "starting": "Daxil edilən balans",
+    "spentSince": "O vaxtdan xərc",
+    "lastHour": "Son 1 saat",
+    "hoursLeft": "İndiki sürətlə təxminən {h} saata çatar",
+    "setAt": "Balans daxil edilib:",
+    "hint": "Google balansı API ilə vermir. Google AI Studio-dakı balansı İnteqrasiyalar → Gemini balansı (USD) sahəsinə yazın, sistem ondan sonrakı xərci hər dəqiqə çıxır."
   }
 }

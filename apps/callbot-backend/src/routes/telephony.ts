@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { scheduleArzoomAnalyticsPush } from '../arzoom-analytics.js';
 import { Router, type Request, type Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { eq, or, sql } from 'drizzle-orm';
@@ -234,6 +235,7 @@ export async function updateCampaignStatistics(campaignId: number) {
  * Update campaign_calls status and campaign statistics after a telephony job completes.
  */
 async function handleJobCompletion(jobId: number, status: 'ended' | 'failed', answered: boolean) {
+  scheduleArzoomAnalyticsPush();
   try {
     // Find the campaign_call for this telephony job. Scoped to the job's own
     // campaign_id (not just customer_id) — a customer can be queued in more than

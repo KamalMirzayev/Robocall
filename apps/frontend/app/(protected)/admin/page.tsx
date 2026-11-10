@@ -5,6 +5,7 @@ import { useAuth } from '@/lib/auth';
 import { useLanguage } from '@/lib/language';
 import apiClient from '@/lib/api-client';
 import { AxiosError } from 'axios';
+import GeminiBalance from '@/components/GeminiBalance';
 
 // ─── Password Change ──────────────────────────────────────────────────────────
 
@@ -400,6 +401,8 @@ export default function AdminPage() {
   return (
     <div className="p-8">
       <h1 className="text-3xl font-bold text-white mb-6">{t('admin.title')}</h1>
+
+      {user?.role === 'admin' && <div className="mb-6"><GeminiBalance variant="card" /></div>}
 
       <ChangePasswordSection />
 

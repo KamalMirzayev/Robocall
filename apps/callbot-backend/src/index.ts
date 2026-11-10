@@ -33,6 +33,7 @@ import { settingsRouter } from './routes/settings.js';
 import { ensureCampaignSegmentSchema, segmentContext } from './campaign-segments.js';
 import { ensureArzoomSchema, startArzoomSync } from './arzoom-sync.js';
 import { ensureSalesTransferSchema, startSalesTransferApp } from './sales-transfer.js';
+import { startArzoomAnalyticsPush } from './arzoom-analytics.js';
 
 // Stopgap: a single socket error (e.g. EPIPE when a client disconnects
 // mid-stream) must not take down the whole API. Log and keep serving.
@@ -226,4 +227,5 @@ server.listen(PORT, () => {
   startPartnerKbRefresher();
   startArzoomSync();
   startSalesTransferApp();
+  startArzoomAnalyticsPush();
 });

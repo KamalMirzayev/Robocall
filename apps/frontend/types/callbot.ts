@@ -283,3 +283,30 @@ export interface Recording {
   customer_name?: string;
   customer_number?: string;
 }
+
+export interface CallAnalytics {
+  days: number;
+  campaignId: number | null;
+  generatedAt: string;
+  kpi: { attempts: number; answered: number; unanswered: number; in_progress: number; customers: number; reached_customers: number; avg_duration: number; total_seconds: number };
+  daily: { day: string; attempts: number; answered: number }[];
+  hourly: { hour: number; attempts: number; answered: number }[];
+  outcomes: { outcome: string; label: string; count: number }[];
+  failures: { reason: string; count: number }[];
+  queue: { id: number; name: string; campaign_status: string; max_attempts: number; retry_interval_hours: number; total: number; pending: number; attempting: number; retrying: number; completed: number; failed: number; cancelled: number; next_call_after: string | null }[];
+  transfers: { extension: string; brand: string | null; answered: number; missed: number }[];
+  recent: { id: number; created_at: string; phone: string; status: string; answered: boolean; duration_seconds: number | null; last_error: string | null; customer_name: string | null; application_status: string | null; application_id: string | null; outcome: string | null; outcome_label: string | null; reason: string | null; summary: string | null }[];
+  campaigns: { id: number; name: string; status: string }[];
+}
+
+export interface GeminiBalance {
+  configured: boolean;
+  startingBalanceUsd?: number;
+  setAt?: string | null;
+  spentSinceSetUsd?: number;
+  remainingUsd?: number;
+  todaySpentUsd: number;
+  lastHourSpentUsd: number;
+  hoursLeftAtCurrentRate?: number | null;
+  checkedAt: string;
+}

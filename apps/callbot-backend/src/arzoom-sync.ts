@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { scheduleArzoomAnalyticsPush } from './arzoom-analytics.js';
 import { GoogleGenAI } from '@google/genai';
 import { db } from './db/index.js';
 import { recordAiTokenUsage } from './ai-usage.js';
@@ -474,6 +475,7 @@ export async function recordArzoomFeedback(params: {
     UPDATE customers SET pks_status = ${label}, pks_comment = ${[params.reason, termsText(terms)].filter(Boolean).join(' — ') || null} WHERE id = ${params.customerId}
   `);
   void pushPendingFeedback().catch((err) => console.error('[arzoom-sync] feedback push failed', err));
+  scheduleArzoomAnalyticsPush();
   return { ok: true };
 }
 
