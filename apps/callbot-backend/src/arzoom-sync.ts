@@ -454,6 +454,9 @@ export async function recordArzoomFeedback(params: {
   outcome: string;
   reason: string;
   requestedTerms?: RequestedTerms | null;
+  // Keep the row in robocall's history only: not sent to ARZOOM and not shown as the
+  // customer's latest result, so an empty follow-up call can't hide a real earlier answer.
+  historyOnly?: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
   const label = FEEDBACK_OUTCOMES[params.outcome];
   if (!label) return { ok: false, error: `outcome must be one of: ${Object.keys(FEEDBACK_OUTCOMES).join(', ')}` };
@@ -467,9 +470,14 @@ export async function recordArzoomFeedback(params: {
   `));
   if (!customer) return { ok: false, error: 'not an ARZOOM application customer' };
   await db.execute(sql`
-    INSERT INTO arzoom_feedback (application_id, customer_id, telephony_job_id, outcome, outcome_label, reason, requested_terms)
-    VALUES (${String(customer.source_record_key)}, ${params.customerId}, ${params.telephonyJobId}, ${params.outcome}, ${label}, ${params.reason || null}, ${terms ? JSON.stringify(terms) : null}::jsonb)
+    INSERT INTO arzoom_feedback (application_id, customer_id, telephony_job_id, outcome, outcome_label, reason, requested_terms, pushed_at, push_error)
+    VALUES (${String(customer.source_record_key)}, ${params.customerId}, ${params.telephonyJobId}, ${params.outcome}, ${label}, ${params.reason || null}, ${terms ? JSON.stringify(terms) : null}::jsonb,
+            ${params.historyOnly ? sql`now()` : sql`NULL`}, ${params.historyOnly ? 'göndərilmədi: əvvəlki danışıq qüvvədədir' : null})
   `);
+  if (params.historyOnly) {
+    scheduleArzoomAnalyticsPush();
+    return { ok: true };
+  }
   // Shown right away on the customers page (Son əlaqə), before ARZOOM echoes it back.
   await db.execute(sql`
     UPDATE customers SET pks_status = ${label}, pks_comment = ${[params.reason, termsText(terms)].filter(Boolean).join(' — ') || null} WHERE id = ${params.customerId}
@@ -637,10 +645,24 @@ ${transcript.slice(-8000)}`;
     }
   }
   if (outcome === 'declined' && !reason) outcome = 'other';
+  // Nothing usable came out of this call. If the customer was already talked to about this
+  // application, keep that answer as the latest result instead of overwriting it.
+  let historyOnly = false;
+  if (outcome === 'other' && !reason) {
+    const [earlier] = rowsFrom(await db.execute(sql`
+      SELECT 1 FROM arzoom_feedback
+      WHERE customer_id = ${params.customerId}
+        AND push_error IS DISTINCT FROM 'göndərilmədi: əvvəlki danışıq qüvvədədir'
+        AND NOT (outcome = 'other' AND (coalesce(reason, '') = '' OR reason LIKE 'Zəngdən avtomatik çıxarılıb%' OR reason LIKE 'Bot zəng zamanı nəticəni qeyd etməyib%'))
+      LIMIT 1
+    `));
+    historyOnly = Boolean(earlier);
+  }
   await recordArzoomFeedback({
     customerId: params.customerId,
     telephonyJobId: params.telephonyJobId,
     outcome,
     reason: reason || fallbackReason(transcript),
+    historyOnly,
   });
 }
