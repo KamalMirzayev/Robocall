@@ -1,4 +1,5 @@
 import { computeCallAnalytics } from './call-analytics.js';
+import { recordingFileInfo } from './recording.js';
 
 // Pushes a call-analytics snapshot (today / 7 days / 30 days, ARZOOM customers only) to
 // ARZOOM, so the ARZOOM panel shows the same numbers and conversation outcomes as the
@@ -44,11 +45,12 @@ export async function buildArzoomAnalyticsSnapshot() {
     periods: { today: strip(today), week: strip(week), month: strip(await computeCallAnalytics({ days: 30, arzoomOnly: true, recentLimit: 0 })) },
     // Every conversation of the last 90 days (newest first, up to RECENT_CALLS_LIMIT) with the
     // outcome, the reason the bot recorded and the AI summary, so older ones show up too.
-    recent_calls: all.recent.map((r) => ({
+    recent_calls: (await Promise.all(all.recent.map(async (r) => ({
       ...r,
+      has_recording: Boolean(r.answered) && (await recordingFileInfo(Number(r.id))) !== null,
       reason: clip(r.reason, 800),
       summary: clip(r.summary, 800),
-    })),
+    })))),
   };
 }
 

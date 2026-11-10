@@ -6,6 +6,8 @@ import { currentApiClient, type ApiClient } from '../api-auth.js';
 import { createTelephonyJob } from './telephony.js';
 import { resolveOrCreateExternalCustomer } from '../external-customers.js';
 import { normalizePhone } from '../phone-utils.js';
+import { createReadStream } from 'node:fs';
+import { recordingFileInfo } from '../recording.js';
 
 export const externalCallsRouter = Router();
 
@@ -331,6 +333,59 @@ externalCallsRouter.post('/arzoom/requeue', async (req: Request, res) => {
   } catch (err) {
     console.error('[external/arzoom/requeue]', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Call recording for ARZOOM's player: {id} is the call id from the analytics snapshot's
+// recent_calls (the telephony job id). Only calls to ARZOOM customers are served. Supports
+// Range requests so the player can seek.
+externalCallsRouter.get('/arzoom/recordings/:id', async (req: Request, res) => {
+  try {
+    const jobId = Number(req.params.id);
+    if (!Number.isInteger(jobId) || jobId <= 0) {
+      res.status(400).json({ error: 'invalid call id' });
+      return;
+    }
+    const [owned] = rowsOf(await db.execute(sql`
+      SELECT 1 FROM telephony_jobs tj JOIN customers c ON c.id = tj.customer_id
+      WHERE tj.id = ${jobId} AND c.source_system = 'arzoom' LIMIT 1
+    `));
+    const file = owned ? await recordingFileInfo(jobId) : null;
+    if (!file) {
+      res.status(404).json({ error: 'recording not found' });
+      return;
+    }
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    let start = 0;
+    let end = file.size - 1;
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
+    if (range && (range[1] || range[2])) {
+      if (range[1]) {
+        start = Number(range[1]);
+        if (range[2]) end = Math.min(end, Number(range[2]));
+      } else {
+        start = Math.max(0, file.size - Number(range[2]));
+      }
+      if (start > end || start >= file.size) {
+        res.status(416).setHeader('Content-Range', `bytes */${file.size}`).end();
+        return;
+      }
+      res.status(206).setHeader('Content-Range', `bytes ${start}-${end}/${file.size}`);
+    }
+    res.setHeader('Content-Length', String(end - start + 1));
+    const stream = createReadStream(file.filePath, { start, end });
+    stream.on('error', (err) => {
+      console.error('[external/arzoom/recordings]', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
+      else res.destroy();
+    });
+    res.on('close', () => stream.destroy());
+    stream.pipe(res);
+  } catch (err) {
+    console.error('[external/arzoom/recordings]', err);
+    if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
   }
 });
 
