@@ -320,10 +320,14 @@ export async function campaignSchedulerTick() {
             if (customerBusy.length > 0) continue;
 
             const customerRows = rowsFrom(await db.execute(sql`
-              SELECT id, phone, name FROM customers WHERE id = ${call.customerId} LIMIT 1
+              SELECT id, phone, name, do_not_call AS "doNotCall" FROM customers WHERE id = ${call.customerId} LIMIT 1
             `)) as CustomerRow[];
             const customer = customerRows[0];
             if (!customer) continue;
+            if ((customer as { doNotCall?: boolean }).doNotCall) {
+              await db.execute(sql`UPDATE campaign_calls SET status = 'cancelled', updated_at = now() WHERE id = ${call.id}`);
+              continue;
+            }
 
             const phone = normalizePhone(customer.phone);
             if (!phone) {
@@ -391,10 +395,14 @@ export async function campaignSchedulerTick() {
           // Retry spacing is enforced by call_after (set when an attempt goes unanswered).
 
           const customerRows = rowsFrom(await db.execute(sql`
-            SELECT id, phone, name FROM customers WHERE id = ${call.customerId} LIMIT 1
+            SELECT id, phone, name, do_not_call AS "doNotCall" FROM customers WHERE id = ${call.customerId} LIMIT 1
           `)) as CustomerRow[];
           const customer = customerRows[0];
           if (!customer) continue;
+          if ((customer as { doNotCall?: boolean }).doNotCall) {
+            await db.execute(sql`UPDATE campaign_calls SET status = 'cancelled', updated_at = now() WHERE id = ${call.id}`);
+            continue;
+          }
 
           const phone = normalizePhone(customer.phone);
           if (!phone) {

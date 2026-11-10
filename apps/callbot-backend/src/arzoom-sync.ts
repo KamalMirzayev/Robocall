@@ -97,6 +97,8 @@ export function arzoomConfigured(): boolean {
 export async function ensureArzoomSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS arzoom_data jsonb`);
   await db.execute(sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS application_status varchar(40)`);
+  // Customer asked never to be called again: the campaign scheduler skips them for good.
+  await db.execute(sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS do_not_call boolean NOT NULL DEFAULT false`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS customers_source_key_idx ON customers (source_system, source_record_key)`);
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS arzoom_feedback (
@@ -402,6 +404,7 @@ export function arzoomCustomerLines(data: unknown): string[] {
   if (item.status === 'offer' || item.status === 'accepted') {
     lines.push('- Müştəri şərtlərlə razıdırsa və ya "razıyam, necə edək" kimi davam etmək istəyirsə: əvvəl record_application_feedback alətini outcome=agrees_will_visit ilə çağır, sonra "Zəhmət olmasa bir neçə saniyə xətdə qalın, sizi satış təmsilçisinə qoşuram" de və dərhal transfer_to_sales alətini çağır. Bundan sonra heç nə demə və end_call çağırma. Alət uğursuz olarsa, üzr istə, filiala yaxınlaşa və ya *5665 nömrəsinə zəng edə biləcəyini de.');
   }
+  lines.push('- Müştəri ona bir daha zəng edilməməsini, narahat edilməməsini və ya nömrəsinin siyahıdan silinməsini istəsə: mübahisə etmə, qısa üzr istə ("Başa düşdüm, üzr istəyirik, sizə bir daha zəng edilməyəcək"), record_application_feedback alətini outcome=declined, do_not_call=true ilə çağır, reason-a müştərinin sözlərini yaz, sonra sağollaş və zəngi bitir.');
   lines.push('- Zəngin sonunda, sağollaşmadan əvvəl, record_application_feedback alətini MÜTLƏQ çağır (nəticə və müştərinin səbəbi).');
   if (item.last_call?.outcome_label) {
     lines.push(`- Əvvəlki əlaqə: ${item.last_call.outcome_label}${item.last_call.text ? ` — ${item.last_call.text}` : ''}`);
@@ -455,6 +458,15 @@ export function termsText(t: RequestedTerms | null | undefined): string {
   return parts.length ? `Müştərinin istədiyi: ${parts.join(', ')}` : '';
 }
 
+// The customer asked not to be called again: flag them and take them out of every queue.
+export async function markDoNotCall(customerId: number): Promise<void> {
+  await db.execute(sql`UPDATE customers SET do_not_call = true WHERE id = ${customerId}`);
+  await db.execute(sql`
+    UPDATE campaign_calls SET status = 'cancelled', updated_at = now()
+    WHERE customer_id = ${customerId} AND status IN ('pending', 'retrying')
+  `);
+}
+
 export async function recordArzoomFeedback(params: {
   customerId: number;
   telephonyJobId: number | null;
@@ -464,6 +476,7 @@ export async function recordArzoomFeedback(params: {
   // Keep the row in robocall's history only: not sent to ARZOOM and not shown as the
   // customer's latest result, so an empty follow-up call can't hide a real earlier answer.
   historyOnly?: boolean;
+  doNotCall?: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
   const label = FEEDBACK_OUTCOMES[params.outcome];
   if (!label) return { ok: false, error: `outcome must be one of: ${Object.keys(FEEDBACK_OUTCOMES).join(', ')}` };
@@ -486,6 +499,7 @@ export async function recordArzoomFeedback(params: {
     return { ok: true };
   }
   await db.execute(sql`UPDATE customers SET arzoom_data = arzoom_data - 'whatsapp_correction' WHERE id = ${params.customerId} AND arzoom_data ? 'whatsapp_correction'`);
+  if (params.doNotCall) await markDoNotCall(params.customerId);
   // Shown right away on the customers page (Son əlaqə), before ARZOOM echoes it back.
   await db.execute(sql`
     UPDATE customers SET pks_status = ${label}, pks_comment = ${[params.reason, termsText(terms)].filter(Boolean).join(' — ') || null} WHERE id = ${params.customerId}
@@ -623,13 +637,15 @@ export async function ensureArzoomFeedbackFromTranscript(params: {
 
   let outcome = 'other';
   let reason = '';
+  let doNotCall = false;
   const key = String(process.env.GEMINI_API_KEY || '').trim();
   if (key) {
     try {
       const model = process.env.POST_CALL_SUMMARY_MODEL || 'gemini-2.5-flash';
       const ai = new GoogleGenAI({ apiKey: key });
       const prompt = `Bu, kredit müraciəti ilə bağlı telefon zənginin transkriptidir (A: bot, C: müştəri).
-Müştərinin son fikrini müəyyən et və YALNIZ JSON qaytar: {"outcome": "...", "reason": "..."}
+Müştərinin son fikrini müəyyən et və YALNIZ JSON qaytar: {"outcome": "...", "reason": "...", "do_not_call": false}
+do_not_call: müştəri açıq şəkildə ona bir daha zəng edilməməsini, narahat edilməməsini və ya nömrəsinin silinməsini istəyibsə true, əks halda false.
 outcome bunlardan biri olmalıdır: ${Object.entries(FEEDBACK_OUTCOMES).filter(([k]) => k !== 'transferred_to_sales').map(([k, v]) => `${k} (${v})`).join(', ')}.
 reason: ətraflı qeyd, Azərbaycan dilində, 2-4 cümlə: müştəri nə dedi, səbəbi, qeyd etdiyi tarix/vaxt, filial və ya sənədlər, və razılaşdırılan növbəti addım. Müştəri cavab verməyibsə və ya danışıq alınmayıbsa outcome "other" olsun.
 
@@ -645,7 +661,8 @@ ${transcript.slice(-8000)}`;
         operation: 'arzoom_feedback',
         usageMetadata: (response as { usageMetadata?: unknown }).usageMetadata as never,
       }).catch(() => undefined);
-      const parsed = JSON.parse(String(response.text || '{}').replace(/^```json|```$/g, '').trim()) as { outcome?: string; reason?: string };
+      const parsed = JSON.parse(String(response.text || '{}').replace(/^```json|```$/g, '').trim()) as { outcome?: string; reason?: string; do_not_call?: boolean };
+      doNotCall = parsed.do_not_call === true;
       if (parsed.outcome && parsed.outcome in FEEDBACK_OUTCOMES && parsed.outcome !== 'transferred_to_sales') outcome = parsed.outcome;
       reason = String(parsed.reason || '').trim().slice(0, 1000);
     } catch (err) {
@@ -673,4 +690,5 @@ ${transcript.slice(-8000)}`;
     reason: reason || fallbackReason(transcript),
     historyOnly,
   });
+  if (doNotCall) await markDoNotCall(params.customerId);
 }

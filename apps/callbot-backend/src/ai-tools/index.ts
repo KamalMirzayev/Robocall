@@ -313,7 +313,8 @@ async function recordApplicationFeedbackTool(args: Record<string, unknown>, ctx:
     monthly_payment: num(args.requested_monthly_payment),
     months: num(args.requested_months),
   };
-  const result = await recordArzoomFeedback({ customerId: ctx.customer.id, telephonyJobId: ctx.telephonyJobId, outcome, reason, requestedTerms });
+  const doNotCall = args.do_not_call === true || String(args.do_not_call).toLowerCase() === 'true';
+  const result = await recordArzoomFeedback({ customerId: ctx.customer.id, telephonyJobId: ctx.telephonyJobId, outcome, reason, requestedTerms, doNotCall });
   if (!result.ok) throw new Error(result.error);
   return { ok: true, message: 'Feedback saved' };
 }
@@ -335,6 +336,7 @@ export const aiToolDeclarations = [
         requested_down_payment: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): down payment amount in AZN the customer wants' },
         requested_monthly_payment: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): monthly payment in AZN the customer wants' },
         requested_months: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): term in months the customer wants' },
+        do_not_call: { type: Type.BOOLEAN, description: 'true only when the customer explicitly asks never to be called again / not to be disturbed / to remove their number' },
       },
       required: ['outcome'],
     },

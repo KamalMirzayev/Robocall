@@ -292,12 +292,16 @@ externalCallsRouter.post('/arzoom/requeue', async (req: Request, res) => {
       return;
     }
     const [customer] = rowsOf(await db.execute(sql`
-      SELECT id, application_status FROM customers
+      SELECT id, application_status, do_not_call FROM customers
       WHERE source_system = 'arzoom' AND source_record_key = ${applicationId}
       LIMIT 1
     `));
     if (!customer) {
       res.status(404).json({ error: 'application not found' });
+      return;
+    }
+    if (customer.do_not_call === true) {
+      res.status(409).json({ error: 'customer asked not to be called again' });
       return;
     }
     const status = String(customer.application_status ?? '');
