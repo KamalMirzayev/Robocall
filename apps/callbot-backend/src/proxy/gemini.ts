@@ -1,4 +1,5 @@
 import { WebSocket } from 'ws';
+import { reportGeminiError } from '../gemini-credit.js';
 import { EndSensitivity, GoogleGenAI, Modality, StartSensitivity, ThinkingLevel, Type, type LiveServerMessage } from '@google/genai';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
@@ -707,6 +708,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         },
         onclose: (event) => {
           console.warn('Gemini session closed', (event as any)?.code, (event as any)?.reason);
+          reportGeminiError((event as any)?.reason);
           sessionClosed = true;
           // During a transfer the call continues without the bot.
           if (transferState === 'dialing' || transferState === 'connected' || transferState === 'pending') return;
@@ -714,6 +716,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         },
         onerror: (err) => {
           console.error('Gemini error', err);
+          reportGeminiError(err);
           send({ type: 'error', message: 'Gemini bağlantı xətası' });
         },
       },
@@ -743,6 +746,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     flushPendingAudio();
   } catch (err) {
     console.error('Gemini connect failed', err);
+    reportGeminiError(err);
     send({ type: 'error', message: 'Gemini-yə qoşulmaq mümkün olmadı' });
     clientWs.close();
     return;

@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { startGeminiCreditWatch } from './gemini-credit.js';
 import express from 'express';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
@@ -228,4 +229,5 @@ server.listen(PORT, () => {
   startArzoomSync();
   startSalesTransferApp();
   startArzoomAnalyticsPush();
+  startGeminiCreditWatch();
 });

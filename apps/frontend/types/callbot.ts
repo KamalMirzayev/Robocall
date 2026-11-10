@@ -301,6 +301,7 @@ export interface CallAnalytics {
 
 export interface GeminiBalance {
   configured: boolean;
+  credit?: { depleted: boolean; depletedAt: string | null; lastError: string | null; lastProbeAt: string | null };
   startingBalanceUsd?: number;
   setAt?: string | null;
   spentSinceSetUsd?: number;

@@ -1232,6 +1232,8 @@
     "lastHour": "Last hour",
     "hoursLeft": "At the current rate it lasts about {h} hours",
     "setAt": "Balance entered:",
-    "hint": "Google gives no balance API. Enter the balance from Google AI Studio in Integrations → Gemini balance (USD); spend since then is taken off every minute."
+    "hint": "Google gives no balance API. The system detects a used-up balance automatically and pauses calls. To see the amount, enter the AI Studio balance in Integrations → Gemini balance (USD) when you top up; spend since then is taken off every minute.",
+    "depleted": "Balance used up",
+    "depletedHint": "Google is rejecting Gemini requests because the balance ran out. Campaign calls are paused and resume on their own within 3 minutes of a top-up."
   }
 }

@@ -1232,6 +1232,8 @@
     "lastHour": "Son 1 saat",
     "hoursLeft": "İndiki sürətlə təxminən {h} saata çatar",
     "setAt": "Balans daxil edilib:",
-    "hint": "Google balansı API ilə vermir. Google AI Studio-dakı balansı İnteqrasiyalar → Gemini balansı (USD) sahəsinə yazın, sistem ondan sonrakı xərci hər dəqiqə çıxır."
+    "hint": "Google balansı API ilə vermir. Sistem balansın bitməsini avtomatik aşkar edir və zəngləri dayandırır. Qalığı rəqəmlə görmək üçün AI Studio-dakı balansı İnteqrasiyalar → Gemini balansı (USD) sahəsinə yazın (yalnız balans artırılanda), sistem sonrakı xərci hər dəqiqə çıxır.",
+    "depleted": "Balans bitib",
+    "depletedHint": "Google Gemini sorğuları balans bitdiyinə görə rədd edir. Kampaniya zəngləri dayandırılıb, balans artırılan kimi (3 dəqiqə ərzində) özü bərpa olunacaq."
   }
 }

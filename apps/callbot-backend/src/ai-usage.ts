@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { geminiCreditStatus } from './gemini-credit.js';
 import { sql } from 'drizzle-orm';
 import { db } from './db/index.js';
 
@@ -143,7 +144,7 @@ aiUsageRouter.get('/balance', async (_req, res) => {
     const today = await usageSince(sql`date_trunc('day', now() AT TIME ZONE 'Asia/Baku') AT TIME ZONE 'Asia/Baku'`, 'today');
     const lastHour = await usageSince(sql`now() - interval '1 hour'`, 'hour');
     if (!raw || !Number.isFinite(starting)) {
-      res.json({ configured: false, todaySpentUsd: today.estimatedCostUsd, lastHourSpentUsd: lastHour.estimatedCostUsd, checkedAt: new Date().toISOString() });
+      res.json({ configured: false, credit: geminiCreditStatus(), todaySpentUsd: today.estimatedCostUsd, lastHourSpentUsd: lastHour.estimatedCostUsd, checkedAt: new Date().toISOString() });
       return;
     }
     const setAt = row?.updated_at ? new Date(row.updated_at as string).toISOString() : null;
@@ -152,6 +153,7 @@ aiUsageRouter.get('/balance', async (_req, res) => {
     const perHour = lastHour.estimatedCostUsd;
     res.json({
       configured: true,
+      credit: geminiCreditStatus(),
       startingBalanceUsd: starting,
       setAt,
       spentSinceSetUsd: spent,

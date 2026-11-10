@@ -32,8 +32,9 @@ export default function GeminiBalance({ variant = 'compact' }: { variant?: 'comp
 
   if (!b) return null;
   const low = b.configured && b.remainingUsd !== undefined && b.startingBalanceUsd ? b.remainingUsd < b.startingBalanceUsd * 0.15 : false;
-  const tone = !b.configured ? 'text-slate-300' : low ? 'text-rose-400' : 'text-emerald-400';
-  const main = b.configured ? usd(b.remainingUsd ?? 0) : t('geminiBalance.notSet');
+  const depleted = Boolean(b.credit?.depleted);
+  const tone = depleted ? 'text-rose-400' : !b.configured ? 'text-slate-300' : low ? 'text-rose-400' : 'text-emerald-400';
+  const main = depleted ? t('geminiBalance.depleted') : b.configured ? usd(b.remainingUsd ?? 0) : t('geminiBalance.notSet');
 
   if (variant === 'compact') {
     return (
@@ -49,6 +50,7 @@ export default function GeminiBalance({ variant = 'compact' }: { variant?: 'comp
     <div className="rounded-xl border border-slate-700 bg-slate-800/70 p-5 shadow-lg">
       <p className="text-sm text-slate-400">{t('geminiBalance.title')}</p>
       <p className={`mt-1 text-3xl font-bold tabular-nums ${tone}`}>{main}</p>
+      {depleted ? <p className="mt-2 rounded-lg bg-rose-500/15 px-3 py-2 text-sm text-rose-300">{t('geminiBalance.depletedHint')}</p> : null}
       <div className="mt-3 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
         {b.configured ? (
           <>

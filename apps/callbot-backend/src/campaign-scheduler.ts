@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { geminiCreditsDepleted } from './gemini-credit.js';
 import { sql, eq, and, lt, gte } from 'drizzle-orm';
 import { db } from './db/index.js';
 import { campaigns, campaignCalls, customers, agents, telephonyJobs } from './db/schema.js';
@@ -215,6 +216,10 @@ export async function campaignSchedulerTick() {
   try {
     console.log(`[Campaign Scheduler] Tick at ${new Date().toISOString()}`);
     await reapStaleJobs();
+    if (geminiCreditsDepleted()) {
+      console.warn('[Campaign Scheduler] Gemini credits are depleted; not dialing until they are back');
+      return;
+    }
 
     // Fetch all active campaigns
     const campaignRows = rowsFrom(await db.execute(sql`
