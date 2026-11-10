@@ -278,3 +278,64 @@ externalCallsRouter.get('/calls/:id', async (req: Request, res) => {
 
   res.json({ callId: telephonyJobId, ...row, status: externalStatus });
 });
+
+// ARZOOM's "Yenidən zəng et": puts an ARZOOM application's customer back into the queue of
+// every application-status campaign it belongs to, so the scheduler calls again right away.
+// Applications ArzoomCall never calls (in review, rejected, re-offer pending, deleted) are refused.
+externalCallsRouter.post('/arzoom/requeue', async (req: Request, res) => {
+  try {
+    const applicationId = String(req.body?.application_id ?? '').trim();
+    if (!applicationId) {
+      res.status(400).json({ error: 'application_id is required' });
+      return;
+    }
+    const [customer] = rowsOf(await db.execute(sql`
+      SELECT id, application_status FROM customers
+      WHERE source_system = 'arzoom' AND source_record_key = ${applicationId}
+      LIMIT 1
+    `));
+    if (!customer) {
+      res.status(404).json({ error: 'application not found' });
+      return;
+    }
+    const status = String(customer.application_status ?? '');
+    if (['review', 'rejected', 'reoffer', 'deleted'].includes(status)) {
+      res.status(409).json({ error: `application status "${status}" is not called` });
+      return;
+    }
+    const busy = rowsOf(await db.execute(sql`
+      SELECT 1 FROM telephony_jobs WHERE customer_id = ${customer.id as number} AND status IN ('pending', 'answered') LIMIT 1
+    `));
+    if (busy.length) {
+      res.json({ ok: true, queued: 0, note: 'a call to this customer is already in progress' });
+      return;
+    }
+    const queued = rowsOf(await db.execute(sql`
+      UPDATE campaign_calls cc
+      SET status = 'pending', attempt_number = 0, call_after = NULL, updated_at = now()
+      FROM campaigns c
+      WHERE c.id = cc.campaign_id AND c.segment = 'application_status'
+        AND c.status IN ('active', 'paused', 'completed')
+        AND cc.customer_id = ${customer.id as number}
+        AND cc.status <> 'attempting'
+      RETURNING cc.campaign_id
+    `));
+    if (!queued.length) {
+      res.status(409).json({ error: 'customer is not in any application-status campaign' });
+      return;
+    }
+    for (const row of queued) {
+      await db.execute(sql`UPDATE campaigns SET status = 'active', updated_at = now() WHERE id = ${row.campaign_id as number} AND status = 'completed'`);
+    }
+    res.json({ ok: true, queued: queued.length });
+  } catch (err) {
+    console.error('[external/arzoom/requeue]', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+function rowsOf(result: unknown): Record<string, unknown>[] {
+  if (Array.isArray(result)) return result as Record<string, unknown>[];
+  const maybeRows = (result as { rows?: Record<string, unknown>[] }).rows;
+  return Array.isArray(maybeRows) ? maybeRows : [];
+}
