@@ -6,6 +6,7 @@ import { computeCallAnalytics } from './call-analytics.js';
 // heartbeat. ARZOOM keeps the latest snapshot; older ones are simply replaced.
 const FETCH_TIMEOUT_MS = 20_000;
 const DEBOUNCE_MS = 20_000;
+const RECENT_CALLS_LIMIT = 1000;
 const HEARTBEAT_MS = 5 * 60_000;
 const MISSING_ENDPOINT_BACKOFF_MS = 30 * 60_000;
 
@@ -24,19 +25,30 @@ function endpoint(): { url: string; token: string } | null {
   }
 }
 
+// Keeps the snapshot well under ARZOOM's 3 MB body limit even with 1000 conversations.
+function clip(value: unknown, max: number): string | null {
+  const text = value == null ? '' : String(value);
+  return text ? (text.length > max ? `${text.slice(0, max - 1)}…` : text) : null;
+}
+
 export async function buildArzoomAnalyticsSnapshot() {
-  const [today, week, month] = await Promise.all([
-    computeCallAnalytics({ days: 1, arzoomOnly: true, recentLimit: 100 }),
+  const [today, week, all] = await Promise.all([
+    computeCallAnalytics({ days: 1, arzoomOnly: true, recentLimit: 0 }),
     computeCallAnalytics({ days: 7, arzoomOnly: true, recentLimit: 0 }),
-    computeCallAnalytics({ days: 30, arzoomOnly: true, recentLimit: 0 }),
+    computeCallAnalytics({ days: 90, arzoomOnly: true, recentLimit: RECENT_CALLS_LIMIT }),
   ]);
   const strip = ({ recent: _r, campaigns: _c, ...rest }: typeof today) => rest;
   return {
     source: 'arzoomcall',
     generated_at: new Date().toISOString(),
-    periods: { today: strip(today), week: strip(week), month: strip(month) },
-    // Latest conversations with the outcome, the reason the bot recorded and the AI summary.
-    recent_calls: today.recent.length ? today.recent : week.recent,
+    periods: { today: strip(today), week: strip(week), month: strip(await computeCallAnalytics({ days: 30, arzoomOnly: true, recentLimit: 0 })) },
+    // Every conversation of the last 90 days (newest first, up to RECENT_CALLS_LIMIT) with the
+    // outcome, the reason the bot recorded and the AI summary, so older ones show up too.
+    recent_calls: all.recent.map((r) => ({
+      ...r,
+      reason: clip(r.reason, 800),
+      summary: clip(r.summary, 800),
+    })),
   };
 }
 

@@ -11,9 +11,9 @@ function rowsFrom(result: unknown): Record<string, unknown>[] {
 // `days` days in Baku time, optionally for one campaign. Used by the ArzoomCall dashboard
 // (GET /api/calls/analytics) and by the snapshot pushed to ARZOOM (arzoom-analytics.ts).
 export async function computeCallAnalytics(opts: { days: number; campaignId?: number | null; recentLimit?: number; arzoomOnly?: boolean }) {
-  const days = Math.max(1, Math.min(90, Math.floor(opts.days)));
+  const days = Math.max(1, Math.min(365, Math.floor(opts.days)));
   const campaignId = opts.campaignId || null;
-  const recentLimit = Math.max(0, Math.min(200, opts.recentLimit ?? 30));
+  const recentLimit = Math.max(0, Math.min(1000, opts.recentLimit ?? 30));
   const arzoomOnly = Boolean(opts.arzoomOnly);
   const jobFilter = sql`${campaignId ? sql`AND tj.campaign_id = ${campaignId}` : sql``} ${arzoomOnly ? sql`AND EXISTS (SELECT 1 FROM customers ax WHERE ax.id = tj.customer_id AND ax.source_system = 'arzoom')` : sql``}`;
   const since = sql`date_trunc('day', now() AT TIME ZONE 'Asia/Baku') AT TIME ZONE 'Asia/Baku' - make_interval(days => ${days - 1}::int)`;
