@@ -129,11 +129,9 @@ async function ensureUnreachedCallSummary(input: {
   const agentId = Number(input.agentId ?? input.agent_id ?? 0) || null;
   const customerId = Number(input.customerId ?? input.customer_id ?? 0) || null;
   const summary = input.summary || unreachedSummary(input.error, input.phone);
-  const error = String(input.error ?? '').replace(/\s+/g, ' ').trim();
-  const description = [
-    `Zəng müştəriyə çatmadı. Səbəb: ${summary}.`,
-    error && error !== summary ? `Texniki qeyd: ${error.slice(0, 500)}` : '',
-  ].filter(Boolean).join('\n');
+  // The raw Asterisk/AMI text stays in telephony_jobs.last_error for debugging; staff only
+  // see the plain reason.
+  const description = `Zəng müştəriyə çatmadı. Səbəb: ${summary}.`;
 
   if (telephonyJobId) {
     const [existing] = await db
