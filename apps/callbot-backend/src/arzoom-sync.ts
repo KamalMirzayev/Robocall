@@ -189,6 +189,7 @@ async function upsertItem(item: ArzoomItem): Promise<{ id: number; statusChanged
         pks_status = ${values.callStatus}, pks_comment = ${values.callComment},
         application_status = ${values.status}, arzoom_data = ${values.data}::jsonb || coalesce(jsonb_strip_nulls(jsonb_build_object(
           'sales_ext', arzoom_data->'sales_ext',
+          'whatsapp_correction', arzoom_data->'whatsapp_correction',
           -- An offer that follows a re-offer is the final one; it stays final while the status stays offer.
           'final_offer', CASE WHEN ${item.status ?? null} = 'offer' AND (application_status = 'reoffer' OR (application_status = 'offer' AND (arzoom_data->>'final_offer') = 'true')) THEN to_jsonb(true) END
         )), '{}'::jsonb), last_synced_at = now()
@@ -355,6 +356,11 @@ export function arzoomCustomerLines(data: unknown): string[] {
   if (!data || typeof data !== 'object') return [];
   const item = data as ArzoomItem;
   const lines: string[] = [`- Müraciət nömrəsi: ${item.id}`];
+  // Earlier calls wrongly told some customers to send documents over WhatsApp, which
+  // ARZOOM doesn't have. This call corrects that first.
+  if ((item as { whatsapp_correction?: boolean }).whatsapp_correction === true) {
+    lines.push('- BU ZƏNGİN ƏSAS MƏQSƏDİ (ən əvvəl de): Əvvəlki zəngdə müştəriyə sənədləri WhatsApp ilə göndərməsi deyilib, bu səhv idi, belə kanal yoxdur. Salamlaşıb özünü təqdim edəndən sonra üzr istə və belə de: "Əvvəlki zəngimizdə sənədləri WhatsApp ilə göndərməyinizi demişdik, bu yanlış məlumat idi, üzr istəyirik. Sizə Arzoom Avto-dan gələn SMS bildirişindəki link vasitəsilə şəxsi kabinetinizə daxil olub sənədləri əlavə edə və ya yenidən kredit müraciəti edə bilərsiniz." Müştəri artıq WhatsApp-a nəsə göndəribsə, de ki, oraya göndərilənlər bizə çatmayıb, kabinetə əlavə etmək lazımdır. Sonra müştərinin sualı varsa cavablandır və müraciətin vəziyyətinə uyğun davam et.');
+  }
   if (item.status_label) lines.push(`- Müraciətin statusu: ${item.status_label}`);
   const car = [item.brand, item.model].filter(Boolean).join(' ');
   if (car) lines.push(`- Avtomobil: ${car}${item.car_price ? ` (${money(item.car_price)})` : ''}`);
@@ -479,6 +485,7 @@ export async function recordArzoomFeedback(params: {
     scheduleArzoomAnalyticsPush();
     return { ok: true };
   }
+  await db.execute(sql`UPDATE customers SET arzoom_data = arzoom_data - 'whatsapp_correction' WHERE id = ${params.customerId} AND arzoom_data ? 'whatsapp_correction'`);
   // Shown right away on the customers page (Son əlaqə), before ARZOOM echoes it back.
   await db.execute(sql`
     UPDATE customers SET pks_status = ${label}, pks_comment = ${[params.reason, termsText(terms)].filter(Boolean).join(' — ') || null} WHERE id = ${params.customerId}
