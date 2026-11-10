@@ -740,7 +740,10 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             silenceDurationMs: Math.max(150, Math.min(geminiVadSilenceDurationMs, 1000)),
           },
         },
-        tools: [{ functionDeclarations: [endCallFunctionDeclaration, ...(customer.sourceSystem === 'arzoom' ? [transferFunctionDeclaration] : []), ...(aiToolDeclarations as any[])] }],
+        tools: [{ functionDeclarations: [endCallFunctionDeclaration, ...(customer.sourceSystem === 'arzoom' ? [transferFunctionDeclaration] : []), ...((customer.sourceSystem === 'arzoom'
+          // ARZOOM applicants upload documents in their cabinet, never over WhatsApp.
+          ? (aiToolDeclarations as any[]).filter((d) => d?.name !== 'send_whatsapp_msg')
+          : aiToolDeclarations) as any[])] }],
       },
     });
     flushPendingAudio();
