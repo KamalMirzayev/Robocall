@@ -21,8 +21,8 @@
     "@google/genai": "^1.29.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
-    "drizzle-orm": "^0.44.0",
-    "express": "^4.21.2",
+    "drizzle-orm": "^0.45.4",
+    "express": "^4.22.3",
     "postgres": "^3.4.5",
     "ws": "^8.18.0"
   },

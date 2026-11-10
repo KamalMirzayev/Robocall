@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { sql } from 'drizzle-orm';
 import { db } from './db/index.js';
+import { clientIp, hasWorkerToken, RateLimiter } from './net-guard.js';
 
 const sessionCookieName = process.env.AUTH_COOKIE_NAME || 'robocall_session';
 const idleTimeoutMinutes = Number(process.env.AUTH_IDLE_TIMEOUT_MINUTES || 240);
@@ -226,10 +227,9 @@ export async function requireAuthOrWorker(req: Request, res: Response, next: Nex
       next();
       return;
     }
-    const expected = process.env.TELEPHONY_WORKER_TOKEN;
     const header = req.get('authorization') ?? '';
     const token = header.startsWith('Bearer ') ? header.slice(7) : req.get('x-telephony-token');
-    if (expected && token && token === expected) {
+    if (hasWorkerToken(token)) {
       next();
       return;
     }
@@ -271,11 +271,26 @@ function requireAdmin(req: Request, res: Response): AppUser | null {
 
 export const authRouter = Router();
 
+// Brute-force protection: failed logins are counted per client IP and per username.
+const loginFailsByIp = new RateLimiter(10, 15 * 60_000);
+const loginFailsByUser = new RateLimiter(30, 15 * 60_000);
+
 authRouter.post('/login', async (req, res) => {
-  const username = cleanText(req.body.username).toLowerCase();
-  const password = String(req.body.password ?? '');
+  const username = cleanText(req.body?.username).toLowerCase().slice(0, 80);
+  const password = String(req.body?.password ?? '');
   if (!username || !password) {
     res.status(400).json({ error: 'username and password required' });
+    return;
+  }
+  const ip = clientIp(req);
+  const wait = Math.max(loginFailsByIp.blocked(ip), loginFailsByUser.blocked(username));
+  if (wait > 0) {
+    res.setHeader('Retry-After', String(wait));
+    res.status(429).json({ error: 'too many failed attempts, try again later' });
+    return;
+  }
+  if (password.length > 256) {
+    res.status(401).json({ error: 'invalid credentials' });
     return;
   }
 
@@ -287,9 +302,13 @@ authRouter.post('/login', async (req, res) => {
   `));
   const row = rows[0];
   if (!row || row.active !== true || !verifyPassword(password, row.password_hash)) {
+    loginFailsByIp.hit(ip);
+    loginFailsByUser.hit(username);
+    console.warn(`[security] failed login from ${ip}`);
     res.status(401).json({ error: 'invalid credentials' });
     return;
   }
+  loginFailsByUser.reset(username);
 
   const token = crypto.randomBytes(32).toString('base64url');
   await db.execute(sql`

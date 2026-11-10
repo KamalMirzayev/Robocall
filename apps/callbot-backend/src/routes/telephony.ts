@@ -1,3 +1,4 @@
+import { hasWorkerToken } from '../net-guard.js';
 import { randomUUID } from 'node:crypto';
 import { scheduleArzoomAnalyticsPush } from '../arzoom-analytics.js';
 import { Router, type Request, type Response } from 'express';
@@ -33,7 +34,7 @@ function requireWorkerAuth(req: Request, res: Response): boolean {
   }
   const header = req.get('authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : req.get('x-telephony-token');
-  if (token !== expected) {
+  if (!hasWorkerToken(token)) {
     res.status(401).json({ error: 'unauthorized' });
     return false;
   }
