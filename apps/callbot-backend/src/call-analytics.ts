@@ -92,8 +92,16 @@ export async function computeCallAnalytics(opts: { days: number; campaignId?: nu
   const transfers = rowsFrom(await db.execute(sql`
     SELECT st.extension, max(st.brand) AS brand,
            count(*) FILTER (WHERE st.status = 'answered')::int AS answered,
-           count(*) FILTER (WHERE st.status <> 'answered')::int AS missed
+           count(*) FILTER (WHERE st.status <> 'answered')::int AS missed,
+           -- Per transfer: application, time, answered and the call (recent_calls id). No names/phones.
+           (array_agg(json_build_object(
+              'application_id', cu.source_record_key,
+              'at', st.created_at,
+              'answered', st.status = 'answered',
+              'call_id', st.telephony_job_id
+            ) ORDER BY st.created_at DESC))[1:50] AS calls
     FROM sales_transfers st
+    LEFT JOIN customers cu ON cu.id = st.customer_id
     LEFT JOIN telephony_jobs tj ON tj.id = st.telephony_job_id
     WHERE st.created_at >= ${since} ${campaignId ? sql`AND tj.campaign_id = ${campaignId}` : sql``}
     GROUP BY st.extension ORDER BY 3 DESC, 1
