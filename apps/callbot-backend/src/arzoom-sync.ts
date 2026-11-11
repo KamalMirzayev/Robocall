@@ -3,6 +3,7 @@ import { scheduleArzoomAnalyticsPush } from './arzoom-analytics.js';
 import { GoogleGenAI } from '@google/genai';
 import { db } from './db/index.js';
 import { recordAiTokenUsage } from './ai-usage.js';
+import { SUMMARY_CATEGORIES } from './summary.js';
 
 // ARZOOM (Arzoom Avto leasing app) -> robocall customers.
 // GET {ARZOOM_API_URL}/api/integrations/robocall/applications?since=&limit= with header
@@ -115,6 +116,9 @@ export async function ensureArzoomSchema(): Promise<void> {
     )
   `);
   await db.execute(sql`ALTER TABLE arzoom_feedback ADD COLUMN IF NOT EXISTS requested_terms jsonb`);
+  // When the customer asked to be called back (outcome=callback): the agreed day and time.
+  await db.execute(sql`ALTER TABLE arzoom_feedback ADD COLUMN IF NOT EXISTS callback_at timestamptz`);
+  await clearLegacySummaries();
   // Earliest time the campaign scheduler may dial this link (see callDelayMinutes).
   await db.execute(sql`ALTER TABLE campaign_calls ADD COLUMN IF NOT EXISTS call_after timestamptz`);
 }
@@ -404,6 +408,7 @@ export function arzoomCustomerLines(data: unknown): string[] {
   if (item.status === 'offer' || item.status === 'accepted') {
     lines.push('- Müştəri şərtlərlə razıdırsa və ya "razıyam, necə edək" kimi davam etmək istəyirsə: əvvəl record_application_feedback alətini outcome=agrees_will_visit ilə çağır, sonra "Zəhmət olmasa bir neçə saniyə xətdə qalın, sizi satış təmsilçisinə qoşuram" de və dərhal transfer_to_sales alətini çağır. Bundan sonra heç nə demə və end_call çağırma. Alət uğursuz olarsa, üzr istə, filiala yaxınlaşa və ya *5665 nömrəsinə zəng edə biləcəyini de.');
   }
+  lines.push(`- SONRA ZƏNG: İndiki vaxt (Bakı): ${bakuIsoNow()}. Müştəri indi danışa bilmədiyini, sonra zəng edilməsini istəsə və ya "sonra özüm əlaqə saxlayaram" desə: mütləq soruş "Sizə hansı gün, saat neçədə zəng edək?". Yalnız gün desə saatı da soruş; "axşam", "günorta" kimi desə dəqiq saatı soruş. Sonra record_application_feedback alətini outcome=callback və callback_at="YYYY-MM-DD HH:MM" (Bakı vaxtı, "sabah", "cümə" kimi sözləri indiki vaxta görə hesabla) ilə çağır, vaxtı müştəriyə təkrarla (məs. "Yaxşı, sabah saat 15:00-da sizə zəng edəcəyik") və sağollaş. Müştəri heç bir vaxt demək istəmirsə callback_at="unknown" ver.`);
   lines.push('- Müştəri ona bir daha zəng edilməməsini, narahat edilməməsini və ya nömrəsinin siyahıdan silinməsini istəsə: mübahisə etmə, qısa üzr istə ("Başa düşdüm, üzr istəyirik, sizə bir daha zəng edilməyəcək"), record_application_feedback alətini outcome=declined, do_not_call=true ilə çağır, reason-a müştərinin sözlərini yaz, sonra sağollaş və zəngi bitir.');
   lines.push('- Zəngin sonunda, sağollaşmadan əvvəl, record_application_feedback alətini MÜTLƏQ çağır (nəticə və müştərinin səbəbi).');
   if (item.last_call?.outcome_label) {
@@ -467,12 +472,96 @@ export async function markDoNotCall(customerId: number): Promise<void> {
   `);
 }
 
+// Old debt-collection summary categories ("Ödənişə söz verib", "Ödənişi təxirə saldı / tarix
+// göstərdi", ...) were written on ARZOOM calls before those calls got their own results.
+// Replace them with the call's ARZOOM result, or clear them. Safe to run on every start.
+async function clearLegacySummaries(): Promise<void> {
+  const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+  const pattern = `^(\\d+\\.\\s*)?(${SUMMARY_CATEGORIES.map((c) => escape(c.title)).join('|')})`;
+  const result = await db.execute(sql`
+    UPDATE calls cl
+    SET summary = (
+      SELECT f.outcome_label || coalesce(' — ' || nullif(f.reason, ''), '')
+      FROM arzoom_feedback f WHERE f.telephony_job_id = cl.telephony_job_id
+      ORDER BY f.id DESC LIMIT 1
+    )
+    FROM customers cu
+    WHERE cu.id = cl.customer_id AND cu.source_system = ${ARZOOM_SOURCE}
+      AND cl.summary ~ ${pattern}
+  `);
+  const count = (result as { rowCount?: number }).rowCount ?? (result as { count?: number }).count ?? 0;
+  if (count) console.log(`[arzoom-sync] cleared ${count} old debt-collection summaries on ARZOOM calls`);
+}
+
+function bakuIsoNow(): string {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Baku', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'long',
+  }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour === '24' ? '00' : p.hour}:${p.minute} (${p.weekday})`;
+}
+
+// "YYYY-MM-DD HH:MM" in Baku time (or an ISO time with offset). Only a time between a few
+// minutes and 60 days from now is accepted.
+export function parseCallbackAt(value: unknown): Date | null {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/.exec(text);
+  let at: Date;
+  if (m && !/(Z|[+-]\d{2}:?\d{2})$/.test(text)) {
+    at = new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4].padStart(2, '0')}:${m[5]}:00+04:00`);
+  } else {
+    at = new Date(text);
+  }
+  const t = at.getTime();
+  if (!Number.isFinite(t)) return null;
+  if (t < Date.now() + 5 * 60_000 || t > Date.now() + 60 * 24 * 3600_000) return null;
+  return at;
+}
+
+function callbackText(at: Date | null): string {
+  if (!at) return 'Zəng vaxtı: müştəri dəqiq vaxt deməyib';
+  const f = new Intl.DateTimeFormat('az-AZ', { timeZone: 'Asia/Baku', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(at);
+  return `Zəng vaxtı: ${f}`;
+}
+
+// The customer asked to be called back: put their queue entry for this call's campaign back
+// to "retrying" at the agreed time (or after the retry interval when no time was given).
+// While the call is still running the entry is "attempting" and nothing happens; the job
+// completion handler calls this again once the entry is closed.
+export async function applyCallbackSchedule(telephonyJobId: number | null): Promise<void> {
+  if (!telephonyJobId) return;
+  const [fb] = rowsFrom(await db.execute(sql`
+    SELECT outcome, callback_at FROM arzoom_feedback WHERE telephony_job_id = ${telephonyJobId}
+    ORDER BY id DESC LIMIT 1
+  `));
+  if (!fb || fb.outcome !== 'callback') return;
+  const rows = rowsFrom(await db.execute(sql`
+    UPDATE campaign_calls cc
+    SET status = 'retrying', attempt_number = 0,
+        call_after = coalesce(${fb.callback_at ? new Date(String(fb.callback_at)).toISOString() : null}::timestamptz,
+                              now() + make_interval(hours => c.retry_interval_hours)),
+        updated_at = now()
+    FROM campaigns c, telephony_jobs tj, customers cu
+    WHERE tj.id = ${telephonyJobId}
+      AND cc.customer_id = tj.customer_id AND cc.campaign_id = tj.campaign_id
+      AND c.id = cc.campaign_id AND cu.id = cc.customer_id AND cu.do_not_call = false
+      AND cc.status IN ('completed', 'failed', 'retrying')
+    RETURNING cc.campaign_id, cc.call_after
+  `));
+  for (const row of rows) {
+    await db.execute(sql`UPDATE campaigns SET status = 'active', updated_at = now() WHERE id = ${Number(row.campaign_id)} AND status = 'completed'`);
+    console.log(`[arzoom-sync] callback for job ${telephonyJobId} scheduled at ${new Date(String(row.call_after)).toISOString()}`);
+  }
+}
+
 export async function recordArzoomFeedback(params: {
   customerId: number;
   telephonyJobId: number | null;
   outcome: string;
   reason: string;
   requestedTerms?: RequestedTerms | null;
+  // outcome=callback: the agreed day and time ("YYYY-MM-DD HH:MM", Baku), or "unknown".
+  callbackAt?: string | null;
   // Keep the row in robocall's history only: not sent to ARZOOM and not shown as the
   // customer's latest result, so an empty follow-up call can't hide a real earlier answer.
   historyOnly?: boolean;
@@ -485,13 +574,27 @@ export async function recordArzoomFeedback(params: {
   if (TERMS_OBJECTIONS.has(params.outcome) && !terms && !params.reason) {
     return { ok: false, error: 'ask which down payment or monthly payment the customer wants and pass it' };
   }
+  let callbackAt: Date | null = null;
+  let reasonText = params.reason;
+  if (params.outcome === 'callback') {
+    const raw = String(params.callbackAt ?? '').trim();
+    callbackAt = parseCallbackAt(raw);
+    if (!callbackAt && raw.toLowerCase() !== 'unknown' && !params.historyOnly) {
+      return {
+        ok: false,
+        error: `callback_at is missing or invalid. Ask the customer which day and at what time to call (now in Baku: ${bakuIsoNow()}) and pass callback_at as "YYYY-MM-DD HH:MM" in Baku time. If the customer will not name any time, pass callback_at="unknown".`,
+      };
+    }
+    reasonText = [params.reason, callbackText(callbackAt)].filter(Boolean).join('. ');
+  }
   const [customer] = rowsFrom(await db.execute(sql`
     SELECT source_record_key FROM customers WHERE id = ${params.customerId} AND source_system = ${ARZOOM_SOURCE} LIMIT 1
   `));
   if (!customer) return { ok: false, error: 'not an ARZOOM application customer' };
   await db.execute(sql`
-    INSERT INTO arzoom_feedback (application_id, customer_id, telephony_job_id, outcome, outcome_label, reason, requested_terms, pushed_at, push_error)
-    VALUES (${String(customer.source_record_key)}, ${params.customerId}, ${params.telephonyJobId}, ${params.outcome}, ${label}, ${params.reason || null}, ${terms ? JSON.stringify(terms) : null}::jsonb,
+    INSERT INTO arzoom_feedback (application_id, customer_id, telephony_job_id, outcome, outcome_label, reason, requested_terms, callback_at, pushed_at, push_error)
+    VALUES (${String(customer.source_record_key)}, ${params.customerId}, ${params.telephonyJobId}, ${params.outcome}, ${label}, ${reasonText || null}, ${terms ? JSON.stringify(terms) : null}::jsonb,
+            ${callbackAt ? callbackAt.toISOString() : null}::timestamptz,
             ${params.historyOnly ? sql`now()` : sql`NULL`}, ${params.historyOnly ? 'göndərilmədi: əvvəlki danışıq qüvvədədir' : null})
   `);
   if (params.historyOnly) {
@@ -502,8 +605,9 @@ export async function recordArzoomFeedback(params: {
   if (params.doNotCall) await markDoNotCall(params.customerId);
   // Shown right away on the customers page (Son əlaqə), before ARZOOM echoes it back.
   await db.execute(sql`
-    UPDATE customers SET pks_status = ${label}, pks_comment = ${[params.reason, termsText(terms)].filter(Boolean).join(' — ') || null} WHERE id = ${params.customerId}
+    UPDATE customers SET pks_status = ${label}, pks_comment = ${[reasonText, termsText(terms)].filter(Boolean).join(' — ') || null} WHERE id = ${params.customerId}
   `);
+  if (params.outcome === 'callback' && !params.doNotCall) await applyCallbackSchedule(params.telephonyJobId);
   void pushPendingFeedback().catch((err) => console.error('[arzoom-sync] feedback push failed', err));
   scheduleArzoomAnalyticsPush();
   return { ok: true };
@@ -638,13 +742,16 @@ export async function ensureArzoomFeedbackFromTranscript(params: {
   let outcome = 'other';
   let reason = '';
   let doNotCall = false;
+  let callbackAtText: string | null = null;
   const key = String(process.env.GEMINI_API_KEY || '').trim();
   if (key) {
     try {
       const model = process.env.POST_CALL_SUMMARY_MODEL || 'gemini-2.5-flash';
       const ai = new GoogleGenAI({ apiKey: key });
       const prompt = `Bu, kredit müraciəti ilə bağlı telefon zənginin transkriptidir (A: bot, C: müştəri).
-Müştərinin son fikrini müəyyən et və YALNIZ JSON qaytar: {"outcome": "...", "reason": "...", "do_not_call": false}
+Müştərinin son fikrini müəyyən et və YALNIZ JSON qaytar: {"outcome": "...", "reason": "...", "do_not_call": false, "callback_at": null}
+Zəng vaxtı (Bakı): ${new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Baku', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(params.startedAt)}.
+callback_at: outcome "callback" olanda müştərinin dediyi gün və saat, "YYYY-MM-DD HH:MM" formatında, Bakı vaxtı ("sabah saat 3-də" kimi ifadələri zəng vaxtına görə hesabla; "3" gündüz saatıdırsa 15:00). Vaxt deyilməyibsə "unknown". Başqa hallarda null.
 do_not_call: müştəri açıq şəkildə ona bir daha zəng edilməməsini, narahat edilməməsini və ya nömrəsinin silinməsini istəyibsə true, əks halda false.
 outcome bunlardan biri olmalıdır: ${Object.entries(FEEDBACK_OUTCOMES).filter(([k]) => k !== 'transferred_to_sales').map(([k, v]) => `${k} (${v})`).join(', ')}.
 reason: ətraflı qeyd, Azərbaycan dilində, 2-4 cümlə: müştəri nə dedi, səbəbi, qeyd etdiyi tarix/vaxt, filial və ya sənədlər, və razılaşdırılan növbəti addım. Müştəri cavab verməyibsə və ya danışıq alınmayıbsa outcome "other" olsun.
@@ -661,8 +768,9 @@ ${transcript.slice(-8000)}`;
         operation: 'arzoom_feedback',
         usageMetadata: (response as { usageMetadata?: unknown }).usageMetadata as never,
       }).catch(() => undefined);
-      const parsed = JSON.parse(String(response.text || '{}').replace(/^```json|```$/g, '').trim()) as { outcome?: string; reason?: string; do_not_call?: boolean };
+      const parsed = JSON.parse(String(response.text || '{}').replace(/^```json|```$/g, '').trim()) as { outcome?: string; reason?: string; do_not_call?: boolean; callback_at?: string | null };
       doNotCall = parsed.do_not_call === true;
+      callbackAtText = parsed.callback_at ? String(parsed.callback_at) : 'unknown';
       if (parsed.outcome && parsed.outcome in FEEDBACK_OUTCOMES && parsed.outcome !== 'transferred_to_sales') outcome = parsed.outcome;
       reason = String(parsed.reason || '').trim().slice(0, 1000);
     } catch (err) {
@@ -689,6 +797,7 @@ ${transcript.slice(-8000)}`;
     outcome,
     reason: reason || fallbackReason(transcript),
     historyOnly,
+    callbackAt: outcome === 'callback' ? (parseCallbackAt(callbackAtText) ? callbackAtText : 'unknown') : null,
   });
   if (doNotCall) await markDoNotCall(params.customerId);
 }

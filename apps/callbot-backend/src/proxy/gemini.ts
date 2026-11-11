@@ -267,7 +267,7 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
   // ARZOOM leasing application (status, car, offer terms, requested documents).
   parts.push(...arzoomCustomerLines(customer.arzoomData));
   
-  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${buildSummaryCategoryGuide()}`;
+  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${customer.sourceSystem === 'arzoom' ? '' : buildSummaryCategoryGuide()}`;
 }
 
 function buildInitialGreetingPrompt(customer: Customer) {
@@ -743,8 +743,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           },
         },
         tools: [{ functionDeclarations: [endCallFunctionDeclaration, ...(customer.sourceSystem === 'arzoom' ? [transferFunctionDeclaration] : []), ...((customer.sourceSystem === 'arzoom'
-          // ARZOOM applicants upload documents in their cabinet, never over WhatsApp.
-          ? (aiToolDeclarations as any[]).filter((d) => d?.name !== 'send_whatsapp_msg')
+          // ARZOOM applications: only the application result and the knowledge base. The old
+          // debt-collection tools (update_status, request_callback) and WhatsApp are not used.
+          ? (aiToolDeclarations as any[]).filter((d) => ['record_application_feedback', 'search_knowledge_base'].includes(d?.name))
           : aiToolDeclarations) as any[])] }],
       },
     });
