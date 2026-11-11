@@ -491,6 +491,25 @@ async function clearLegacySummaries(): Promise<void> {
   `);
   const count = (result as { rowCount?: number }).rowCount ?? (result as { count?: number }).count ?? 0;
   if (count) console.log(`[arzoom-sync] cleared ${count} old debt-collection summaries on ARZOOM calls`);
+  // The customer card's "Son əlaqə" (pks_status / pks_comment): take the latest ARZOOM result instead.
+  const cards = await db.execute(sql`
+    UPDATE customers cu
+    SET pks_status = f.outcome_label, pks_comment = f.reason
+    FROM (
+      SELECT cu2.id, lf.outcome_label, lf.reason
+      FROM customers cu2
+      LEFT JOIN LATERAL (
+        SELECT outcome_label, reason FROM arzoom_feedback af
+        WHERE af.customer_id = cu2.id AND af.push_error IS DISTINCT FROM 'göndərilmədi: əvvəlki danışıq qüvvədədir'
+        ORDER BY af.id DESC LIMIT 1
+      ) lf ON true
+      WHERE cu2.source_system = ${ARZOOM_SOURCE}
+        AND (cu2.pks_status ~ ${pattern} OR cu2.pks_comment ~ ${pattern})
+    ) f
+    WHERE cu.id = f.id
+  `);
+  const cardCount = (cards as { rowCount?: number }).rowCount ?? (cards as { count?: number }).count ?? 0;
+  if (cardCount) console.log(`[arzoom-sync] cleared old debt-collection results on ${cardCount} ARZOOM customer cards`);
 }
 
 function bakuIsoNow(): string {
