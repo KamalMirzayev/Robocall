@@ -240,6 +240,17 @@ async function attachToCampaigns(customerId: number, item: ArzoomItem, statusCha
   const status = item.status;
   const result = status ? STATUS_TO_RESULT[status] : undefined;
   const callAfter = sql`now() + make_interval(mins => ${callDelayMinutes(item)})`;
+  // ARZOOM moves an application to "accepted" (Satışa ötürülüb) when this bot transferred
+  // the customer to a sales rep. That customer has just talked to a person: don't dial again.
+  let transferredByBot = false;
+  if (status === 'accepted') {
+    const [last] = rowsFrom(await db.execute(sql`
+      SELECT outcome FROM arzoom_feedback
+      WHERE customer_id = ${customerId} AND push_error IS DISTINCT FROM 'göndərilmədi: əvvəlki danışıq qüvvədədir'
+      ORDER BY id DESC LIMIT 1
+    `));
+    transferredByBot = last?.outcome === 'transferred_to_sales';
+  }
   const campaigns = rowsFrom(await db.execute(sql`
     SELECT id, coalesce(segment_params->>'statuses', segment_params->>'result') AS result,
            coalesce(segment_params->>'autoAdd', 'off') AS auto_add, coalesce(segment_params->>'requeue', 'on') AS requeue
@@ -250,7 +261,7 @@ async function attachToCampaigns(customerId: number, item: ArzoomItem, statusCha
     const campaignId = Number(c.id);
     // statuses is a comma-separated list (older campaigns had a single result value).
     const picked = String(c.result || '').split(',').map((x) => x.trim()).filter(Boolean);
-    const wanted = Boolean(result) && (picked.length ? picked.includes(result as string) : DEFAULT_RESULTS.has(result as string));
+    const wanted = !transferredByBot && Boolean(result) && (picked.length ? picked.includes(result as string) : DEFAULT_RESULTS.has(result as string));
     const [link] = rowsFrom(await db.execute(sql`
       SELECT id, status FROM campaign_calls WHERE campaign_id = ${campaignId} AND customer_id = ${customerId} LIMIT 1
     `));
