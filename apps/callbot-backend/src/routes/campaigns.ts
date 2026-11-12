@@ -1704,7 +1704,7 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
   const runWeekdays = Array.isArray(req.body?.runWeekdays)
     ? req.body.runWeekdays.filter(Boolean).slice(0, 7).join(',')
     : '';
-  const runWindowStart = cleanText(req.body?.runWindowStart) || '09:00';
+  const runWindowStart = cleanText(req.body?.runWindowStart) || '10:30';
   const runWindowEnd = cleanText(req.body?.runWindowEnd) || '19:00';
   const runStartDate = cleanText(req.body?.runStartDate) || null;
   const runEndDate = cleanText(req.body?.runEndDate) || null;
