@@ -39,6 +39,8 @@ interface ArzoomTerms {
   amount?: number | null;
   months?: number | null;
   monthly_payment?: number | null;
+  // Other one-off costs of the deal in AZN (0 when not set). The interest rate is never sent.
+  other_costs?: { dyp?: number | null; kasko?: number | null; gps?: number | null; bank_commission?: number | null; total?: number | null } | null;
 }
 
 export interface ArzoomItem {
@@ -389,6 +391,20 @@ export function arzoomCustomerLines(data: unknown): string[] {
     if (terms.months != null) t.push(`müddət ${terms.months} ay`);
     if (terms.monthly_payment != null) t.push(`aylıq ödəniş ${money(terms.monthly_payment)}`);
     if (t.length) lines.push(`- ${item.final_terms ? 'Razılaşdırılmış şərtlər' : 'Təklif'}: ${t.join(', ')}`);
+    const oc = terms.other_costs;
+    const ocNum = (v: unknown) => { const n = Number(v); return Number.isFinite(n) && n > 0 ? n : 0; };
+    if (oc) {
+      const parts = [
+        ocNum(oc.dyp) ? `DYP ${money(ocNum(oc.dyp))}` : null,
+        ocNum(oc.kasko) ? `KASKO sığortası ${money(ocNum(oc.kasko))}` : null,
+        ocNum(oc.gps) ? `GPS ${money(ocNum(oc.gps))}` : null,
+        ocNum(oc.bank_commission) ? `bank komissiyası ${money(ocNum(oc.bank_commission))}` : null,
+      ].filter(Boolean);
+      const total = ocNum(oc.total) || [oc.dyp, oc.kasko, oc.gps, oc.bank_commission].reduce<number>((sum, v) => sum + ocNum(v), 0);
+      if (total > 0) {
+        lines.push(`- Digər xərclər: ${parts.length ? `${parts.join(', ')}; ` : ''}cəmi ${money(total)}. Təklifin şərtlərini deyəndə bunu da qısa de: "Bundan əlavə digər xərclər var: ${parts.length ? parts.join(', ') : ''}${parts.length ? ', ' : ''}cəmi ${money(total)}." Müştəri soruşsa hər birini ayrıca izah et. Faiz dərəcəsini söyləmə.`);
+      }
+    }
   }
   if (item.status === 'info') {
     const docs = (item.info_docs || []).filter(Boolean);
