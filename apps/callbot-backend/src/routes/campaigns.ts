@@ -537,7 +537,7 @@ async function ensureCampaignExistsOrCreate(campaignId: number, seed: CampaignSe
     ? seed.trunkIds.filter(Boolean).slice(0, 50).join(',')
     : null;
   const runWeekdays = Array.isArray(seed?.runWeekdays) ? seed?.runWeekdays.filter(Boolean).slice(0, 7) : [];
-  const runWindowStart = cleanText(seed?.runWindowStart) || '09:00';
+  const runWindowStart = cleanText(seed?.runWindowStart) || '10:30';
   const runWindowEnd = cleanText(seed?.runWindowEnd) || '19:00';
   const scheduleConfig = {
     runWeekdays,

@@ -51,7 +51,7 @@ const defaultValue: CampaignInput = {
   dailyCustomerRefresh: false,
   trunkIds: [] as string[],
   runWeekdays: ['mon', 'tue', 'wed', 'thu', 'fri'],
-  runWindowStart: '09:00',
+  runWindowStart: '10:30',
   runWindowEnd: '19:00',
 };
 
