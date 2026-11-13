@@ -229,7 +229,7 @@ Danışığın gedişi:
   {
     key: 'credit_offer',
     tone: 'blue',
-    title: { az: 'Kredit təklifi (nəticəsiz qalanlar)', en: 'Credit offer (no result yet)' },
+    title: { az: 'Churn kampaniyası (müraciətlərin bərpası)', en: 'Churn campaign (application win-back)' },
     summary: {
       az: 'Əvvəl kredit üçün zəng edilib nəticə alınmayan müştərilərə kampaniya çərçivəsində kreditlə avtomobil təklif edir; razı olana ARZOOM müraciət linki SMS ilə gedir.',
       en: 'Offers a car on credit to customers who gave no result earlier; those who agree get the ARZOOM application link by SMS.',
