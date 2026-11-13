@@ -112,7 +112,12 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
   const d = data as Record<string, unknown>;
   const lines: string[] = [];
   const s = (v: unknown) => (v == null ? '' : String(v).trim());
-  if (s(d.brand)) lines.push(segment === 'credit_offer' ? `- Əvvəl kredit üçün müraciət etdiyi marka/model: ${s(d.brand)}` : `- Avtomobil: ${s(d.brand)}`);
+  const extraModel = d.extra && typeof d.extra === 'object'
+    ? Object.entries(d.extra as Record<string, unknown>).find(([k]) => /model/i.test(k))?.[1]
+    : undefined;
+  const model = s(d.model) || s(extraModel);
+  const car = [s(d.brand), model && !s(d.brand).toLowerCase().includes(model.toLowerCase()) ? model : ''].filter(Boolean).join(' ');
+  if (car) lines.push(segment === 'credit_offer' ? `- Əvvəl kredit üçün müraciət etdiyi avtomobil (marka və model): ${car}` : `- Avtomobil: ${car}`);
   if (s(d.last_service_date)) lines.push(`- Son dəfə servisə gəlib: ${s(d.last_service_date)}`);
   if (s(d.last_talk)) lines.push(`- Əvvəlki danışıq (müştəri ilə son əlaqənin qeydi): ${s(d.last_talk).slice(0, 800)}`);
   const extra = d.extra && typeof d.extra === 'object' ? (d.extra as Record<string, unknown>) : {};
@@ -131,7 +136,7 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
       : '- SERVİS NÜMAYƏNDƏSİ: Müştəri servisə gəlmək üçün nümayəndə ilə əlaqə istəsə, servis nümayəndəsinin ona tezliklə zəng edəcəyini de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır; reason-a müştərinin uyğun vaxtını yaz.');
   }
   if (segment === 'credit_offer') {
-    const applied = s(d.brand);
+    const applied = car;
     lines.push([
       '- CHURN SSENARİSİ (agent təlimatından üstündür, bu ardıcıllıqla danış):',
       '  1) "Salam, hörmətli müştəri, sizi Group Motors şirkətindən salamlayıram" de və danışmağa vaxtı olub-olmadığını soruş. Müştəriyə adı ilə müraciət etmə, ad-soyad soruşma; həmişə "hörmətli müştəri" de.',

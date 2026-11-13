@@ -7,13 +7,14 @@ import { EXCEL_SOURCE } from './campaign-results.js';
 // recognised by their header text (Azerbaijani or English); any other column is kept and
 // shown to the bot as extra info.
 
-type Field = 'name' | 'phone' | 'brand' | 'last_service_date' | 'last_talk';
+type Field = 'name' | 'phone' | 'brand' | 'model' | 'last_service_date' | 'last_talk';
 
 const HEADER_PATTERNS: Array<[Field, RegExp]> = [
   ['phone', /(telefon|nömrə|nomre|mobil|phone|tel\b|gsm)/i],
   ['last_service_date', /(servis|gəliş|gelis|son\s*tarix|last\s*service|visit)/i],
   ['last_talk', /(danışıq|danisiq|qeyd|şərh|serh|comment|note|son\s*əlaqə|son\s*elaqe)/i],
-  ['brand', /(marka|maşın|masin|avtomobil|model|brand|car)/i],
+  ['brand', /(marka|maşın|masin|avtomobil|brand|car)/i],
+  ['model', /(model)/i],
   ['name', /(ad|soyad|müştəri|musteri|name|client|customer)/i],
 ];
 
@@ -21,7 +22,7 @@ const MAX_ROWS = 20_000;
 
 export interface ParsedSheet {
   columns: Array<{ header: string; field: Field | null }>;
-  rows: Array<{ name: string; phone: string | null; rawPhone: string; brand: string; last_service_date: string; last_talk: string; extra: Record<string, string> }>;
+  rows: Array<{ name: string; phone: string | null; rawPhone: string; brand: string; model: string; last_service_date: string; last_talk: string; extra: Record<string, string> }>;
 }
 
 function cellText(value: unknown): string {
@@ -84,7 +85,7 @@ export async function parseCustomerSheet(buffer: Buffer): Promise<ParsedSheet> {
   for (let r = headerRow + 1; r <= ws.rowCount && rows.length < MAX_ROWS; r++) {
     const vals = (ws.getRow(r).values as unknown[]).slice(1);
     if (!vals.some((v) => cellText(v))) continue;
-    const row = { name: '', phone: null as string | null, rawPhone: '', brand: '', last_service_date: '', last_talk: '', extra: {} as Record<string, string> };
+    const row = { name: '', phone: null as string | null, rawPhone: '', brand: '', model: '', last_service_date: '', last_talk: '', extra: {} as Record<string, string> };
     columns.forEach((col, i) => {
       const text = cellText(vals[i]).slice(0, 1000);
       if (!text) return;
@@ -111,7 +112,7 @@ export interface ExcelImportResult {
   doNotCall: number;
   alreadyInCampaign: number;
   added: number;
-  sample: Array<{ name: string; phone: string | null; brand: string; last_service_date: string; last_talk: string }>;
+  sample: Array<{ name: string; phone: string | null; brand: string; model: string; last_service_date: string; last_talk: string }>;
 }
 
 function rowsFrom(result: unknown): Record<string, unknown>[] {
@@ -161,6 +162,7 @@ export async function importCustomerSheet(campaignId: number, buffer: Buffer, dr
       if (blocked.has(phone) || inCampaign.has(phone)) continue;
       const data = JSON.stringify({
         brand: row.brand || null,
+        model: row.model || null,
         last_service_date: row.last_service_date || null,
         last_talk: row.last_talk || null,
         extra: row.extra,
@@ -207,6 +209,6 @@ export async function importCustomerSheet(campaignId: number, buffer: Buffer, dr
     doNotCall: [...blocked].length,
     alreadyInCampaign: [...inCampaign].length,
     added,
-    sample: unique.slice(0, 5).map((r) => ({ name: r.name, phone: r.phone, brand: r.brand, last_service_date: r.last_service_date, last_talk: r.last_talk.slice(0, 120) })),
+    sample: unique.slice(0, 5).map((r) => ({ name: r.name, phone: r.phone, brand: r.brand, model: r.model, last_service_date: r.last_service_date, last_talk: r.last_talk.slice(0, 120) })),
   };
 }

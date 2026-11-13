@@ -12,13 +12,14 @@ interface ImportResult {
   doNotCall: number;
   alreadyInCampaign: number;
   added: number;
-  sample: Array<{ name: string; phone: string | null; brand: string; last_service_date: string; last_talk: string }>;
+  sample: Array<{ name: string; phone: string | null; brand: string; model?: string; last_service_date: string; last_talk: string }>;
 }
 
 const FIELD_LABELS: Record<string, string> = {
   name: 'Müştəri adı',
   phone: 'Telefon',
-  brand: 'Maşın / marka',
+  brand: 'Marka',
+  model: 'Model',
   last_service_date: 'Son servisə gəliş',
   last_talk: 'Son danışıq',
 };
@@ -79,7 +80,7 @@ export default function ExcelImportPanel({ campaignId, onImported }: { campaignI
   return (
     <div className="space-y-4">
       <p className="text-sm text-gray-400">
-        Excel (.xlsx) faylı seçin. Birinci sətir başlıq olmalıdır: müştəri adı, telefon, maşın markası, son servisə gəliş tarixi, son danışıq.
+        Excel (.xlsx) faylı seçin. Birinci sətir başlıq olmalıdır: müştəri adı, telefon, marka, model, son servisə gəliş tarixi, son danışıq.
         Başqa sütunlar da bota əlavə məlumat kimi verilir. Bir daha zəng edilməsini istəməyən və artıq bu kampaniyada olan nömrələr əlavə olunmur.
       </p>
       <input
@@ -114,7 +115,7 @@ export default function ExcelImportPanel({ campaignId, onImported }: { campaignI
                   <tr key={i} className="border-t border-slate-700">
                     <td className="py-1 pr-2">{r.name}</td>
                     <td className="py-1 pr-2 tabular-nums">{r.phone}</td>
-                    <td className="py-1 pr-2">{r.brand}</td>
+                    <td className="py-1 pr-2">{[r.brand, r.model].filter(Boolean).join(' ')}</td>
                     <td className="py-1 pr-2">{r.last_service_date}</td>
                     <td className="py-1">{r.last_talk}</td>
                   </tr>
