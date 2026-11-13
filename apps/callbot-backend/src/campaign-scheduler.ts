@@ -235,6 +235,24 @@ export async function campaignSchedulerTick() {
     
     console.log(`[Campaign Scheduler] Found ${campaignRows.length} active campaigns`);
     
+    // Campaigns that will dial this tick, per trunk: a shared trunk's lines are split
+    // between them, so one campaign cannot take every line of a multi-line trunk.
+    const trunkOf = (c: CampaignRow): string[] => (c.trunkIds
+      ? c.trunkIds.split(',').map((t) => t.trim()).filter(Boolean)
+      : c.trunkId ? [c.trunkId] : []);
+    const campaignsPerTrunk = new Map<string, number>();
+    for (const c of campaignRows) {
+      if (!isWithinRunWindow(c.runWindowStart, c.runWindowEnd) || !isValidRunDay(c.runWeekdays) || !isWithinDateRange(c.runStartDate, c.runEndDate)) continue;
+      const [due] = rowsFrom(await db.execute(sql`
+        SELECT 1 FROM campaign_calls
+        WHERE campaign_id = ${c.id} AND status IN ('pending', 'retrying', 'attempting')
+          AND (call_after IS NULL OR call_after <= now())
+        LIMIT 1
+      `));
+      if (!due) continue;
+      for (const t of trunkOf(c)) campaignsPerTrunk.set(t, (campaignsPerTrunk.get(t) ?? 0) + 1);
+    }
+
     for (const campaign of campaignRows) {
       console.log(`[Campaign Scheduler] Campaign ${campaign.id}: checking...`, {
         name: campaign.name,
@@ -294,14 +312,22 @@ export async function campaignSchedulerTick() {
         // Free slots per trunk: its capacity (trunk_capacity, default 1) minus active jobs.
         const slotRows = rowsFrom(await db.execute(sql`
           SELECT x.trunk_id,
-                 coalesce((SELECT max_calls FROM trunk_capacity cap WHERE cap.trunk_id = x.trunk_id), 1)
-                 - (SELECT count(*) FROM telephony_jobs j
-                    WHERE j.trunk_id = x.trunk_id
-                      AND j.status IN ('pending', 'claimed', 'dialing', 'answered')
-                      AND j.created_at > now() - interval '3 hours') AS free
+                 coalesce((SELECT max_calls FROM trunk_capacity cap WHERE cap.trunk_id = x.trunk_id), 1) AS cap,
+                 (SELECT count(*) FROM telephony_jobs j
+                  WHERE j.trunk_id = x.trunk_id
+                    AND j.status IN ('pending', 'claimed', 'dialing', 'answered')
+                    AND j.created_at > now() - interval '3 hours') AS busy,
+                 (SELECT count(*) FROM telephony_jobs j
+                  WHERE j.trunk_id = x.trunk_id AND j.campaign_id = ${campaign.id}
+                    AND j.status IN ('pending', 'claimed', 'dialing', 'answered')
+                    AND j.created_at > now() - interval '3 hours') AS mine
           FROM unnest(ARRAY[${sql.join(assignedTrunks.map((t) => sql`${t}`), sql`, `)}]::text[]) AS x(trunk_id)
         `));
-        const freeSlots = new Map(slotRows.map((r) => [String(r.trunk_id), Math.max(0, Number(r.free))]));
+        const freeSlots = new Map(slotRows.map((r) => {
+          const cap = Number(r.cap);
+          const share = Math.max(1, Math.floor(cap / Math.max(1, campaignsPerTrunk.get(String(r.trunk_id)) ?? 1)));
+          return [String(r.trunk_id), Math.max(0, Math.min(cap - Number(r.busy), share - Number(r.mine)))];
+        }));
         const placedCalls = new Set<number>();
 
         let jobCount = 0;
