@@ -23,6 +23,8 @@ export default function CampaignDetailsPage() {
   const { t } = useLanguage();
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [campaignCalls, setCampaignCalls] = useState<CampaignCallHistoryItem[]>([]);
+  const hasCar = campaignCalls.some((r) => r.car);
+  const hasFin = campaignCalls.length === 0 || campaignCalls.some((r) => r.fin);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [importingMatches, setImportingMatches] = useState(false);
@@ -223,7 +225,8 @@ export default function CampaignDetailsPage() {
           <thead className="bg-slate-900/60 text-gray-300">
             <tr>
               <th className="text-left px-4 py-3">{t('campaignDetail.tableCustomer')}</th>
-              <th className="text-left px-4 py-3">{t('campaignDetail.tableFin')}</th>
+              {hasCar && <th className="text-left px-4 py-3">Marka / model</th>}
+              {hasFin && <th className="text-left px-4 py-3">{t('campaignDetail.tableFin')}</th>}
               <th className="text-left px-4 py-3">{t('campaignDetail.tablePhone')}</th>
               <th className="text-left px-4 py-3">{t('campaignDetail.tableStatus')}</th>
               <th className="text-left px-4 py-3">{t('campaignDetail.tableAttempt')}</th>
@@ -234,13 +237,14 @@ export default function CampaignDetailsPage() {
           <tbody>
             {campaignCalls.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-10 text-center text-gray-400">{t('campaignDetail.noRecords')}</td>
+                <td colSpan={5 + (hasCar ? 1 : 0) + (hasFin ? 1 : 0)} className="px-4 py-10 text-center text-gray-400">{t('campaignDetail.noRecords')}</td>
               </tr>
             )}
             {campaignCalls.map((row) => (
               <tr key={row.id} className="border-t border-slate-700">
                 <td className="px-4 py-3 text-white">{row.customerName || '-'}</td>
-                <td className="px-4 py-3 text-gray-300">{row.fin || '-'}</td>
+                {hasCar && <td className="px-4 py-3 text-gray-300">{row.car || '-'}</td>}
+                {hasFin && <td className="px-4 py-3 text-gray-300">{row.fin || '-'}</td>}
                 <td className="px-4 py-3 text-gray-300">{row.phone || '-'}</td>
                 <td className={`px-4 py-3 ${statusColor(row.status)}`}>{row.status}</td>
                 <td className="px-4 py-3 text-gray-300">#{row.attemptNumber}</td>

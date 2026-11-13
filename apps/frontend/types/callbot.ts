@@ -217,6 +217,7 @@ export interface CampaignCallHistoryItem {
   customerName?: string | null;
   fin?: string | null;
   phone?: string | null;
+  car?: string | null;
   status: 'pending' | 'calling' | 'failed' | 'completed' | string;
   attemptNumber: number;
   updatedAt?: string | null;

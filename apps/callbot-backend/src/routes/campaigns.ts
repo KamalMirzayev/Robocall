@@ -1536,9 +1536,14 @@ campaignsRouter.get('/:id/calls', async (req, res) => {
       SELECT
         cc.id,
         cc.customer_id AS "customerId",
-        nullif(trim(concat_ws(' ', c.name, c.surname, c.father_name)), '') AS "customerName",
+        nullif(trim(concat_ws(' ', c.name, nullif(c.surname, '-'), c.father_name)), '') AS "customerName",
         c.fin AS "fin",
         coalesce(c.mobile_phone, c.phone) AS phone,
+        -- Excel-imported customers: brand and model from the uploaded sheet.
+        nullif(trim(concat_ws(' ', c.import_data->>'brand',
+          coalesce(c.import_data->>'model',
+            (SELECT e.value FROM jsonb_each_text(CASE WHEN jsonb_typeof(c.import_data->'extra') = 'object' THEN c.import_data->'extra' ELSE '{}'::jsonb END) e
+             WHERE e.key ILIKE '%model%' LIMIT 1)))), '') AS car,
         cc.status,
         cc.attempt_number AS "attemptNumber",
         cc.updated_at AS "updatedAt",
@@ -1548,7 +1553,9 @@ campaignsRouter.get('/:id/calls', async (req, res) => {
         lc.duration_seconds AS "lastCallDurationSeconds",
         -- ARZOOM application calls: the result the bot recorded for that very call, not the
         -- generic (debt-collection) transcript summary.
-        CASE WHEN c.source_system = 'arzoom' THEN fb.text ELSE lc.summary END AS "lastCallSummary",
+        CASE WHEN c.source_system = 'arzoom' THEN fb.text
+             WHEN c.source_system = 'excel' THEN coalesce(cr.text, lc.summary)
+             ELSE lc.summary END AS "lastCallSummary",
         lc.description AS "lastCallDescription"
       FROM campaign_calls cc
       LEFT JOIN customers c ON c.id = cc.customer_id
@@ -1566,6 +1573,13 @@ campaignsRouter.get('/:id/calls', async (req, res) => {
         ORDER BY f.id DESC
         LIMIT 1
       ) fb ON true
+      LEFT JOIN LATERAL (
+        SELECT concat_ws(' — ', r.outcome_label, nullif(r.reason, '')) AS text
+        FROM campaign_results r
+        WHERE r.customer_id = cc.customer_id AND (r.campaign_id = cc.campaign_id OR r.campaign_id IS NULL)
+        ORDER BY r.id DESC
+        LIMIT 1
+      ) cr ON true
       WHERE cc.campaign_id = ${campaignId}
       ORDER BY cc.updated_at DESC, cc.id DESC
     `));
