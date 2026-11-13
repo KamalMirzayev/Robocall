@@ -134,7 +134,7 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
     const applied = s(d.brand);
     lines.push([
       '- CHURN SSENARİSİ (agent təlimatından üstündür, bu ardıcıllıqla danış):',
-      '  1) "Salam, sizi Group Motors şirkətindən salamlayıram" de, müştərinin adı varsa adı ilə müraciət et və danışmağa vaxtı olub-olmadığını soruş.',
+      '  1) "Salam, hörmətli müştəri, sizi Group Motors şirkətindən salamlayıram" de və danışmağa vaxtı olub-olmadığını soruş. Müştəriyə adı ilə müraciət etmə, ad-soyad soruşma; həmişə "hörmətli müştəri" de.',
       applied
         ? `  2) Xatırlat: "Siz əvvəl ${applied} üçün kreditlə avtomobil əldə etmək məqsədilə müraciət etmişdiniz."`
         : '  2) Xatırlat: "Siz əvvəl kreditlə avtomobil əldə etmək üçün müraciət etmişdiniz."',

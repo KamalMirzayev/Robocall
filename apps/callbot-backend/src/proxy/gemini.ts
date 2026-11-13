@@ -281,8 +281,7 @@ function buildInitialGreetingPrompt(customer: Customer, segment: string | null =
     .trim();
   // Churn campaign: the company greeting comes first (see CHURN SSENARİSİ in the customer data).
   if (segment === 'credit_offer') {
-    const who = fullName && fullName !== 'Hörmətli müştəri' ? ` ${fullName} ilə danışıram?` : ' Danışmağa vaxtınız var?';
-    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, sizi Group Motors şirkətindən salamlayıram.${who}" Bundan sonra cavabı gözlə, sonra CHURN SSENARİSİ ilə davam et.`;
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, sizi Group Motors şirkətindən salamlayıram. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə, sonra CHURN SSENARİSİ ilə davam et.`;
   }
   // ARZOOM applications carry no name: greet without one and ask for the application owner.
   if (!fullName || fullName === '-') {
