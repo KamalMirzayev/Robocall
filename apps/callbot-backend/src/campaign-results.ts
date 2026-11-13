@@ -328,6 +328,17 @@ export function sendPendingApplicationSms(): Promise<void> {
       WHERE r.sms_status = 'pending' ORDER BY r.id LIMIT 20
     `));
     for (const row of rows) {
+      // One link per customer, ever: a later "yes" on another call is not sent again.
+      const [already] = rowsFrom(await db.execute(sql`
+        SELECT 1 FROM campaign_results r2
+        WHERE r2.customer_id = (SELECT customer_id FROM campaign_results WHERE id = ${Number(row.id)})
+          AND r2.id <> ${Number(row.id)} AND r2.sms_status = 'sent'
+        LIMIT 1
+      `));
+      if (already) {
+        await db.execute(sql`UPDATE campaign_results SET sms_status = 'duplicate', sms_error = 'link artıq göndərilib' WHERE id = ${Number(row.id)}`);
+        continue;
+      }
       try {
         const res = await fetch(`${origin}${path.startsWith('/') ? path : `/${path}`}`, {
           method: 'POST',
