@@ -43,7 +43,10 @@ export function useCalls(filters?: { agent_id?: string; status?: string }) {
  * useCalls() there was paging through the entire table on every mount/tab-click just to
  * render it unpaginated). `enabled` defers the first fetch until the tab is actually open.
  */
-export function useCallsPage(pageSize = 50, enabled = true) {
+export interface CallFilters { q?: string; campaignId?: string; from?: string; to?: string }
+
+export function useCallsPage(pageSize = 50, enabled = true, filters: CallFilters = {}) {
+  const filterKey = JSON.stringify(filters);
   const [calls, setCalls] = useState<Call[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -53,7 +56,9 @@ export function useCallsPage(pageSize = 50, enabled = true) {
   const fetchPage = useCallback(async (targetPage: number) => {
     setLoading(true);
     try {
-      const result = await callbotApi.getCallsPage({ page: targetPage, pageSize });
+      const f = JSON.parse(filterKey) as CallFilters;
+      const params = Object.fromEntries(Object.entries(f).filter(([, v]) => v)) as CallFilters;
+      const result = await callbotApi.getCallsPage({ page: targetPage, pageSize, ...params });
       setCalls(result.data);
       setTotal(result.total);
       setError(null);
@@ -62,12 +67,17 @@ export function useCallsPage(pageSize = 50, enabled = true) {
     } finally {
       setLoading(false);
     }
-  }, [pageSize]);
+  }, [pageSize, filterKey]);
 
   useEffect(() => {
     if (!enabled) return;
     fetchPage(page);
   }, [page, enabled, fetchPage]);
+
+  // A new filter starts from the first page.
+  useEffect(() => {
+    setPage(1);
+  }, [filterKey]);
 
   return {
     calls,

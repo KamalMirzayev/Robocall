@@ -114,6 +114,9 @@ function normalizeCall(item: any): Call {
     customerFin: item.customerFin ?? null,
     customerContractNo: item.customerContractNo ?? null,
     customerMobilePhone: item.customerMobilePhone ?? null,
+    customerPhone: item.customerPhone ?? null,
+    campaignId: item.campaignId ?? null,
+    campaignName: item.campaignName ?? null,
     duration: Number(item.duration ?? item.durationSeconds ?? 0),
     durationSeconds: Number(item.durationSeconds ?? item.duration ?? 0),
     transcript: item.transcript,
@@ -181,7 +184,7 @@ export const callbotApi = {
 
   // Single-page fetch for calls/page.tsx's History tab — the customers-page-style paginated
   // display, as opposed to getCalls() above which deliberately fetches everything.
-  async getCallsPage(params: { page: number; pageSize: number; agent_id?: string; status?: string }): Promise<{ data: Call[]; total: number; page: number; pageSize: number }> {
+  async getCallsPage(params: { page: number; pageSize: number; agent_id?: string; status?: string; q?: string; campaignId?: string; from?: string; to?: string }): Promise<{ data: Call[]; total: number; page: number; pageSize: number }> {
     try {
       const response = await apiClient.get<{ items: any[]; total: number; page: number; pageSize: number }>('/callbot/calls', { params });
       return { data: response.data.items.map(normalizeCall), total: response.data.total, page: response.data.page, pageSize: response.data.pageSize };

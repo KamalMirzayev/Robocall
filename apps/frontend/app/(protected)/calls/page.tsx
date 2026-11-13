@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { formatDate } from '@/lib/date-format';
 import InitiateCallForm from '@/components/InitiateCallForm';
-import { useCallsPage, useAllCallsLazy } from '@/hooks/useCallbot';
+import { useCallsPage, useAllCallsLazy, type CallFilters } from '@/hooks/useCallbot';
+import { callbotApi } from '@/lib/callbot-api';
 import { useLanguage } from '@/lib/language';
 
 type Tab = 'live' | 'history' | 'initiate' | 'intentions';
@@ -61,6 +62,19 @@ function durationLabel(totalSeconds: number): string {
 export default function CallsPage() {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<Tab>('live');
+  const emptyFilters: CallFilters = { q: '', campaignId: '', from: '', to: '' };
+  const [filterDraft, setFilterDraft] = useState<CallFilters>(emptyFilters);
+  const [historyFilters, setHistoryFilters] = useState<CallFilters>(emptyFilters);
+  const [campaignOptions, setCampaignOptions] = useState<Array<{ id: number; name: string }>>([]);
+  useEffect(() => {
+    if (activeTab !== 'history' || campaignOptions.length) return;
+    callbotApi.getCampaigns()
+      .then((data: any) => {
+        const list: any[] = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : Array.isArray(data?.data) ? data.data : [];
+        setCampaignOptions(list.map((c) => ({ id: Number(c.id), name: String(c.name ?? `#${c.id}`) })));
+      })
+      .catch(() => undefined);
+  }, [activeTab, campaignOptions.length]);
   const [liveCalls, setLiveCalls] = useState<LiveCall[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,7 +89,7 @@ export default function CallsPage() {
     loading: historyLoading,
     error: historyError,
     refetch: refetchHistory,
-  } = useCallsPage(50, activeTab === 'history');
+  } = useCallsPage(50, activeTab === 'history', historyFilters);
   const {
     calls: allCallsForIntentions,
     loading: intentionsLoading,
@@ -413,15 +427,66 @@ export default function CallsPage() {
 
       {activeTab === 'history' && (
         <div className="bg-slate-800 rounded-lg overflow-hidden">
-          <div className="flex justify-end px-6 pt-4">
+          <form
+            className="flex flex-wrap items-end gap-3 px-6 pt-4 text-sm"
+            onSubmit={(e) => {
+              e.preventDefault();
+              setHistoryFilters({ ...filterDraft });
+            }}
+          >
+            <label className="flex flex-col gap-1 text-gray-400">
+              Axtarış
+              <input
+                value={filterDraft.q}
+                onChange={(e) => setFilterDraft({ ...filterDraft, q: e.target.value })}
+                placeholder="Ad, nömrə, xülasə"
+                className="w-56 rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-gray-200"
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-gray-400">
+              Kampaniya
+              <select
+                value={filterDraft.campaignId}
+                onChange={(e) => setFilterDraft({ ...filterDraft, campaignId: e.target.value })}
+                className="w-60 rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-gray-200"
+              >
+                <option value="">Hamısı</option>
+                {campaignOptions.map((c) => (
+                  <option key={c.id} value={String(c.id)}>{c.name}</option>
+                ))}
+                <option value="none">Kampaniyasız zənglər</option>
+              </select>
+            </label>
+            <label className="flex flex-col gap-1 text-gray-400">
+              Tarixdən
+              <input type="date" value={filterDraft.from} onChange={(e) => setFilterDraft({ ...filterDraft, from: e.target.value })}
+                className="rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-gray-200" />
+            </label>
+            <label className="flex flex-col gap-1 text-gray-400">
+              Tarixədək
+              <input type="date" value={filterDraft.to} onChange={(e) => setFilterDraft({ ...filterDraft, to: e.target.value })}
+                className="rounded border border-slate-600 bg-slate-900 px-2 py-1.5 text-gray-200" />
+            </label>
+            <button type="submit" className="rounded bg-blue-600 px-4 py-1.5 font-medium text-white hover:bg-blue-500">Tətbiq et</button>
             <button
+              type="button"
+              onClick={() => {
+                setFilterDraft(emptyFilters);
+                setHistoryFilters(emptyFilters);
+              }}
+              className="rounded border border-slate-600 px-3 py-1.5 text-gray-300 hover:bg-slate-700"
+            >
+              Sıfırla
+            </button>
+            <button
+              type="button"
               onClick={() => refetchHistory()}
               disabled={historyLoading}
-              className="px-3 py-1.5 rounded border border-slate-600 text-gray-300 text-sm hover:bg-slate-700 disabled:opacity-40"
+              className="ml-auto px-3 py-1.5 rounded border border-slate-600 text-gray-300 hover:bg-slate-700 disabled:opacity-40"
             >
               {t('calls.refresh')}
             </button>
-          </div>
+          </form>
           {historyLoading ? (
             <div className="p-8 text-center text-gray-400">{t('calls.loadingHistory')}</div>
           ) : historyError ? (
@@ -438,6 +503,7 @@ export default function CallsPage() {
                     <th className="px-6 py-3 text-left font-semibold text-gray-300">{t('calls.historyTable.id')}</th>
                     <th className="px-6 py-3 text-left font-semibold text-gray-300">{t('calls.historyTable.agent')}</th>
                     <th className="px-6 py-3 text-left font-semibold text-gray-300">{t('calls.historyTable.customer')}</th>
+                    <th className="px-6 py-3 text-left font-semibold text-gray-300">Kampaniya</th>
                     <th className="px-6 py-3 text-left font-semibold text-gray-300">{t('calls.historyTable.started')}</th>
                     <th className="px-6 py-3 text-left font-semibold text-gray-300">{t('calls.historyTable.ended')}</th>
                     <th className="px-6 py-3 text-left font-semibold text-gray-300">{t('calls.historyTable.duration')}</th>
@@ -450,8 +516,10 @@ export default function CallsPage() {
                       <td className="px-6 py-4 text-gray-400">{call.id}</td>
                       <td className="px-6 py-4 text-gray-300">{call.agentName || call.agentId || call.agent_id || '-'}</td>
                       <td className="px-6 py-4 text-gray-300">
-                        {[call.customerName, call.customerSurname].filter(Boolean).join(' ') || call.customerId || call.customer_id || '-'}
+                        {[call.customerName, call.customerSurname].filter((p) => p && p !== '-').join(' ') || call.customerId || call.customer_id || '-'}
+                        {call.customerPhone && <div className="text-xs text-gray-500 tabular-nums">{call.customerPhone}</div>}
                       </td>
+                      <td className="px-6 py-4 text-gray-400">{call.campaignName || '-'}</td>
                       <td className="px-6 py-4 text-gray-400">{call.startedAt || call.started_at ? formatDate(call.startedAt || call.started_at) : '-'}</td>
                       <td className="px-6 py-4 text-gray-400">{call.endedAt ?? call.ended_at ? formatDate((call.endedAt ?? call.ended_at) as string) : '-'}</td>
                       <td className="px-6 py-4 text-gray-400">{durationLabel(call.durationSeconds ?? call.duration ?? 0)}</td>

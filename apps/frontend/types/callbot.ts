@@ -246,6 +246,9 @@ export interface Call {
   customerFin?: string | null;
   customerContractNo?: string | null;
   customerMobilePhone?: string | null;
+  customerPhone?: string | null;
+  campaignId?: number | null;
+  campaignName?: string | null;
   duration: number;
   durationSeconds?: number;
   transcript?: string;
