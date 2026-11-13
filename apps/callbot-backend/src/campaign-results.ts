@@ -163,7 +163,10 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
     ? Object.entries(d.extra as Record<string, unknown>).find(([k]) => /brend|brand|marka/i.test(k))?.[1]
     : undefined;
   const sc = splitCar(s(d.brand) || s(extraBrand), s(d.model) || s(extraModel));
-  const car = [sc.brand, sc.model && !sc.brand.toLowerCase().includes(sc.model.toLowerCase()) ? sc.model : ''].filter(Boolean).join(' ');
+  // "Mazda" + "Mazda 3" reads "Mazda 3", not "Mazda Mazda 3".
+  const car = sc.model && sc.model.toLowerCase().startsWith(sc.brand.toLowerCase())
+    ? sc.model
+    : [sc.brand, sc.model && !sc.brand.toLowerCase().includes(sc.model.toLowerCase()) ? sc.model : ''].filter(Boolean).join(' ');
   if (car) lines.push(segment === 'credit_offer' ? `- Əvvəl kredit üçün müraciət etdiyi avtomobil (marka və model): ${car}` : `- Avtomobil: ${car}`);
   if (s(d.last_service_date)) lines.push(`- Son dəfə servisə gəlib: ${s(d.last_service_date)}`);
   if (s(d.last_talk)) lines.push(`- Əvvəlki danışıq (müştəri ilə son əlaqənin qeydi): ${s(d.last_talk).slice(0, 800)}`);

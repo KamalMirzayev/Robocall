@@ -1540,7 +1540,9 @@ campaignsRouter.get('/:id/calls', async (req, res) => {
         c.fin AS "fin",
         coalesce(c.mobile_phone, c.phone) AS phone,
         -- Excel-imported customers: brand and model from the uploaded sheet.
-        nullif(trim(concat_ws(' ', c.import_data->>'brand',
+        nullif(trim(concat_ws(' ',
+          CASE WHEN lower(coalesce(c.import_data->>'model', '')) LIKE lower(coalesce(c.import_data->>'brand', '')) || '%'
+                    AND coalesce(c.import_data->>'brand', '') <> '' THEN NULL ELSE c.import_data->>'brand' END,
           coalesce(c.import_data->>'model',
             (SELECT e.value FROM jsonb_each_text(CASE WHEN jsonb_typeof(c.import_data->'extra') = 'object' THEN c.import_data->'extra' ELSE '{}'::jsonb END) e
              WHERE e.key ILIKE '%model%' LIMIT 1)))), '') AS car,
