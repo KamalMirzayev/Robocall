@@ -363,7 +363,7 @@ export function sendPendingApplicationSms(): Promise<void> {
 }
 
 export function startApplicationSmsRetry(): void {
-  setInterval(() => void sendPendingApplicationSms().catch(() => undefined), 5 * 60_000).unref?.();
+  setInterval(() => void sendPendingApplicationSms().catch(() => undefined), 60_000).unref?.();
 }
 
 // Segment and service-rep extensions for a call to an imported customer.
