@@ -48,6 +48,32 @@ export function linkBrand(raw: unknown): string | null {
   return null;
 }
 
+// Brand of a Group Motors model name ("Seal 05" -> BYD, "Corolla" -> Toyota), for sheets
+// that carry only the model.
+const MODEL_BRANDS: Array<[RegExp, string]> = [
+  [/\b(seal|sealion|yuan|song|han|tang|qin|atto|dolphin|shark|destroyer|frigate|leopard)\b/i, 'BYD'],
+  [/\b(corolla|camry|rav\s*-?4|land\s*cruiser|prado|hilux|c-?hr|yaris|highlander|fortuner|bz\s*-?\d+x?|crown|avalon|sequoia|tundra|tacoma|hiace|rush|veloz|raize|innova|sienna|supra|lc\s*\d+)\b/i, 'Toyota'],
+  [/\b(cx\s*-?\d+|mx\s*-?\d+|bt\s*-?50|mazda\s*\d)\b/i, 'Mazda'],
+  [/\b(outlander|pajero|asx|l\s*-?200|eclipse|xpander|attrage|lancer|triton|montero|mirage)\b/i, 'Mitsubishi'],
+];
+
+export function brandOfModel(raw: unknown): string | null {
+  const t = String(raw ?? '');
+  return linkBrand(t) ?? MODEL_BRANDS.find(([re]) => re.test(t))?.[1] ?? null;
+}
+
+// Splits what the sheet gave into brand and model: a lone model gets its brand.
+export function splitCar(brandCell: string, modelCell: string): { brand: string; model: string } {
+  let brand = brandCell.trim();
+  let model = modelCell.trim();
+  if (brand && !linkBrand(brand) && !model) {
+    model = brand;
+    brand = '';
+  }
+  if (!brand) brand = brandOfModel(model) ?? '';
+  return { brand, model };
+}
+
 function rowsFrom(result: unknown): Record<string, unknown>[] {
   if (Array.isArray(result)) return result as Record<string, unknown>[];
   const rows = (result as { rows?: Record<string, unknown>[] }).rows;
@@ -73,6 +99,19 @@ export async function ensureCampaignResultsSchema(): Promise<void> {
     )
   `);
   await db.execute(sql`ALTER TABLE campaign_results ADD COLUMN IF NOT EXISTS brand varchar(20)`);
+  // Sheets imported before brand/model were split: a model sitting in "brand" moves to "model".
+  for (const row of rowsFrom(await db.execute(sql`
+    SELECT id, import_data->>'brand' AS brand FROM customers
+    WHERE source_system = 'excel' AND import_data IS NOT NULL AND coalesce(import_data->>'model', '') = ''
+      AND coalesce(import_data->>'brand', '') <> '' AND import_data->>'brand' !~* '(toyota|byd|mazda|mitsub)'
+  `))) {
+    const { brand, model } = splitCar(String(row.brand ?? ''), '');
+    await db.execute(sql`
+      UPDATE customers SET import_data = import_data || ${JSON.stringify({ brand: brand || null, model: model || null })}::jsonb,
+        category = ${brand || model || null}
+      WHERE id = ${Number(row.id)}
+    `);
+  }
   await db.execute(sql`CREATE INDEX IF NOT EXISTS campaign_results_job_idx ON campaign_results (telephony_job_id)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS campaign_results_customer_idx ON campaign_results (customer_id)`);
 }
@@ -115,8 +154,8 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
   const extraModel = d.extra && typeof d.extra === 'object'
     ? Object.entries(d.extra as Record<string, unknown>).find(([k]) => /model/i.test(k))?.[1]
     : undefined;
-  const model = s(d.model) || s(extraModel);
-  const car = [s(d.brand), model && !s(d.brand).toLowerCase().includes(model.toLowerCase()) ? model : ''].filter(Boolean).join(' ');
+  const sc = splitCar(s(d.brand), s(d.model) || s(extraModel));
+  const car = [sc.brand, sc.model && !sc.brand.toLowerCase().includes(sc.model.toLowerCase()) ? sc.model : ''].filter(Boolean).join(' ');
   if (car) lines.push(segment === 'credit_offer' ? `- Əvvəl kredit üçün müraciət etdiyi avtomobil (marka və model): ${car}` : `- Avtomobil: ${car}`);
   if (s(d.last_service_date)) lines.push(`- Son dəfə servisə gəlib: ${s(d.last_service_date)}`);
   if (s(d.last_talk)) lines.push(`- Əvvəlki danışıq (müştəri ilə son əlaqənin qeydi): ${s(d.last_talk).slice(0, 800)}`);
@@ -323,7 +362,7 @@ export function sendPendingApplicationSms(): Promise<void> {
     if (!base || !token) return;
     const origin = new URL(base).origin;
     const rows = rowsFrom(await db.execute(sql`
-      SELECT r.id, cu.phone, r.brand AS chosen, cp.segment_params->>'brand' AS campaign_brand, cu.import_data->>'brand' AS applied
+      SELECT r.id, cu.phone, r.brand AS chosen, cp.segment_params->>'brand' AS campaign_brand, cu.import_data->>'brand' AS applied, cu.import_data->>'model' AS model
       FROM campaign_results r JOIN customers cu ON cu.id = r.customer_id
       LEFT JOIN campaigns cp ON cp.id = r.campaign_id
       WHERE r.sms_status = 'pending' ORDER BY r.id LIMIT 20
@@ -344,7 +383,7 @@ export function sendPendingApplicationSms(): Promise<void> {
         const res = await fetch(`${origin}${path.startsWith('/') ? path : `/${path}`}`, {
           method: 'POST',
           headers: { 'X-Integration-Token': token, 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ phone: String(row.phone || '').replace(/\D/g, ''), brand: linkBrand(row.chosen) ?? linkBrand(row.applied) ?? linkBrand(row.campaign_brand) ?? undefined, source: 'robocall' }),
+          body: JSON.stringify({ phone: String(row.phone || '').replace(/\D/g, ''), brand: linkBrand(row.chosen) ?? brandOfModel(row.applied) ?? brandOfModel(row.model) ?? linkBrand(row.campaign_brand) ?? undefined, source: 'robocall' }),
           signal: AbortSignal.timeout(15_000),
         });
         const body = (await res.json().catch(() => ({}))) as { duplicate?: boolean; error?: string };

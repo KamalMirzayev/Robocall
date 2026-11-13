@@ -1,7 +1,7 @@
 import ExcelJS from 'exceljs';
 import { sql } from 'drizzle-orm';
 import { db } from './db/index.js';
-import { EXCEL_SOURCE } from './campaign-results.js';
+import { EXCEL_SOURCE, splitCar } from './campaign-results.js';
 
 // Customers for the service and credit-offer campaigns come as an Excel sheet. Columns are
 // recognised by their header text (Azerbaijani or English); any other column is kept and
@@ -98,6 +98,9 @@ export async function parseCustomerSheet(buffer: Buffer): Promise<ParsedSheet> {
         row.extra[col.header.slice(0, 60)] = text;
       }
     });
+    const car = splitCar(row.brand, row.model);
+    row.brand = car.brand;
+    row.model = car.model;
     rows.push(row);
   }
   return { columns, rows };
