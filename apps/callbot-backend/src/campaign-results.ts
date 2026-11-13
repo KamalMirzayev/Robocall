@@ -146,7 +146,8 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
       '  3) De: "Hazırda yeni kampaniyamız var və Group Motors-un təqdim etdiyi dörd marka üzrə müraciət edə bilərsiniz: Toyota, BYD, Mazda və Mitsubishi." Paneldə kampaniya təklifi yazılıbsa, onu da qısa əlavə et.',
       '  4) Soruş: hansı marka maraqlıdır və kredit şərtləri ilə tanış olmaq istəyirmi. Avtomobillər haqqında sualları bilik bazasından cavablandır; faiz və komissiya rəqəmi demə.',
       '  5) Maraqlıdırsa: "Sizə SMS ilə müraciət linki göndərirəm, linkə daxil olub kredit müraciətinizi edin, 5 dəqiqə ərzində müraciətinizə cavab gələcək" de və record_campaign_result alətini outcome=agrees_send_link və brand=<müştərinin seçdiyi marka: Toyota, BYD, Mazda və ya Mitsubishi> ilə çağır. Marka seçməyibsə, brand-i boş burax.',
-      '  6) Maraqlı deyilsə, səbəbini nəzakətlə soruş, təşəkkür et, nəticəni yaz və sağollaş.',
+      '  6) Maraqlı deyilsə, səbəbini bir dəfə nəzakətlə soruş, təşəkkür et, nəticəni yaz və sağollaş.',
+      '  TƏZYİQ YOXDUR: Bu məlumatlandırma zəngidir, satış təzyiqi deyil. Təklifi yalnız bir dəfə de; müştəri "yox", "maraqlı deyil", "düşünərəm" desə və ya tərəddüd etsə, təkrar təklif etmə, inandırmağa, üstünlükləri sadalamağa, endirim və ya "son şans" kimi ifadələrlə tələsdirməyə çalışma, qərarına hörmət et. SMS linkini yalnız müştəri özü açıq şəkildə razılıq verəndə və ya istəyəndə göndər; razılığı müştərinin əvəzinə fərz etmə.',
     ].join('\n'));
     lines.push('- MÜRACİƏT LİNKİ: Müştəri təklifə maraq göstərib müraciət etmək istəsə, ona de: "Sizə SMS ilə müraciət linki göndərəcəyik, linkə daxil olub bir neçə dəqiqəyə onlayn müraciət edə bilərsiniz." Sonra record_campaign_result alətini outcome=agrees_send_link ilə çağır. Sənədləri WhatsApp və ya başqa kanalla göndərməyi heç vaxt təklif etmə.');
   }

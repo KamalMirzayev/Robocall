@@ -240,6 +240,7 @@ Zəngin məqsədi: müştəriyə kampaniya çərçivəsində kreditlə (lizinql�
 
 ${COMMON_RULES}
 - Faiz dərəcəsini və komissiyanı heç vaxt demə
+- Təzyiq yoxdur: təklifi bir dəfə de, müştəri istəməsə və ya tərəddüd etsə inandırmağa çalışma, qərarına hörmət et; SMS linkini yalnız açıq razılıqla göndər
 
 Kampaniya məlumatı:
 {DYNAMIC_CONTEXT}
