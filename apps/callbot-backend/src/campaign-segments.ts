@@ -53,6 +53,22 @@ const SEGMENT_FIELDS: Record<string, FieldDef[]> = {
     { key: 'autoAdd', label: '', options: { on: 'on', off: 'off' }, hidden: true },
     { key: 'requeue', label: '', options: { on: 'on', off: 'off' }, hidden: true },
   ],
+  // Former service customers, imported from Excel (excel-import.ts).
+  service_return: [
+    { key: 'offer', label: 'Kampaniya təklifi (servis)' },
+    { key: 'location', label: 'Servis ünvanı və iş saatları' },
+    { key: 'phone', label: 'Servis əlaqə nömrəsi' },
+    { key: 'note', label: 'Əlavə qeyd' },
+    // Live transfer to service reps (campaign-results.ts reads it), not shown to the bot.
+    { key: 'repExtensions', label: '', hidden: true },
+  ],
+  // Credit customers without a result: a car-on-credit offer, the ARZOOM application link by SMS.
+  credit_offer: [
+    { key: 'offer', label: 'Kampaniya təklifi (kredit)' },
+    { key: 'brand', label: 'Marka', options: { Toyota: 'Toyota', Mitsubishi: 'Mitsubishi', Mazda: 'Mazda', BYD: 'BYD' } },
+    { key: 'deadline', label: 'Təklifin son tarixi' },
+    { key: 'note', label: 'Əlavə qeyd' },
+  ],
   satisfaction: [
     {
       key: 'serviceType',

@@ -2,6 +2,7 @@ import { hasWorkerToken } from '../net-guard.js';
 import { randomUUID } from 'node:crypto';
 import { scheduleArzoomAnalyticsPush } from '../arzoom-analytics.js';
 import { applyCallbackSchedule } from '../arzoom-sync.js';
+import { applyResultCallback } from '../campaign-results.js';
 import { Router, type Request, type Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { eq, or, sql } from 'drizzle-orm';
@@ -281,6 +282,7 @@ async function handleJobCompletion(jobId: number, status: 'ended' | 'failed', an
       
       // The customer asked to be called back at a given time (ARZOOM result "callback").
       await applyCallbackSchedule(jobId).catch((err) => console.error(`[callback] job ${jobId}`, err));
+      await applyResultCallback(jobId).catch((err) => console.error(`[callback] job ${jobId}`, err));
 
       // Recalculate campaign statistics
       if (campaignId) {

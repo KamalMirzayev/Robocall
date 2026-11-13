@@ -126,6 +126,8 @@ export const customers = pgTable('customers', {
   // ARZOOM leasing applications (arzoom-sync.ts): the full application and its status.
   applicationStatus: varchar('application_status', { length: 40 }),
   arzoomData: jsonb('arzoom_data'),
+  // Customers imported from Excel (excel-import.ts): car, last service visit, last talk.
+  importData: jsonb('import_data'),
   doNotCall: boolean('do_not_call').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });

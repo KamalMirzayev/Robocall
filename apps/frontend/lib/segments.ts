@@ -11,7 +11,9 @@ export type SegmentKey =
   | 'application_status'
   | 'payment_reminder'
   | 'satisfaction'
-  | 'marketing';
+  | 'marketing'
+  | 'service_return'
+  | 'credit_offer';
 
 export interface Segment {
   key: SegmentKey;
@@ -195,6 +197,63 @@ Danışığın gedişi:
   },
 ];
 
+SEGMENTS.push(
+  {
+    key: 'service_return',
+    tone: 'ok',
+    title: { az: 'Servis müştəriləri (geri qazanma)', en: 'Service customers (win-back)' },
+    summary: {
+      az: 'Əvvəllər servisə gəlib indi gəlməyən müştərilərə zəng edir, kampaniya təklifi ilə servisə dəvət edir. Siyahı Excel ilə yüklənir.',
+      en: 'Calls customers who used to come to the service, invites them back with the campaign offer. The list is uploaded from Excel.',
+    },
+    content: `Sənin adın {AGENT_NAME}-dır. Sən {COMPANY_NAME} şirkətinin servis mərkəzinin müştəri xidmətləri əməkdaşısan və Azərbaycan dilində danışırsan.
+
+Zəngin məqsədi: əvvəllər servisimizə gələn, amma son vaxtlar gəlməyən müştəriyə zəng etmək, onu kampaniya təklifi ilə yenidən servisə dəvət etmək və nəticəni qeyd etmək.
+
+${COMMON_RULES}
+
+Kampaniya məlumatı:
+{DYNAMIC_CONTEXT}
+
+Müştərinin maşını, son servisə gəlişi və əvvəlki danışığın qeydi aşağıdakı "Müştəri məlumatları" bölməsindədir.
+
+Danışığın gedişi:
+1. Salamlaş, özünü və servisi təqdim et, danışmağa vaxtı olub-olmadığını soruş.
+2. Maşınını və son gəlişini xatırlat (məs. "Sizin Toyota Camry avtomobiliniz sonuncu dəfə martda servisimizdə olub"). Əvvəlki danışıqda bir şey qeyd olunubsa, onu nəzakətlə xatırlat.
+3. Maşının hazırkı vəziyyətini və servisə ehtiyacı olub-olmadığını soruş.
+4. Kampaniya təklifini qısa və aydın de.
+5. Maraq varsa: servisə nə vaxt gələ biləcəyini soruş; nümayəndə ilə danışmaq istəsə müştəri məlumatlarındakı SERVİS NÜMAYƏNDƏSİ qaydasını tətbiq et.
+6. Gəlmirsə, səbəbini öyrən (başqa servis, maşını satıb, narazılıq və s.), narazılıq varsa dinlə və qeyd et.
+7. Nəticəni record_campaign_result aləti ilə yaz, təşəkkür et və sağollaş.`,
+  },
+  {
+    key: 'credit_offer',
+    tone: 'blue',
+    title: { az: 'Kredit təklifi (nəticəsiz qalanlar)', en: 'Credit offer (no result yet)' },
+    summary: {
+      az: 'Əvvəl kredit üçün zəng edilib nəticə alınmayan müştərilərə kampaniya çərçivəsində kreditlə avtomobil təklif edir; razı olana ARZOOM müraciət linki SMS ilə gedir.',
+      en: 'Offers a car on credit to customers who gave no result earlier; those who agree get the ARZOOM application link by SMS.',
+    },
+    content: `Sənin adın {AGENT_NAME}-dır. Sən {COMPANY_NAME} şirkətinin satış şöbəsinin əməkdaşısan və Azərbaycan dilində danışırsan.
+
+Zəngin məqsədi: müştəriyə kampaniya çərçivəsində kreditlə (lizinqlə) avtomobil təklifini çatdırmaq; maraq olarsa ona onlayn müraciət linkini SMS ilə göndərmək.
+
+${COMMON_RULES}
+- Faiz dərəcəsini və komissiyanı heç vaxt demə
+
+Kampaniya məlumatı:
+{DYNAMIC_CONTEXT}
+
+Danışığın gedişi:
+1. Salamlaş, özünü və şirkəti təqdim et, danışmağa vaxtı olub-olmadığını soruş.
+2. Kampaniya təklifini qısa və cəlbedici de.
+3. Avtomobil almaq fikrinin olub-olmadığını, hansı marka/model maraqlandırdığını soruş. Avtomobillər və şərtlər haqqında sualı bilik bazasından dəqiqləşdirərək cavablandır.
+4. Maraq varsa: müştəri məlumatlarındakı MÜRACİƏT LİNKİ qaydası ilə SMS linkini təklif et.
+5. Maraq yoxdursa, səbəbini öyrən, nəzakətlə təşəkkür et.
+6. Nəticəni record_campaign_result aləti ilə yaz və sağollaş.`,
+  },
+);
+
 export function getSegment(key: string | null | undefined): Segment | undefined {
   if (!key) return undefined;
   return SEGMENTS.find((s) => s.key === key);
@@ -259,6 +318,16 @@ export const SEGMENT_CAMPAIGN_PRESETS: Record<SegmentKey, SegmentCampaignPreset>
     defaults: { skipNextDayAfterSuccess: true },
   },
   // One polite try; marketing should never feel like chasing.
+  service_return: {
+    maxAttempts: 3, retryIntervalHours: 24, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:30', runWindowEnd: '19:00',
+    flags: ['skipNextDayAfterSuccess'],
+    defaults: { skipNextDayAfterSuccess: true },
+  },
+  credit_offer: {
+    maxAttempts: 3, retryIntervalHours: 24, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:30', runWindowEnd: '19:00',
+    flags: ['skipNextDayAfterSuccess'],
+    defaults: { skipNextDayAfterSuccess: true },
+  },
   marketing: {
     maxAttempts: 1, retryIntervalHours: 72, runWeekdays: WORKDAYS_SAT, runWindowStart: '11:00', runWindowEnd: '19:00',
     flags: ['skipNextDayAfterSuccess'],
@@ -278,6 +347,40 @@ export interface SegmentField {
 }
 
 export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
+  service_return: [
+    {
+      key: 'offer', type: 'textarea',
+      label: { az: 'Kampaniya təklifi (hər kampaniyada əl ilə yazın)', en: 'Campaign offer (type it for each campaign)' },
+      placeholder: { az: 'Məs. noyabr ayı ərzində texniki baxışa 20% endirim', en: 'E.g. 20% off maintenance through November' },
+    },
+    { key: 'location', type: 'text', label: { az: 'Servis ünvanı və iş saatları', en: 'Service address and hours' } },
+    { key: 'phone', type: 'text', label: { az: 'Servis əlaqə nömrəsi', en: 'Service phone' } },
+    {
+      key: 'repExtensions', type: 'text',
+      label: { az: 'Servis nümayəndələrinin daxili nömrələri (canlı qoşma üçün, vergüllə; boş qalsa nümayəndə geri zəng edir)', en: 'Service rep extensions for live transfer (comma separated; empty = rep calls back)' },
+      placeholder: { az: 'Məs. 301, 302', en: 'E.g. 301, 302' },
+    },
+    { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
+  ],
+  credit_offer: [
+    {
+      key: 'offer', type: 'textarea',
+      label: { az: 'Kampaniya təklifi (hər kampaniyada əl ilə yazın)', en: 'Campaign offer (type it for each campaign)' },
+      placeholder: { az: 'Məs. Toyota modellərinə 10% ilkin ödənişlə lizinq', en: 'E.g. Toyota leasing with 10% down payment' },
+    },
+    {
+      key: 'brand', type: 'select',
+      label: { az: 'Marka (SMS mətnində göstərilir)', en: 'Brand (shown in the SMS)' },
+      options: [
+        { value: 'Toyota', label: { az: 'Toyota', en: 'Toyota' } },
+        { value: 'Mitsubishi', label: { az: 'Mitsubishi', en: 'Mitsubishi' } },
+        { value: 'Mazda', label: { az: 'Mazda', en: 'Mazda' } },
+        { value: 'BYD', label: { az: 'BYD', en: 'BYD' } },
+      ],
+    },
+    { key: 'deadline', type: 'date', label: { az: 'Təklifin son tarixi', en: 'Offer ends on' } },
+    { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
+  ],
   sales: [
     {
       key: 'offer', type: 'textarea',

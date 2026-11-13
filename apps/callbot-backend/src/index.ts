@@ -35,6 +35,7 @@ import { ensureCampaignSegmentSchema, segmentContext } from './campaign-segments
 import { ensureArzoomSchema, startArzoomSync } from './arzoom-sync.js';
 import { ensureSalesTransferSchema, startSalesTransferApp } from './sales-transfer.js';
 import { startArzoomAnalyticsPush } from './arzoom-analytics.js';
+import { ensureCampaignResultsSchema, startApplicationSmsRetry } from './campaign-results.js';
 import { clientIp, internalOrWorker, isInternalRequest, hasWorkerToken, rateLimit } from './net-guard.js';
 
 // Stopgap: a single socket error (e.g. EPIPE when a client disconnects
@@ -52,6 +53,7 @@ await loadSettings();
 await ensureCampaignSegmentSchema();
 await ensureArzoomSchema();
 await ensureSalesTransferSchema();
+await ensureCampaignResultsSchema();
 
 const app = express();
 app.disable('x-powered-by');
@@ -68,6 +70,8 @@ app.use((_req, res, next) => {
 // Coarse per-client flood guard; the local telephony worker is exempt.
 const floodGuard = rateLimit(Number(process.env.API_RATE_LIMIT_PER_MIN || 1200), 60_000);
 app.use((req, res, next) => (isInternalRequest(req) ? next() : floodGuard(req, res, next)));
+// Excel customer lists arrive base64-encoded in JSON.
+app.use('/api/campaigns/:id/import/excel', express.json({ limit: '25mb' }));
 app.use(express.json({ limit: '3mb' }));
 
 app.use('/api/auth', authRouter);
@@ -259,4 +263,5 @@ server.listen(PORT, () => {
   startSalesTransferApp();
   startArzoomAnalyticsPush();
   startGeminiCreditWatch();
+  startApplicationSmsRetry();
 });

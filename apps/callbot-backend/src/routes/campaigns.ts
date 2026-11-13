@@ -7,6 +7,7 @@ import { type PksRow, validateFin } from '../pks-utils.js';
 import { buildWorkbook, HEADER_STYLE, type XlsxCellInput } from '../xlsx.js';
 import { isCampaignSegment, sanitizeSegmentParams } from '../campaign-segments.js';
 import { importArzoomToCampaign } from '../arzoom-sync.js';
+import { importCustomerSheet } from '../excel-import.js';
 
 export type PksFilters = Record<string, string>;
 export type PksFilterMode = 'and' | 'or' | 'grouped';
@@ -1797,6 +1798,37 @@ campaignsRouter.post('/:id/import-arzoom', requireRole('admin', 'campaign_manage
     res.json(await importArzoomToCampaign(campaignId, { statuses, dryRun: req.body?.dryRun === true }));
   } catch (err) {
     res.status(500).json(buildRouteError(err, 'failed to import ARZOOM applications'));
+  }
+});
+
+// POST /:id/import/excel { file: base64 .xlsx, dryRun } — customers for the service and
+// credit-offer campaigns (excel-import.ts). dryRun shows the recognised columns and counts.
+campaignsRouter.post('/:id/import/excel', requireRole('admin', 'campaign_manager'), async (req, res) => {
+  const campaignId = Number(req.params.id);
+  if (!Number.isInteger(campaignId) || campaignId <= 0) {
+    res.status(400).json({ error: 'invalid campaign id' });
+    return;
+  }
+  const b64 = String(req.body?.file ?? '').replace(/^data:[^,]*,/, '');
+  if (!b64) {
+    res.status(400).json({ error: 'file is required' });
+    return;
+  }
+  try {
+    const [campaign] = rowsFrom(await db.execute(sql`SELECT id FROM campaigns WHERE id = ${campaignId} LIMIT 1`));
+    if (!campaign) {
+      res.status(404).json({ error: 'campaign not found' });
+      return;
+    }
+    const buffer = Buffer.from(b64, 'base64');
+    if (buffer.length < 100 || buffer.length > 20 * 1024 * 1024) {
+      res.status(400).json({ error: 'Fayl boşdur və ya çox böyükdür (20 MB-dan çox)' });
+      return;
+    }
+    res.json(await importCustomerSheet(campaignId, buffer, req.body?.dryRun === true));
+  } catch (err) {
+    const message = (err as Error)?.message || 'failed to import Excel';
+    res.status(400).json({ error: /zip|central directory|end of data|corrupted/i.test(message) ? 'Fayl .xlsx formatında deyil' : message });
   }
 });
 

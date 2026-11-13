@@ -22,6 +22,7 @@
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.4",
+    "exceljs": "^4.4.0",
     "express": "^4.22.3",
     "postgres": "^3.4.5",
     "ws": "^8.18.0"
@@ -35,5 +36,8 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vitest": "^2.0.0"
+  },
+  "overrides": {
+    "uuid": "^11.1.1"
   }
 }

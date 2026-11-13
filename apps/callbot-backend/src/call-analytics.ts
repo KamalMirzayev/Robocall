@@ -51,7 +51,10 @@ export async function computeCallAnalytics(opts: { days: number; campaignId?: nu
 
   const outcomes = rowsFrom(await db.execute(sql`
     SELECT f.outcome, max(f.outcome_label) AS label, count(*)::int AS count
-    FROM arzoom_feedback f
+    FROM (
+      SELECT outcome, outcome_label, telephony_job_id, created_at FROM arzoom_feedback
+      ${arzoomOnly ? sql`` : sql`UNION ALL SELECT segment || ':' || outcome, outcome_label, telephony_job_id, created_at FROM campaign_results`}
+    ) f
     LEFT JOIN telephony_jobs tj ON tj.id = f.telephony_job_id
     WHERE f.created_at >= ${since} ${campaignId ? sql`AND tj.campaign_id = ${campaignId}` : sql``}
     GROUP BY f.outcome ORDER BY 3 DESC
@@ -104,6 +107,7 @@ export async function computeCallAnalytics(opts: { days: number; campaignId?: nu
     LEFT JOIN customers cu ON cu.id = st.customer_id
     LEFT JOIN telephony_jobs tj ON tj.id = st.telephony_job_id
     WHERE st.created_at >= ${since} ${campaignId ? sql`AND tj.campaign_id = ${campaignId}` : sql``}
+      ${arzoomOnly ? sql`AND cu.source_system = 'arzoom'` : sql``}
     GROUP BY st.extension ORDER BY 3 DESC, 1
   `).catch(() => []));
 

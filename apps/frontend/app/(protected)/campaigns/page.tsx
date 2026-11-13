@@ -9,6 +9,7 @@ import { useLanguage } from '@/lib/language';
 import { useAuth } from '@/lib/auth';
 import SearchableSelect from '@/components/SearchableSelect';
 import ArzoomImportPanel from '@/components/ArzoomImportPanel';
+import ExcelImportPanel from '@/components/ExcelImportPanel';
 import { SEGMENT_TONE_CLASSES, getSegment, type Segment } from '@/lib/segments';
 
 interface CampaignRow extends CampaignInput {
@@ -90,7 +91,7 @@ export default function CampaignsPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === 'admin';
   const [importCampaign, setImportCampaign] = useState<CampaignRow | null>(null);
-  const [importMode, setImportMode] = useState<'pks' | 'database' | 'arzoom'>('pks');
+  const [importMode, setImportMode] = useState<'pks' | 'database' | 'arzoom' | 'excel'>('pks');
   const [conditions, setConditions] = useState<FilterCondition[]>([
     { id: 1, column: 'status', operator: '=', value: 'Инкассо' },
   ]);
@@ -308,7 +309,7 @@ export default function CampaignsPage() {
   const openImportModal = (campaign: CampaignRow) => {
     setImportCampaign(campaign);
     setImportOpen(true);
-    setImportMode('pks');
+    setImportMode(['service_return', 'credit_offer'].includes(String((campaign as { segment?: string | null }).segment ?? '')) ? 'excel' : 'pks');
     setSelectedCustomers(new Set());
     setDatabaseImportResult(null);
     pksImport.clear();
@@ -726,7 +727,24 @@ export default function CampaignsPage() {
               >
                 {t('campaigns.import.arzoomTab')}
               </button>
+              <button
+                onClick={() => {
+                  setImportMode('excel');
+                  setDatabaseImportResult(null);
+                }}
+                className={`px-4 py-2 font-medium ${
+                  importMode === 'excel'
+                    ? 'text-blue-400 border-b-2 border-blue-400'
+                    : 'text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                Excel
+              </button>
             </div>
+
+            {importMode === 'excel' && importCampaign && (
+              <ExcelImportPanel campaignId={Number(importCampaign.id)} onImported={loadCampaigns} />
+            )}
 
             {importMode === 'arzoom' && importCampaign && (
               <ArzoomImportPanel

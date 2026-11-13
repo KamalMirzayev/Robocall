@@ -1,13 +1,15 @@
 import { Type } from '@google/genai';
 import { partnerKbConfigured, searchPartnerKb } from '../partner-kb.js';
 import { FEEDBACK_OUTCOMES, recordArzoomFeedback } from '../arzoom-sync.js';
+import { recordCampaignResult } from '../campaign-results.js';
 
 export type ToolName =
   | 'request_callback'
   | 'send_whatsapp_msg'
   | 'search_knowledge_base'
   | 'update_status'
-  | 'record_application_feedback';
+  | 'record_application_feedback'
+  | 'record_campaign_result';
 
 export interface ToolContext {
   customer: {
@@ -319,6 +321,23 @@ async function recordApplicationFeedbackTool(args: Record<string, unknown>, ctx:
   return { ok: true, message: 'Feedback saved' };
 }
 
+async function recordCampaignResultTool(args: Record<string, unknown>, ctx: ToolContext) {
+  const outcome = cleanText(args.outcome);
+  const reason = cleanText(args.reason);
+  if (ctx.dryRun) return { ok: true, dryRun: true, outcome, reason };
+  const doNotCall = args.do_not_call === true || String(args.do_not_call).toLowerCase() === 'true';
+  const result = await recordCampaignResult({
+    customerId: ctx.customer.id,
+    telephonyJobId: ctx.telephonyJobId,
+    outcome,
+    reason,
+    callbackAt: cleanText(args.callback_at) || null,
+    doNotCall,
+  });
+  if (!result.ok) throw new Error(result.error);
+  return { ok: true, message: 'Result saved' };
+}
+
 export const aiToolDeclarations = [
   {
     name: 'record_application_feedback',
@@ -338,6 +357,21 @@ export const aiToolDeclarations = [
         requested_months: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): term in months the customer wants' },
         callback_at: { type: Type.STRING, description: 'outcome=callback only: the day and time the customer wants to be called, "YYYY-MM-DD HH:MM" in Baku time; "unknown" if the customer will not name a time' },
         do_not_call: { type: Type.BOOLEAN, description: 'true only when the customer explicitly asks never to be called again / not to be disturbed / to remove their number' },
+      },
+      required: ['outcome'],
+    },
+  },
+  {
+    name: 'record_campaign_result',
+    description:
+      "Save the result of a service or credit-offer campaign call at the end of the call (before saying goodbye). The allowed outcomes are listed in the customer data (NƏTİCƏ).",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        outcome: { type: Type.STRING, description: 'One of the outcomes listed for this campaign in the customer data' },
+        reason: { type: Type.STRING, description: 'Short note in Azerbaijani (1-3 sentences): what the customer said and the agreed next step' },
+        callback_at: { type: Type.STRING, description: 'outcome=callback only: "YYYY-MM-DD HH:MM" in Baku time, or "unknown"' },
+        do_not_call: { type: Type.BOOLEAN, description: 'true only when the customer explicitly asks never to be called again' },
       },
       required: ['outcome'],
     },
@@ -406,6 +440,7 @@ const aiToolHandlers: Record<ToolName, (args: Record<string, unknown>, ctx: Tool
   search_knowledge_base: searchKnowledgeBaseTool,
   update_status: updateStatusTool,
   record_application_feedback: recordApplicationFeedbackTool,
+  record_campaign_result: recordCampaignResultTool,
 };
 
 export function isAiToolName(name: string): name is ToolName {

@@ -17,6 +17,7 @@ import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, load
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
 import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
+import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, recordCampaignResult } from '../campaign-results.js';
 import { pinnedExtensions, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
 type Customer = InferSelectModel<typeof customers>;
@@ -193,7 +194,7 @@ const transferFunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: {} },
 };
 
-async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null): Promise<string> {
+async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null, excel: { segment: string | null; canTransfer: boolean } | null = null): Promise<string> {
   // New approach: use toneTemplateId if available, else fall back to legacy tone
   let toneInstruction = '';
   if (agent.toneTemplateId) {
@@ -266,8 +267,11 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
   if (customer.phone) parts.push(`- Telefon: ${customer.phone}`);
   // ARZOOM leasing application (status, car, offer terms, requested documents).
   parts.push(...arzoomCustomerLines(customer.arzoomData));
+  // Customers imported from Excel (service / credit-offer campaigns).
+  if (excel) parts.push(...excelCustomerLines((customer as { importData?: unknown }).importData, excel.segment, { canTransfer: excel.canTransfer }));
+  const legacyGuide = customer.sourceSystem === 'arzoom' || customer.sourceSystem === EXCEL_SOURCE ? '' : buildSummaryCategoryGuide();
   
-  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${customer.sourceSystem === 'arzoom' ? '' : buildSummaryCategoryGuide()}`;
+  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${legacyGuide}`;
 }
 
 function buildInitialGreetingPrompt(customer: Customer) {
@@ -337,6 +341,10 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   let transferConnectedAt: Date | null = null;
   const brand = (customer as { arzoomData?: { brand?: string } | null }).arzoomData?.brand ?? null;
   const pinnedReps = pinnedExtensions((customer as { arzoomData?: unknown }).arzoomData);
+  const isExcel = customer.sourceSystem === EXCEL_SOURCE;
+  // Service campaigns: the campaign's service-rep extensions (empty = no live transfer).
+  let excelCtx: { segment: string | null; transferExtensions: string[] } | null = null;
+  const transferExtensions = () => (isExcel ? excelCtx?.transferExtensions ?? [] : pinnedReps.length ? pinnedReps : salesExtensionsFor(brand));
   const rawSend = (msg: ServerMessage) => {
     if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(msg));
   };
@@ -399,13 +407,20 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     clearFinalSilenceEndTimer();
     console.log(`Sales transfer started for telephony job ${telephonyJobId ?? 'none'} brand=${brand ?? '-'}`);
     transferHandle = await startSalesTransfer(
-      { telephonyJobId, customerId: customer.id, brand, callerId: customer.phone || null, extensions: pinnedReps },
+      { telephonyJobId, customerId: customer.id, brand, callerId: customer.phone || null, extensions: isExcel ? transferExtensions() : pinnedReps },
       {
         onConnected: (ext) => {
           transferState = 'connected';
           transferConnectedAt = new Date();
-          transcriptLines.push(`[Satış təmsilçisinə qoşuldu: ${ext}]`);
-          void recordArzoomFeedback({
+          transcriptLines.push(`[${isExcel ? 'Servis nümayəndəsinə' : 'Satış təmsilçisinə'} qoşuldu: ${ext}]`);
+          if (isExcel) {
+            void recordCampaignResult({
+              customerId: customer.id,
+              telephonyJobId,
+              outcome: 'transferred_to_rep',
+              reason: `Müştəri təklifə razılaşdı və ${ext} daxili nömrəli servis nümayəndəsinə qoşuldu.`,
+            }).catch(() => {});
+          } else void recordArzoomFeedback({
             customerId: customer.id,
             telephonyJobId,
             outcome: 'transferred_to_sales',
@@ -428,7 +443,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           }
           try {
             session.sendClientContent({
-              turns: '[Sistem] Satış təmsilçiləri hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, filiala yaxınlaşa və ya *5665 nömrəsinə zəng edə biləcəyini, ya da təmsilçinin ona tezliklə geri zəng edəcəyini de. Sonra qısa sağollaş və end_call çağır.',
+              turns: isExcel
+                ? '[Sistem] Servis nümayəndələri hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, nümayəndənin ona tezliklə geri zəng edəcəyini de, record_campaign_result alətini outcome=wants_rep_contact ilə çağır, sonra qısa sağollaş və end_call çağır.'
+                : '[Sistem] Satış təmsilçiləri hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, filiala yaxınlaşa və ya *5665 nömrəsinə zəng edə biləcəyini, ya da təmsilçinin ona tezliklə geri zəng edəcəyini de. Sonra qısa sağollaş və end_call çağır.',
               turnComplete: true,
             });
           } catch {
@@ -446,6 +463,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
   let session: Awaited<ReturnType<typeof ai.live.connect>> | null = null;
   const callMemoryContext = await buildCallMemoryContextBounded(customer, agent);
+  if (isExcel) excelCtx = await excelCallContext(jobId, customer.id).catch(() => ({ segment: null, transferExtensions: [] }));
 
   const forwardCustomerAudio = (data: string) => {
     if (transferState === 'dialing' || transferState === 'connected') {
@@ -583,7 +601,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             }
 
             if (functionName === 'transfer_to_sales') {
-              const exts = pinnedReps.length ? pinnedReps : salesExtensionsFor(brand);
+              const exts = transferExtensions();
               const ok = transferState === 'idle' && !endCallRequested && exts.length > 0 && Boolean(telephonyJobId);
               if (ok) {
                 transferState = 'pending';
@@ -731,7 +749,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         // relying on the model's default, since this is a preview model
         // and defaults can change between versions.
         thinkingConfig: { thinkingLevel: geminiThinkingLevel },
-        systemInstruction: await buildSystemInstruction(customer, agent, callMemoryContext, baseTemplateId, dynamicContext),
+        systemInstruction: await buildSystemInstruction(customer, agent, callMemoryContext, baseTemplateId, dynamicContext,
+          isExcel ? { segment: excelCtx?.segment ?? null, canTransfer: (excelCtx?.transferExtensions.length ?? 0) > 0 } : null),
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         realtimeInputConfig: {
@@ -742,11 +761,15 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             silenceDurationMs: Math.max(150, Math.min(geminiVadSilenceDurationMs, 1000)),
           },
         },
-        tools: [{ functionDeclarations: [endCallFunctionDeclaration, ...(customer.sourceSystem === 'arzoom' ? [transferFunctionDeclaration] : []), ...((customer.sourceSystem === 'arzoom'
+        tools: [{ functionDeclarations: [endCallFunctionDeclaration,
+          ...(customer.sourceSystem === 'arzoom' || (isExcel && (excelCtx?.transferExtensions.length ?? 0) > 0) ? [transferFunctionDeclaration] : []),
+          ...((customer.sourceSystem === 'arzoom'
           // ARZOOM applications: only the application result and the knowledge base. The old
           // debt-collection tools (update_status, request_callback) and WhatsApp are not used.
           ? (aiToolDeclarations as any[]).filter((d) => ['record_application_feedback', 'search_knowledge_base'].includes(d?.name))
-          : aiToolDeclarations) as any[])] }],
+          : isExcel
+            ? (aiToolDeclarations as any[]).filter((d) => ['record_campaign_result', 'search_knowledge_base'].includes(d?.name))
+            : (aiToolDeclarations as any[]).filter((d) => !['record_application_feedback', 'record_campaign_result'].includes(d?.name))) as any[])] }],
       },
     });
     flushPendingAudio();
@@ -808,8 +831,24 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           transcript: finalTranscript,
           // The generic summary uses debt-collection categories; ARZOOM calls get the
           // recorded application result instead (below).
-          summary: isArzoom ? null : await summarizeTranscriptWithAi(finalTranscript),
+          summary: isArzoom || isExcel ? null : await summarizeTranscriptWithAi(finalTranscript),
         }).where(eq(calls.id, callId));
+        if (isExcel) {
+          await ensureCampaignResultFromTranscript({
+            customerId: customer.id,
+            telephonyJobId,
+            startedAt,
+            transcript: finalTranscript,
+          }).catch((err) => console.error('Failed to save campaign result', err));
+          if (telephonyJobId) {
+            await db.execute(sql`
+              UPDATE calls SET summary = (
+                SELECT concat_ws(' — ', outcome_label, nullif(reason, '')) FROM campaign_results
+                WHERE telephony_job_id = ${telephonyJobId} ORDER BY id DESC LIMIT 1
+              ) WHERE id = ${callId}
+            `).catch((err) => console.error('Failed to set campaign call summary', err));
+          }
+        }
         if (isArzoom) {
           await ensureArzoomFeedbackFromTranscript({
             customerId: customer.id,
