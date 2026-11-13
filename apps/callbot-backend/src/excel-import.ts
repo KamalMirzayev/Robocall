@@ -198,7 +198,12 @@ export async function importCustomerSheet(campaignId: number, buffer: Buffer, dr
       added += 1;
     }
     if (added) {
-      await db.execute(sql`UPDATE campaigns SET total_customers = total_customers + ${added}, updated_at = now() WHERE id = ${campaignId}`);
+      // A campaign that ran out of customers was marked completed; new customers reopen it.
+      await db.execute(sql`
+        UPDATE campaigns SET total_customers = total_customers + ${added},
+          status = CASE WHEN status = 'completed' THEN 'active' ELSE status END, updated_at = now()
+        WHERE id = ${campaignId}
+      `);
     }
   }
 
