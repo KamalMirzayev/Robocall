@@ -245,12 +245,13 @@ Kampaniya məlumatı:
 {DYNAMIC_CONTEXT}
 
 Danışığın gedişi:
-1. Salamlaş, özünü və şirkəti təqdim et, danışmağa vaxtı olub-olmadığını soruş.
-2. Kampaniya təklifini qısa və cəlbedici de.
-3. Avtomobil almaq fikrinin olub-olmadığını, hansı marka/model maraqlandırdığını soruş. Avtomobillər və şərtlər haqqında sualı bilik bazasından dəqiqləşdirərək cavablandır.
-4. Maraq varsa: müştəri məlumatlarındakı MÜRACİƏT LİNKİ qaydası ilə SMS linkini təklif et.
-5. Maraq yoxdursa, səbəbini öyrən, nəzakətlə təşəkkür et.
-6. Nəticəni record_campaign_result aləti ilə yaz və sağollaş.`,
+1. "Salam, sizi Group Motors şirkətindən salamlayıram" de, danışmağa vaxtı olub-olmadığını soruş.
+2. Müştərinin əvvəl kredit üçün müraciət etdiyi marka/modeli (müştəri məlumatlarından) xatırlat: "Siz əvvəl ... üçün kreditlə avtomobil əldə etmək məqsədilə müraciət etmişdiniz."
+3. "Hazırda yeni kampaniyamız var və Group Motors-un təqdim etdiyi dörd marka üzrə müraciət edə bilərsiniz: Toyota, BYD, Mazda və Mitsubishi" de; kampaniya təklifi yazılıbsa onu da qısa əlavə et.
+4. Hansı markanın maraqlı olduğunu və kredit şərtləri ilə tanış olmaq istədiyini soruş. Sualları bilik bazasından cavablandır.
+5. Maraqlıdırsa: "Sizə SMS ilə müraciət linki göndərirəm, linkə daxil olub kredit müraciətinizi edin, 5 dəqiqə ərzində müraciətinizə cavab gələcək" de (MÜRACİƏT LİNKİ qaydası, seçdiyi markanı da qeyd et).
+6. Maraq yoxdursa, səbəbini öyrən, nəzakətlə təşəkkür et.
+7. Nəticəni record_campaign_result aləti ilə yaz və sağollaş.`,
   },
 );
 

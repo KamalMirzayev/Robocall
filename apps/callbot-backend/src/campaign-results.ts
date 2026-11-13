@@ -35,6 +35,19 @@ export const RESULT_OUTCOMES: Record<string, Record<string, string>> = {
   },
 };
 
+// ARZOOM sends the application link for these brands only.
+export const LINK_BRANDS = ['Toyota', 'BYD', 'Mazda', 'Mitsubishi'] as const;
+
+export function linkBrand(raw: unknown): string | null {
+  const t = String(raw ?? '').toLowerCase();
+  if (!t) return null;
+  if (/toyota|tayota|тойота/.test(t)) return 'Toyota';
+  if (/\bbyd\b|^byd/.test(t)) return 'BYD';
+  if (/mazda|мазда/.test(t)) return 'Mazda';
+  if (/mitsub|мицуб/.test(t)) return 'Mitsubishi';
+  return null;
+}
+
 function rowsFrom(result: unknown): Record<string, unknown>[] {
   if (Array.isArray(result)) return result as Record<string, unknown>[];
   const rows = (result as { rows?: Record<string, unknown>[] }).rows;
@@ -59,6 +72,7 @@ export async function ensureCampaignResultsSchema(): Promise<void> {
       created_at timestamptz NOT NULL DEFAULT now()
     )
   `);
+  await db.execute(sql`ALTER TABLE campaign_results ADD COLUMN IF NOT EXISTS brand varchar(20)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS campaign_results_job_idx ON campaign_results (telephony_job_id)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS campaign_results_customer_idx ON campaign_results (customer_id)`);
 }
@@ -98,7 +112,7 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
   const d = data as Record<string, unknown>;
   const lines: string[] = [];
   const s = (v: unknown) => (v == null ? '' : String(v).trim());
-  if (s(d.brand)) lines.push(`- Avtomobil: ${s(d.brand)}`);
+  if (s(d.brand)) lines.push(segment === 'credit_offer' ? `- Əvvəl kredit üçün müraciət etdiyi marka/model: ${s(d.brand)}` : `- Avtomobil: ${s(d.brand)}`);
   if (s(d.last_service_date)) lines.push(`- Son dəfə servisə gəlib: ${s(d.last_service_date)}`);
   if (s(d.last_talk)) lines.push(`- Əvvəlki danışıq (müştəri ilə son əlaqənin qeydi): ${s(d.last_talk).slice(0, 800)}`);
   const extra = d.extra && typeof d.extra === 'object' ? (d.extra as Record<string, unknown>) : {};
@@ -117,6 +131,18 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
       : '- SERVİS NÜMAYƏNDƏSİ: Müştəri servisə gəlmək üçün nümayəndə ilə əlaqə istəsə, servis nümayəndəsinin ona tezliklə zəng edəcəyini de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır; reason-a müştərinin uyğun vaxtını yaz.');
   }
   if (segment === 'credit_offer') {
+    const applied = s(d.brand);
+    lines.push([
+      '- CHURN SSENARİSİ (agent təlimatından üstündür, bu ardıcıllıqla danış):',
+      '  1) "Salam, sizi Group Motors şirkətindən salamlayıram" de, müştərinin adı varsa adı ilə müraciət et və danışmağa vaxtı olub-olmadığını soruş.',
+      applied
+        ? `  2) Xatırlat: "Siz əvvəl ${applied} üçün kreditlə avtomobil əldə etmək məqsədilə müraciət etmişdiniz."`
+        : '  2) Xatırlat: "Siz əvvəl kreditlə avtomobil əldə etmək üçün müraciət etmişdiniz."',
+      '  3) De: "Hazırda yeni kampaniyamız var və Group Motors-un təqdim etdiyi dörd marka üzrə müraciət edə bilərsiniz: Toyota, BYD, Mazda və Mitsubishi." Paneldə kampaniya təklifi yazılıbsa, onu da qısa əlavə et.',
+      '  4) Soruş: hansı marka maraqlıdır və kredit şərtləri ilə tanış olmaq istəyirmi. Avtomobillər haqqında sualları bilik bazasından cavablandır; faiz və komissiya rəqəmi demə.',
+      '  5) Maraqlıdırsa: "Sizə SMS ilə müraciət linki göndərirəm, linkə daxil olub kredit müraciətinizi edin, 5 dəqiqə ərzində müraciətinizə cavab gələcək" de və record_campaign_result alətini outcome=agrees_send_link və brand=<müştərinin seçdiyi marka: Toyota, BYD, Mazda və ya Mitsubishi> ilə çağır. Marka seçməyibsə, brand-i boş burax.',
+      '  6) Maraqlı deyilsə, səbəbini nəzakətlə soruş, təşəkkür et, nəticəni yaz və sağollaş.',
+    ].join('\n'));
     lines.push('- MÜRACİƏT LİNKİ: Müştəri təklifə maraq göstərib müraciət etmək istəsə, ona de: "Sizə SMS ilə müraciət linki göndərəcəyik, linkə daxil olub bir neçə dəqiqəyə onlayn müraciət edə bilərsiniz." Sonra record_campaign_result alətini outcome=agrees_send_link ilə çağır. Sənədləri WhatsApp və ya başqa kanalla göndərməyi heç vaxt təklif etmə.');
   }
   return lines;
@@ -143,6 +169,7 @@ export async function recordCampaignResult(params: {
   reason: string;
   callbackAt?: string | null;
   doNotCall?: boolean;
+  brand?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const { campaignId, segment } = await segmentOfJob(params.telephonyJobId, params.customerId);
   const outcomes = RESULT_OUTCOMES[segment ?? ''];
@@ -164,10 +191,12 @@ export async function recordCampaignResult(params: {
     reason = [reason, callbackAt ? `Zəng vaxtı: ${bakuText(callbackAt)}` : 'Zəng vaxtı: müştəri dəqiq vaxt deməyib'].filter(Boolean).join('. ');
   }
   const wantsSms = segment === 'credit_offer' && params.outcome === 'agrees_send_link';
+  const brand = wantsSms ? linkBrand(params.brand) : null;
+  if (brand) reason = [reason, `Seçdiyi marka: ${brand}`].filter(Boolean).join('. ');
   await db.execute(sql`
-    INSERT INTO campaign_results (campaign_id, customer_id, telephony_job_id, segment, outcome, outcome_label, reason, callback_at, sms_status)
+    INSERT INTO campaign_results (campaign_id, customer_id, telephony_job_id, segment, outcome, outcome_label, reason, callback_at, sms_status, brand)
     VALUES (${campaignId}, ${params.customerId}, ${params.telephonyJobId}, ${segment}, ${params.outcome}, ${label}, ${reason || null},
-            ${callbackAt ? callbackAt.toISOString() : null}::timestamptz, ${wantsSms ? 'pending' : null})
+            ${callbackAt ? callbackAt.toISOString() : null}::timestamptz, ${wantsSms ? 'pending' : null}, ${brand})
   `);
   await db.execute(sql`
     UPDATE customers SET pks_status = ${label}, pks_comment = ${reason || null} WHERE id = ${params.customerId}
@@ -288,7 +317,7 @@ export function sendPendingApplicationSms(): Promise<void> {
     if (!base || !token) return;
     const origin = new URL(base).origin;
     const rows = rowsFrom(await db.execute(sql`
-      SELECT r.id, cu.phone, coalesce(nullif(cp.segment_params->>'brand', ''), cu.import_data->>'brand') AS brand
+      SELECT r.id, cu.phone, r.brand AS chosen, cp.segment_params->>'brand' AS campaign_brand, cu.import_data->>'brand' AS applied
       FROM campaign_results r JOIN customers cu ON cu.id = r.customer_id
       LEFT JOIN campaigns cp ON cp.id = r.campaign_id
       WHERE r.sms_status = 'pending' ORDER BY r.id LIMIT 20
@@ -298,7 +327,7 @@ export function sendPendingApplicationSms(): Promise<void> {
         const res = await fetch(`${origin}${path.startsWith('/') ? path : `/${path}`}`, {
           method: 'POST',
           headers: { 'X-Integration-Token': token, 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ phone: String(row.phone || '').replace(/\D/g, ''), brand: row.brand || undefined, source: 'robocall' }),
+          body: JSON.stringify({ phone: String(row.phone || '').replace(/\D/g, ''), brand: linkBrand(row.chosen) ?? linkBrand(row.applied) ?? linkBrand(row.campaign_brand) ?? undefined, source: 'robocall' }),
           signal: AbortSignal.timeout(15_000),
         });
         const body = (await res.json().catch(() => ({}))) as { duplicate?: boolean; error?: string };

@@ -274,11 +274,16 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
   return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${legacyGuide}`;
 }
 
-function buildInitialGreetingPrompt(customer: Customer) {
+function buildInitialGreetingPrompt(customer: Customer, segment: string | null = null) {
   const fullName = [customer.name, customer.surname]
-    .filter(Boolean)
+    .filter((p) => p && p.trim() !== '-')
     .join(' ')
     .trim();
+  // Churn campaign: the company greeting comes first (see CHURN SSENARİSİ in the customer data).
+  if (segment === 'credit_offer') {
+    const who = fullName && fullName !== 'Hörmətli müştəri' ? ` ${fullName} ilə danışıram?` : ' Danışmağa vaxtınız var?';
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, sizi Group Motors şirkətindən salamlayıram.${who}" Bundan sonra cavabı gözlə, sonra CHURN SSENARİSİ ilə davam et.`;
+  }
   // ARZOOM applications carry no name: greet without one and ask for the application owner.
   if (!fullName || fullName === '-') {
     return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, hər vaxtınız xeyir olsun." Özünü və şirkəti qısa təqdim et, kredit müraciəti ilə bağlı zəng etdiyini de və danışmağa vaxtı olub-olmadığını soruş. Bundan sonra cavabı gözlə.`;
@@ -546,7 +551,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           send({ type: 'connected' });
           if (initialGreetingEnabled) {
             session?.sendClientContent({
-              turns: buildInitialGreetingPrompt(customer),
+              turns: buildInitialGreetingPrompt(customer, isExcel ? excelCtx?.segment ?? null : null),
               turnComplete: true,
             });
           }

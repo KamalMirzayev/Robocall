@@ -333,6 +333,7 @@ async function recordCampaignResultTool(args: Record<string, unknown>, ctx: Tool
     reason,
     callbackAt: cleanText(args.callback_at) || null,
     doNotCall,
+    brand: cleanText(args.brand) || null,
   });
   if (!result.ok) throw new Error(result.error);
   return { ok: true, message: 'Result saved' };
@@ -372,6 +373,7 @@ export const aiToolDeclarations = [
         reason: { type: Type.STRING, description: 'Short note in Azerbaijani (1-3 sentences): what the customer said and the agreed next step' },
         callback_at: { type: Type.STRING, description: 'outcome=callback only: "YYYY-MM-DD HH:MM" in Baku time, or "unknown"' },
         do_not_call: { type: Type.BOOLEAN, description: 'true only when the customer explicitly asks never to be called again' },
+        brand: { type: Type.STRING, description: 'outcome=agrees_send_link only: the brand the customer chose (Toyota, BYD, Mazda or Mitsubishi); leave empty if none' },
       },
       required: ['outcome'],
     },
