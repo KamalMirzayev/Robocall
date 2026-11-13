@@ -291,23 +291,32 @@ export async function campaignSchedulerTick() {
       // Multi-trunk mode: create one job per available trunk per tick
       if (assignedTrunks.length > 0) {
         // Get trunks currently busy (have active telephony jobs)
-        const busyTrunkRows = rowsFrom(await db.execute(sql`
-          SELECT DISTINCT trunk_id FROM telephony_jobs
-          WHERE trunk_id IS NOT NULL
-            AND status IN ('pending', 'answered')
+        // Free slots per trunk: its capacity (trunk_capacity, default 1) minus active jobs.
+        const slotRows = rowsFrom(await db.execute(sql`
+          SELECT x.trunk_id,
+                 coalesce((SELECT max_calls FROM trunk_capacity cap WHERE cap.trunk_id = x.trunk_id), 1)
+                 - (SELECT count(*) FROM telephony_jobs j
+                    WHERE j.trunk_id = x.trunk_id
+                      AND j.status IN ('pending', 'claimed', 'dialing', 'answered')
+                      AND j.created_at > now() - interval '3 hours') AS free
+          FROM unnest(ARRAY[${sql.join(assignedTrunks.map((t) => sql`${t}`), sql`, `)}]::text[]) AS x(trunk_id)
         `));
-        const busyTrunks = new Set(busyTrunkRows.map((r) => String(r.trunk_id)));
+        const freeSlots = new Map(slotRows.map((r) => [String(r.trunk_id), Math.max(0, Number(r.free))]));
+        const placedCalls = new Set<number>();
 
         let jobCount = 0;
         for (const trunkId of assignedTrunks) {
-          if (busyTrunks.has(trunkId)) {
+          let slots = freeSlots.get(trunkId) ?? 0;
+          if (slots <= 0) {
             console.log(`[Campaign Scheduler] Trunk ${trunkId} busy, skipping`);
             continue;
           }
 
-          // Find next eligible call for this trunk
+          // Fill this trunk's free slots with the next eligible calls
           let callPlaced = false;
           for (const call of callRows) {
+            if (slots <= 0) break;
+            if (placedCalls.has(call.id)) continue;
             // Retry spacing is enforced by call_after (set when an attempt goes unanswered).
 
             // Check this specific customer doesn't already have an active job
@@ -364,10 +373,11 @@ export async function campaignSchedulerTick() {
               );
               jobCount++;
               callPlaced = true;
+              placedCalls.add(call.id);
+              slots -= 1;
             } catch (err) {
               console.error(`[Campaign Scheduler] Error creating job for call ${call.id}:`, err);
             }
-            break; // one call per trunk
           }
           if (!callPlaced) {
             console.log(`[Campaign Scheduler] No eligible calls for trunk ${trunkId}`);

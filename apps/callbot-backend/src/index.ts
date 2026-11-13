@@ -36,6 +36,7 @@ import { ensureArzoomSchema, startArzoomSync } from './arzoom-sync.js';
 import { ensureSalesTransferSchema, startSalesTransferApp } from './sales-transfer.js';
 import { startArzoomAnalyticsPush } from './arzoom-analytics.js';
 import { ensureCampaignResultsSchema, startApplicationSmsRetry } from './campaign-results.js';
+import { ensureTrunkCapacitySchema } from './trunk-capacity.js';
 import { clientIp, internalOrWorker, isInternalRequest, hasWorkerToken, rateLimit } from './net-guard.js';
 
 // Stopgap: a single socket error (e.g. EPIPE when a client disconnects
@@ -54,6 +55,7 @@ await ensureCampaignSegmentSchema();
 await ensureArzoomSchema();
 await ensureSalesTransferSchema();
 await ensureCampaignResultsSchema();
+await ensureTrunkCapacitySchema();
 
 const app = express();
 app.disable('x-powered-by');

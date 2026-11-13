@@ -292,29 +292,29 @@ const WORKDAYS_SAT: Weekday[] = [...WORKDAYS, 'sat'];
 export const SEGMENT_CAMPAIGN_PRESETS: Record<SegmentKey, SegmentCampaignPreset> = {
   // Two tries two days apart; a customer who said yes or no is not called again tomorrow.
   sales: {
-    maxAttempts: 2, retryIntervalHours: 48, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:00', runWindowEnd: '19:00',
+    maxAttempts: 2, retryIntervalHours: 48, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:30', runWindowEnd: '19:00',
     flags: ['skipNextDayAfterSuccess'],
     defaults: { skipNextDayAfterSuccess: true },
   },
   // Persistent: daily retries, biggest payments first, fresh debt figures every morning.
   collection: {
-    maxAttempts: 5, retryIntervalHours: 24, runWeekdays: WORKDAYS_SAT, runWindowStart: '09:00', runWindowEnd: '20:00',
+    maxAttempts: 5, retryIntervalHours: 24, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:30', runWindowEnd: '19:00',
     flags: ['orderByMonthlyPaymentDesc', 'skipNextDayAfterSuccess', 'dailyCustomerRefresh'],
     defaults: { orderByMonthlyPaymentDesc: true, skipNextDayAfterSuccess: true, dailyCustomerRefresh: true },
   },
   // Time-sensitive news: retry the same day a few hours later.
   application_status: {
-    maxAttempts: 3, retryIntervalHours: 4, runWeekdays: WORKDAYS, runWindowStart: '09:00', runWindowEnd: '18:00',
+    maxAttempts: 3, retryIntervalHours: 4, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:30', runWindowEnd: '19:00',
     flags: ['skipNextDayAfterSuccess'],
     defaults: { skipNextDayAfterSuccess: true },
   },
   payment_reminder: {
-    maxAttempts: 2, retryIntervalHours: 24, runWeekdays: WORKDAYS, runWindowStart: '10:00', runWindowEnd: '18:00',
+    maxAttempts: 2, retryIntervalHours: 24, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:30', runWindowEnd: '19:00',
     flags: ['orderByMonthlyPaymentDesc', 'skipNextDayAfterSuccess', 'dailyCustomerRefresh'],
     defaults: { skipNextDayAfterSuccess: true, dailyCustomerRefresh: true },
   },
   satisfaction: {
-    maxAttempts: 2, retryIntervalHours: 24, runWeekdays: WORKDAYS, runWindowStart: '11:00', runWindowEnd: '18:00',
+    maxAttempts: 2, retryIntervalHours: 24, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:30', runWindowEnd: '19:00',
     flags: ['skipNextDayAfterSuccess'],
     defaults: { skipNextDayAfterSuccess: true },
   },
@@ -330,7 +330,7 @@ export const SEGMENT_CAMPAIGN_PRESETS: Record<SegmentKey, SegmentCampaignPreset>
     defaults: { skipNextDayAfterSuccess: true },
   },
   marketing: {
-    maxAttempts: 1, retryIntervalHours: 72, runWeekdays: WORKDAYS_SAT, runWindowStart: '11:00', runWindowEnd: '19:00',
+    maxAttempts: 1, retryIntervalHours: 72, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:30', runWindowEnd: '19:00',
     flags: ['skipNextDayAfterSuccess'],
     defaults: { skipNextDayAfterSuccess: true },
   },

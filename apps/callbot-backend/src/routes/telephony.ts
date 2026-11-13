@@ -587,7 +587,7 @@ telephonyRouter.get('/jobs/next', async (req, res) => {
   }
 
   // A trunk maps to a single physical channel with the provider, so at most
-  // one job per non-null trunk_id may be claimed/dialing/answered at a time.
+  // per non-null trunk_id at most trunk_capacity.max_calls (default 1) jobs may be claimed/dialing/answered at a time.
   // The advisory lock closes the race window that FOR UPDATE SKIP LOCKED
   // alone leaves open: it only locks the chosen row, not the rows the
   // correlated NOT EXISTS reads, so two concurrent claims for the same
@@ -608,8 +608,8 @@ telephonyRouter.get('/jobs/next', async (req, res) => {
         AND (t.trunk_id IS NULL OR pg_try_advisory_xact_lock(hashtext(t.trunk_id)))
         AND (
           t.trunk_id IS NULL
-          OR NOT EXISTS (
-            SELECT 1 FROM telephony_jobs busy
+          OR (
+            SELECT count(*) FROM telephony_jobs busy
             WHERE busy.trunk_id = t.trunk_id
               AND busy.id <> t.id
               AND (
@@ -627,7 +627,7 @@ telephonyRouter.get('/jobs/next', async (req, res) => {
                   AND busy.created_at > now() - (${staleDialingSeconds} * interval '1 second')
                 )
               )
-          )
+          ) < coalesce((SELECT cap.max_calls FROM trunk_capacity cap WHERE cap.trunk_id = t.trunk_id), 1)
         )
       ORDER BY t.created_at ASC
       FOR UPDATE OF t SKIP LOCKED
