@@ -13,7 +13,7 @@ const HEADER_PATTERNS: Array<[Field, RegExp]> = [
   ['phone', /(telefon|nömrə|nomre|mobil|phone|tel\b|gsm)/i],
   ['last_service_date', /(servis|gəliş|gelis|son\s*tarix|last\s*service|visit)/i],
   ['last_talk', /(danışıq|danisiq|qeyd|şərh|serh|comment|note|son\s*əlaqə|son\s*elaqe)/i],
-  ['brand', /(marka|maşın|masin|avtomobil|brand|car)/i],
+  ['brand', /(marka|brend|brand|maşın|masin|avtomobil|car)/i],
   ['model', /(model)/i],
   ['name', /(ad|soyad|müştəri|musteri|name|client|customer)/i],
 ];

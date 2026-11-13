@@ -99,16 +99,21 @@ export async function ensureCampaignResultsSchema(): Promise<void> {
     )
   `);
   await db.execute(sql`ALTER TABLE campaign_results ADD COLUMN IF NOT EXISTS brand varchar(20)`);
-  // Sheets imported before brand/model were split: a model sitting in "brand" moves to "model".
+  // Sheets imported before brand/model were recognised: pull "Brend"/"Model" out of the extra
+  // columns, and give a lone model its brand.
   for (const row of rowsFrom(await db.execute(sql`
-    SELECT id, import_data->>'brand' AS brand FROM customers
-    WHERE source_system = 'excel' AND import_data IS NOT NULL AND coalesce(import_data->>'model', '') = ''
-      AND coalesce(import_data->>'brand', '') <> '' AND import_data->>'brand' !~* '(toyota|byd|mazda|mitsub)'
+    SELECT id, import_data AS d FROM customers
+    WHERE source_system = 'excel' AND import_data IS NOT NULL
+      AND (coalesce(import_data->>'model', '') = '' OR import_data->>'brand' IS NULL OR import_data->>'brand' !~* '(toyota|byd|mazda|mitsub)')
   `))) {
-    const { brand, model } = splitCar(String(row.brand ?? ''), '');
+    const d = (typeof row.d === 'string' ? JSON.parse(row.d) : row.d) as Record<string, unknown>;
+    const extra = d.extra && typeof d.extra === 'object' ? (d.extra as Record<string, unknown>) : {};
+    const pick = (re: RegExp) => String(Object.entries(extra).find(([k]) => re.test(k))?.[1] ?? '');
+    const { brand, model } = splitCar(String(d.brand ?? '') || pick(/brend|brand|marka/i), String(d.model ?? '') || pick(/model/i));
+    if (brand === String(d.brand ?? '') && model === String(d.model ?? '')) continue;
     await db.execute(sql`
       UPDATE customers SET import_data = import_data || ${JSON.stringify({ brand: brand || null, model: model || null })}::jsonb,
-        category = ${brand || model || null}
+        category = ${[brand, model].filter(Boolean).join(' ') || null}
       WHERE id = ${Number(row.id)}
     `);
   }
@@ -154,7 +159,10 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
   const extraModel = d.extra && typeof d.extra === 'object'
     ? Object.entries(d.extra as Record<string, unknown>).find(([k]) => /model/i.test(k))?.[1]
     : undefined;
-  const sc = splitCar(s(d.brand), s(d.model) || s(extraModel));
+  const extraBrand = d.extra && typeof d.extra === 'object'
+    ? Object.entries(d.extra as Record<string, unknown>).find(([k]) => /brend|brand|marka/i.test(k))?.[1]
+    : undefined;
+  const sc = splitCar(s(d.brand) || s(extraBrand), s(d.model) || s(extraModel));
   const car = [sc.brand, sc.model && !sc.brand.toLowerCase().includes(sc.model.toLowerCase()) ? sc.model : ''].filter(Boolean).join(' ');
   if (car) lines.push(segment === 'credit_offer' ? `- Əvvəl kredit üçün müraciət etdiyi avtomobil (marka və model): ${car}` : `- Avtomobil: ${car}`);
   if (s(d.last_service_date)) lines.push(`- Son dəfə servisə gəlib: ${s(d.last_service_date)}`);
