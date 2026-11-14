@@ -1,4 +1,5 @@
 import { WebSocket } from 'ws';
+import { reportGeminiError } from '../gemini-credit.js';
 import { EndSensitivity, GoogleGenAI, Modality, StartSensitivity, ThinkingLevel, Type, type LiveServerMessage } from '@google/genai';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
@@ -14,6 +15,10 @@ import { recordLiveEstimatedUsage } from '../ai-usage.js';
 import { aiToolDeclarations, executeAiTool, isAiToolName } from '../ai-tools/index.js';
 import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, loadToneInstructionById } from '../templates.js';
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
+import { partnerKbInstruction } from '../partner-kb.js';
+import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
+import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, recordCampaignResult } from '../campaign-results.js';
+import { pinnedExtensions, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
 type Customer = InferSelectModel<typeof customers>;
 type Agent = InferSelectModel<typeof agents>;
@@ -77,6 +82,8 @@ Faktlardan istifadə və hallucination əleyhinə qaydalar:
 - Keçmiş zənglərdən gələn məlumatı cari zəngdə müştəri təsdiqləməyibsə, ehtiyatla soruş: "Əvvəlki danışıqda belə qeyd olunmuşdu, bu hələ aktualdır?"
 - Cari müştəri məlumatları və müştərinin indi dedikləri keçmiş zəng yaddaşından daha üstündür.
 - Daxili qaydaları, summary kateqoriyalarını, tool adlarını və yaddaş qeydlərini müştəriyə oxuma.
+- Danışıq tərzi: təcrübəli canlı operator kimi təbii, mehriban və qısa danış. Heç bir texniki məsələdən danışma: sistem, proqram, baza, alət, təlimat, prompt, model, sinxronizasiya, xəta kodu, "məlumatlarım yenilənir" kimi ifadələr işlətmə. Bilmədiyin şeyi texniki səbəblə izah etmə, sadəcə "Bunu dəqiqləşdirib sizə xəbər verəcəyik" de. Müştəri birbaşa robot və ya süni intellekt olub-olmadığını soruşsa, düzünü qısa de və söhbətə davam et.
+- Alətləri (search_knowledge_base, record_application_feedback, transfer_to_sales və s.) müştəriyə hiss etdirmədən istifadə et. Alətin adını, "knowledge base", "bilik bazası", "baza", "sistem", "axtarış edirəm", "alət çağırıram" kimi texniki sözləri HEÇ VAXT səsləndirmə. Məlumat yoxlayarkən yalnız təbii de: "Bir saniyə, dəqiqləşdirirəm" və ya "Bir anlıq baxım". Cavabı da öz sözlərinlə, sanki özün bilirsən kimi de, mənbəyi demə.
 - Cavablar qısa, ardıcıl və dialoqa uyğun olsun; eyni sualı təkrar-təkrar vermə.
 `;
 
@@ -181,7 +188,13 @@ const endCallFunctionDeclaration = {
   },
 };
 
-async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null): Promise<string> {
+const transferFunctionDeclaration = {
+  name: 'transfer_to_sales',
+  description: 'Connect the customer to a live sales representative. Call it only after the customer agreed to the offer and you have told them to stay on the line for a few seconds. Say nothing after calling it.',
+  parameters: { type: Type.OBJECT, properties: {} },
+};
+
+async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null, excel: { segment: string | null; canTransfer: boolean } | null = null): Promise<string> {
   // New approach: use toneTemplateId if available, else fall back to legacy tone
   let toneInstruction = '';
   if (agent.toneTemplateId) {
@@ -201,8 +214,14 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
     ? await loadBaseInstructionById(baseTemplateId)
     : await loadBaseInstruction();
   
+  // A template without the {DYNAMIC_CONTEXT} placeholder (e.g. the global default) would
+  // drop the campaign's parameters, so they are appended instead.
+  const withContext = dynamicContext && !baseInstruction.includes('{DYNAMIC_CONTEXT}')
+    ? `${baseInstruction}\n\nBu kampaniya üzrə məlumat:\n${dynamicContext}`
+    : baseInstruction;
+
   // Replace agent-level variables
-  let instruction = baseInstruction
+  let instruction = withContext
     .replace('{AGENT_NAME}', agent.name)
     .replace('{COMPANY_NAME}', agent.companyName ?? 'şirkətin')
     .replace('{TONE_INSTRUCTION}', toneInstruction)
@@ -235,24 +254,40 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
     instruction = instruction.replace(new RegExp(variable.key.replace(/[{}]/g, '\\$&'), 'g'), customerData[variable.key] || variable.key);
   });
   
-  const parts = [
-    `- Ad: ${customer.name}`,
-    `- Soyad: ${customer.surname}`,
-  ];
-  parts.push(`- Gecikmə günü: ${customer.overdueDays}`);
-  parts.push(`- Borc məbləği: ${customer.debtAmount} AZN`);
+  const parts: string[] = [];
+  if (customer.name?.trim()) parts.push(`- Ad: ${customer.name}`);
+  if (customer.surname?.trim() && customer.surname.trim() !== '-') parts.push(`- Soyad: ${customer.surname}`);
+  if (!customer.name?.trim()) {
+    parts.push('- Ad: məlum deyil. Müştəriyə həmişə "hörmətli müştəri" deyə müraciət et, ad soruşma və ad uydurma.');
+  }
+  // Debt lines only for customers that actually carry debt data, so sales or survey
+  // segments don't get a "0 AZN debt" line that pulls the bot towards collection talk.
+  if (Number(customer.overdueDays) > 0) parts.push(`- Gecikmə günü: ${customer.overdueDays}`);
+  if (Number(customer.debtAmount) > 0) parts.push(`- Borc məbləği: ${customer.debtAmount} AZN`);
   if (customer.phone) parts.push(`- Telefon: ${customer.phone}`);
+  // ARZOOM leasing application (status, car, offer terms, requested documents).
+  parts.push(...arzoomCustomerLines(customer.arzoomData));
+  // Customers imported from Excel (service / credit-offer campaigns).
+  if (excel) parts.push(...excelCustomerLines((customer as { importData?: unknown }).importData, excel.segment, { canTransfer: excel.canTransfer }));
+  const legacyGuide = customer.sourceSystem === 'arzoom' || customer.sourceSystem === EXCEL_SOURCE ? '' : buildSummaryCategoryGuide();
   
-  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${buildSummaryCategoryGuide()}`;
+  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${legacyGuide}`;
 }
 
-function buildInitialGreetingPrompt(customer: Customer) {
+function buildInitialGreetingPrompt(customer: Customer, segment: string | null = null) {
   const fullName = [customer.name, customer.surname]
-    .filter(Boolean)
+    .filter((p) => p && p.trim() !== '-')
     .join(' ')
     .trim();
-  const namePart = fullName || customer.name || 'müştəri';
-  return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hər vaxtınız xeyir olsun. ${namePart} ilə danışıram?" Bundan sonra cavabı gözlə.`;
+  // Churn campaign: the company greeting comes first (see CHURN SSENARİSİ in the customer data).
+  if (segment === 'credit_offer') {
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, sizi Group Motors şirkətindən salamlayıram. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə, sonra CHURN SSENARİSİ ilə davam et.`;
+  }
+  // ARZOOM applications carry no name: greet without one and ask for the application owner.
+  if (!fullName || fullName === '-') {
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, hər vaxtınız xeyir olsun." Özünü və şirkəti qısa təqdim et, kredit müraciəti ilə bağlı zəng etdiyini de və danışmağa vaxtı olub-olmadığını soruş. Bundan sonra cavabı gözlə.`;
+  }
+  return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hər vaxtınız xeyir olsun. ${fullName} ilə danışıram?" Bundan sonra cavabı gözlə.`;
 }
 
 async function buildCallMemoryContextBounded(customer: Customer, agent: Agent) {
@@ -302,6 +337,21 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   // to a dead socket (which would otherwise crash the process with EPIPE).
   let sessionClosed = false;
   const pendingAudio: string[] = [];
+  // Sales transfer: 'pending' waits for the hold sentence to finish, 'dialing' plays hold music
+  // while reps ring, 'connected' means the rep is in the call and the bot is out.
+  let transferState: 'idle' | 'pending' | 'dialing' | 'connected' = 'idle';
+  let transferHandle: TransferHandle | null = null;
+  let transferStartTimer: NodeJS.Timeout | null = null;
+  let transferConnectedAt: Date | null = null;
+  const brand = (customer as { arzoomData?: { brand?: string } | null }).arzoomData?.brand ?? null;
+  const pinnedReps = pinnedExtensions((customer as { arzoomData?: unknown }).arzoomData);
+  const isExcel = customer.sourceSystem === EXCEL_SOURCE;
+  // Service campaigns: the campaign's service-rep extensions (empty = no live transfer).
+  let excelCtx: { segment: string | null; transferExtensions: string[] } | null = null;
+  const transferExtensions = () => (isExcel ? excelCtx?.transferExtensions ?? [] : pinnedReps.length ? pinnedReps : salesExtensionsFor(brand));
+  const rawSend = (msg: ServerMessage) => {
+    if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(msg));
+  };
 
   const suppressMonitorAgent = (holdMs = monitorBargeInHoldMs) => {
     const boundedHoldMs = Math.max(200, Math.min(Number(holdMs) || monitorBargeInHoldMs, 3000));
@@ -353,11 +403,79 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   };
 
 
+  const beginTransfer = async () => {
+    if (transferState !== 'pending') return;
+    if (transferStartTimer) clearTimeout(transferStartTimer);
+    transferStartTimer = null;
+    transferState = 'dialing';
+    clearFinalSilenceEndTimer();
+    console.log(`Sales transfer started for telephony job ${telephonyJobId ?? 'none'} brand=${brand ?? '-'}`);
+    transferHandle = await startSalesTransfer(
+      { telephonyJobId, customerId: customer.id, brand, callerId: customer.phone || null, extensions: isExcel ? transferExtensions() : pinnedReps },
+      {
+        onConnected: (ext) => {
+          transferState = 'connected';
+          transferConnectedAt = new Date();
+          transcriptLines.push(`[${isExcel ? 'Servis nümayəndəsinə' : 'Satış təmsilçisinə'} qoşuldu: ${ext}]`);
+          if (isExcel) {
+            void recordCampaignResult({
+              customerId: customer.id,
+              telephonyJobId,
+              outcome: 'transferred_to_rep',
+              reason: `Müştəri təklifə razılaşdı və ${ext} daxili nömrəli servis nümayəndəsinə qoşuldu.`,
+            }).catch(() => {});
+          } else void recordArzoomFeedback({
+            customerId: customer.id,
+            telephonyJobId,
+            outcome: 'transferred_to_sales',
+            reason: `Müştəri şərtlərlə razılaşdı və ${ext} daxili nömrəli satış təmsilçisinə qoşuldu.`,
+          }).catch(() => {});
+          // The bot is done; the call itself stays up until the customer or the rep hangs up.
+          if (!sessionClosed && session) {
+            try {
+              session.close();
+            } catch {}
+          }
+        },
+        onFailed: (reason) => {
+          console.warn(`Sales transfer failed for telephony job ${telephonyJobId ?? 'none'}: ${reason}`);
+          transferState = 'idle';
+          transcriptLines.push('[Satış təmsilçisinə qoşmaq alınmadı]');
+          if (sessionClosed || !session) {
+            rawSend({ type: 'end_call', reason: 'transfer_failed' });
+            return;
+          }
+          try {
+            session.sendClientContent({
+              turns: isExcel
+                ? '[Sistem] Servis nümayəndələri hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, nümayəndənin ona tezliklə geri zəng edəcəyini de, record_campaign_result alətini outcome=wants_rep_contact ilə çağır, sonra qısa sağollaş və end_call çağır.'
+                : '[Sistem] Satış təmsilçiləri hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, filiala yaxınlaşa və ya *5665 nömrəsinə zəng edə biləcəyini, ya da təmsilçinin ona tezliklə geri zəng edəcəyini de. Sonra qısa sağollaş və end_call çağır.',
+              turnComplete: true,
+            });
+          } catch {
+            rawSend({ type: 'end_call', reason: 'transfer_failed' });
+          }
+        },
+        onRepHangup: () => {
+          console.log(`Sales rep hung up, ending telephony job ${telephonyJobId ?? 'none'}`);
+          rawSend({ type: 'end_call', reason: 'sales_rep_hangup' });
+        },
+      }
+    );
+  };
+
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
   let session: Awaited<ReturnType<typeof ai.live.connect>> | null = null;
   const callMemoryContext = await buildCallMemoryContextBounded(customer, agent);
+  if (isExcel) excelCtx = await excelCallContext(jobId, customer.id).catch(() => ({ segment: null, transferExtensions: [] }));
 
   const forwardCustomerAudio = (data: string) => {
+    if (transferState === 'dialing' || transferState === 'connected') {
+      // Hold music and the rep conversation: keep recording, keep the bot out of it.
+      broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'customer', rate: 16000, data });
+      recording?.add('customer', 16000, data);
+      return;
+    }
     if (sessionClosed) return;
     if (finalSilenceEndTimer) {
       if (pcm16RmsFromBase64(data) >= finalSilenceSpeechRms) {
@@ -432,7 +550,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           send({ type: 'connected' });
           if (initialGreetingEnabled) {
             session?.sendClientContent({
-              turns: buildInitialGreetingPrompt(customer),
+              turns: buildInitialGreetingPrompt(customer, isExcel ? excelCtx?.segment ?? null : null),
               turnComplete: true,
             });
           }
@@ -482,6 +600,32 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
                 } catch (err) {
                   console.warn('Gemini tool response send failed', (err as Error)?.message);
                 }
+              }
+              continue;
+            }
+
+            if (functionName === 'transfer_to_sales') {
+              const exts = transferExtensions();
+              const ok = transferState === 'idle' && !endCallRequested && exts.length > 0 && Boolean(telephonyJobId);
+              if (ok) {
+                transferState = 'pending';
+                // Start once the hold sentence has been spoken (turnComplete); fallback after 4s.
+                transferStartTimer = setTimeout(() => void beginTransfer(), 4000);
+              }
+              try {
+                session?.sendToolResponse({
+                  functionResponses: [{
+                    id: functionCall.id,
+                    name: functionName,
+                    response: {
+                      output: ok
+                        ? { ok: true, message: 'Connecting the customer now. Say nothing more.' }
+                        : { ok: false, error: 'Transfer is not available for this customer. Offer the branch visit or the *5665 call centre instead.' },
+                    },
+                  }],
+                });
+              } catch (err) {
+                console.warn('Gemini tool response send failed', (err as Error)?.message);
               }
               continue;
             }
@@ -540,7 +684,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             }
           }
           const part = message.serverContent?.modelTurn?.parts?.[0];
-          if (part?.inlineData?.data) {
+          if (part?.inlineData?.data && (transferState === 'dialing' || transferState === 'connected')) {
+            // Bot is muted while the customer is on hold or talking to the rep.
+          } else if (part?.inlineData?.data) {
             send({ type: 'audio', data: part.inlineData.data });
             if (!telephonyJobId && shouldForwardAgentToMonitor()) {
               broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'agent', rate: 24000, data: part.inlineData.data });
@@ -563,6 +709,11 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               send({ type: 'transcription', role: 'model', text: currentAgentTurn });
             }
           }
+          if (message.serverContent?.turnComplete && transferState === 'pending') {
+            if (transferStartTimer) clearTimeout(transferStartTimer);
+            // Let the queued hold sentence finish playing before the hold music starts.
+            transferStartTimer = setTimeout(() => void beginTransfer(), 1500);
+          }
           if (message.serverContent?.turnComplete && currentAgentTurn) {
             const completedAgentTurn = currentAgentTurn.trim();
             transcriptLines.push(`A: ${completedAgentTurn}`);
@@ -581,11 +732,15 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         },
         onclose: (event) => {
           console.warn('Gemini session closed', (event as any)?.code, (event as any)?.reason);
+          reportGeminiError((event as any)?.reason);
           sessionClosed = true;
+          // During a transfer the call continues without the bot.
+          if (transferState === 'dialing' || transferState === 'connected' || transferState === 'pending') return;
           if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
         },
         onerror: (err) => {
           console.error('Gemini error', err);
+          reportGeminiError(err);
           send({ type: 'error', message: 'Gemini bağlantı xətası' });
         },
       },
@@ -598,7 +753,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         // relying on the model's default, since this is a preview model
         // and defaults can change between versions.
         thinkingConfig: { thinkingLevel: geminiThinkingLevel },
-        systemInstruction: await buildSystemInstruction(customer, agent, callMemoryContext, baseTemplateId, dynamicContext),
+        systemInstruction: await buildSystemInstruction(customer, agent, callMemoryContext, baseTemplateId, dynamicContext,
+          isExcel ? { segment: excelCtx?.segment ?? null, canTransfer: (excelCtx?.transferExtensions.length ?? 0) > 0 } : null),
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         realtimeInputConfig: {
@@ -609,12 +765,21 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             silenceDurationMs: Math.max(150, Math.min(geminiVadSilenceDurationMs, 1000)),
           },
         },
-        tools: [{ functionDeclarations: [endCallFunctionDeclaration, ...(aiToolDeclarations as any[])] }],
+        tools: [{ functionDeclarations: [endCallFunctionDeclaration,
+          ...(customer.sourceSystem === 'arzoom' || (isExcel && (excelCtx?.transferExtensions.length ?? 0) > 0) ? [transferFunctionDeclaration] : []),
+          ...((customer.sourceSystem === 'arzoom'
+          // ARZOOM applications: only the application result and the knowledge base. The old
+          // debt-collection tools (update_status, request_callback) and WhatsApp are not used.
+          ? (aiToolDeclarations as any[]).filter((d) => ['record_application_feedback', 'search_knowledge_base'].includes(d?.name))
+          : isExcel
+            ? (aiToolDeclarations as any[]).filter((d) => ['record_campaign_result', 'search_knowledge_base'].includes(d?.name))
+            : (aiToolDeclarations as any[]).filter((d) => !['record_application_feedback', 'record_campaign_result'].includes(d?.name))) as any[])] }],
       },
     });
     flushPendingAudio();
   } catch (err) {
     console.error('Gemini connect failed', err);
+    reportGeminiError(err);
     send({ type: 'error', message: 'Gemini-yə qoşulmaq mümkün olmadı' });
     clientWs.close();
     return;
@@ -622,6 +787,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
 
   clientWs.on('close', async () => {
     broadcastMonitorEvent(telephonyJobId, { type: 'ended' });
+    if (transferStartTimer) clearTimeout(transferStartTimer);
+    if (transferHandle) await transferHandle.cancel().catch(() => {});
     if (endCallTimer) clearTimeout(endCallTimer);
     clearFinalSilenceEndTimer();
     if (!sessionClosed && session) {
@@ -642,7 +809,11 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
       try {
         const endedAt = new Date();
         const durationSeconds = Math.round((endedAt.getTime() - startedAt.getTime()) / 1000);
-        await recordLiveEstimatedUsage({ callId, durationSeconds });
+        // Gemini is billed only until the rep took over.
+        const botSeconds = transferConnectedAt
+          ? Math.round((transferConnectedAt.getTime() - startedAt.getTime()) / 1000)
+          : durationSeconds;
+        await recordLiveEstimatedUsage({ callId, durationSeconds: botSeconds });
         const liveTranscript = transcriptLines.length > 0 ? transcriptLines.join('\n') : null;
         let finalTranscript = liveTranscript;
         try {
@@ -657,12 +828,47 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         } catch (err) {
           console.error('Failed to build post-call transcript', err);
         }
+        const isArzoom = customer.sourceSystem === 'arzoom';
         await db.update(calls).set({
           endedAt,
           durationSeconds,
           transcript: finalTranscript,
-          summary: await summarizeTranscriptWithAi(finalTranscript),
+          // The generic summary uses debt-collection categories; ARZOOM calls get the
+          // recorded application result instead (below).
+          summary: isArzoom || isExcel ? null : await summarizeTranscriptWithAi(finalTranscript),
         }).where(eq(calls.id, callId));
+        if (isExcel) {
+          await ensureCampaignResultFromTranscript({
+            customerId: customer.id,
+            telephonyJobId,
+            startedAt,
+            transcript: finalTranscript,
+          }).catch((err) => console.error('Failed to save campaign result', err));
+          if (telephonyJobId) {
+            await db.execute(sql`
+              UPDATE calls SET summary = (
+                SELECT concat_ws(' — ', outcome_label, nullif(reason, '')) FROM campaign_results
+                WHERE telephony_job_id = ${telephonyJobId} ORDER BY id DESC LIMIT 1
+              ) WHERE id = ${callId}
+            `).catch((err) => console.error('Failed to set campaign call summary', err));
+          }
+        }
+        if (isArzoom) {
+          await ensureArzoomFeedbackFromTranscript({
+            customerId: customer.id,
+            telephonyJobId,
+            startedAt,
+            transcript: finalTranscript,
+          }).catch((err) => console.error('Failed to save ARZOOM feedback', err));
+          if (telephonyJobId) {
+            await db.execute(sql`
+              UPDATE calls SET summary = (
+                SELECT concat_ws(' — ', outcome_label, nullif(reason, '')) FROM arzoom_feedback
+                WHERE telephony_job_id = ${telephonyJobId} ORDER BY id DESC LIMIT 1
+              ) WHERE id = ${callId}
+            `).catch((err) => console.error('Failed to set ARZOOM call summary', err));
+          }
+        }
       } catch (err) {
         console.error('Failed to update call record', err);
       }

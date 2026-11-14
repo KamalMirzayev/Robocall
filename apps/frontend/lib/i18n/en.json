@@ -3,8 +3,8 @@
     "loading": "Loading..."
   },
   "login": {
-    "adminPortal": "Admin Portal",
-    "title": "Robocall",
+    "adminPortal": "Staff sign-in",
+    "title": "AI call panel",
     "subtitle": "Sign in to manage voice operations and telephony.",
     "timedOut": "You were signed out due to inactivity. Please log in again.",
     "username": "Username",
@@ -13,7 +13,13 @@
     "passwordPlaceholder": "Enter password",
     "loggingIn": "Logging in...",
     "loginButton": "Login",
-    "loginFailed": "Login failed"
+    "loginFailed": "Login failed",
+    "engineEyebrow": "ArzoomCall",
+    "engineTitle": "AI runs your calls, from campaign to sale",
+    "engineText": "Customer satisfaction surveys, payment reminders, telesales and marketing calls in one panel.",
+    "chipCalls": "campaigns",
+    "chipLang": "in Azerbaijani",
+    "chipRec": "recordings and transcripts"
   },
   "home": {
     "loading": "Loading..."
@@ -37,7 +43,7 @@
   "protectedLayout": {
     "loading": "Loading...",
     "openMenu": "Open menu",
-    "appName": "Robocall",
+    "appName": "ArzoomCall",
     "closeMenu": "Close menu",
     "role": "Role",
     "navCalls": "Calls",
@@ -58,7 +64,12 @@
     "dynamicContextCodes": "Dynamic Context Codes",
     "aiBotTools": "Tools",
     "admin": "Admin",
-    "logout": "Logout"
+    "logout": "Logout",
+    "brandSub": "AI call center",
+    "mainSection": "Panel",
+    "themeToggle": "Toggle theme",
+    "integrations": "Integrations",
+    "navAnalytics": "Analytics"
   },
   "authLayout": {
     "loading": "Loading..."
@@ -98,7 +109,7 @@
   },
   "aiBotResponses": {
     "heading": "AI BOT - Responses",
-    "description": "Response templates area is now available in robocall frontend routing.",
+    "description": "Response templates area is now available in ArzoomCall frontend routing.",
     "note": "Backend save/load functionality can be integrated next."
   },
   "aiBotScenarios": {
@@ -209,7 +220,7 @@
   },
   "dynamicContextCodes": {
     "heading": "Dynamic Context Codes",
-    "description": "The registry of codes external callers (like a mobile-app backend) can pass as dynamicContext when triggering a call — each resolves to a Robocall-authored phrase substituted into a template's {DYNAMIC_CONTEXT} placeholder, instead of accepting arbitrary free text.",
+    "description": "The registry of codes external callers (like a mobile-app backend) can pass as dynamicContext when triggering a call — each resolves to a ArzoomCall-authored phrase substituted into a template's {DYNAMIC_CONTEXT} placeholder, instead of accepting arbitrary free text.",
     "newCode": "New Code",
     "newCodeTitle": "New Dynamic Context Code",
     "editCodeTitle": "Edit Dynamic Context Code",
@@ -318,11 +329,11 @@
     "retryIntervalHours": "Retry Interval (h)",
     "settingsHeading": "Campaign Settings",
     "paymentPriorityTitle": "Start calling from highest monthly payment",
-    "paymentPriorityDesc": "After PKS customers are imported, prioritize calls by largest `odenis_ayliq` first.",
+    "paymentPriorityDesc": "Call customers with the largest monthly payment first (for PKS imports).",
     "skipNextDayTitle": "Do not call next day after successful call",
     "skipNextDayDesc": "Skip customer queueing for tomorrow if yesterday's call was successful.",
     "dailyRefreshTitle": "Daily update customer data",
-    "dailyRefreshDesc": "Every morning at 08:30, refresh debt/payment info for customers still pending in this campaign from PKS. Only takes effect for campaigns built from a PKS import.",
+    "dailyRefreshDesc": "Every morning at 08:30, refresh debt and payment data for pending customers from PKS. Only works for campaigns built from a PKS import.",
     "runWeekdays": "Run Weekdays",
     "selectWeekday": "Select at least one weekday.",
     "dailyStartTime": "Daily Start Time",
@@ -339,6 +350,12 @@
       "fri": "Fri",
       "sat": "Sat",
       "sun": "Sun"
+    },
+    "arzoom": {
+      "autoAddTitle": "Add new Arzoom applications automatically",
+      "autoAddDesc": "When off, you add applications yourself via Import → Import from Arzoom. When on, every application with the selected statuses (new ones too) joins the campaign.",
+      "requeueTitle": "Call again when the application status changes",
+      "requeueDesc": "E.g. when an offer is sent for an application that was waiting for documents, the customer is called again about the new status."
     }
   },
   "dialplan": {
@@ -561,7 +578,8 @@
     "active": "Active",
     "inactive": "Inactive",
     "initiatingCall": "Initiating Call...",
-    "initiateCall": "Initiate Call"
+    "initiateCall": "Initiate Call",
+    "pickCustomerFromList": "Pick the customer from the dropdown list (or enter a phone number that is in the customer base) and choose an agent."
   },
   "customerForm": {
     "heading": "Add New Customer",
@@ -657,6 +675,44 @@
       "lastSyncedAt": "Last Synced At",
       "createdAt": "Created At",
       "actions": "Actions"
+    },
+    "views": {
+      "arzoom": "Arzoom applications",
+      "pks": "PKS template",
+      "arzoomHint": "Leasing applications synced from Arzoom.",
+      "pksHint": "The old credit and collections columns (customers not from Arzoom)."
+    },
+    "arzoom": {
+      "application": "Application No",
+      "status": "Status",
+      "car": "Car",
+      "carPrice": "Car price",
+      "terms": "Terms",
+      "note": "Documents / reason",
+      "guarantor": "Guarantor",
+      "lastCall": "Last contact",
+      "deleted": "Deleted",
+      "yes": "Yes",
+      "no": "No",
+      "down": "down",
+      "months": "mo",
+      "perMonth": "mo",
+      "history": {
+        "details": "Details",
+        "historyTitle": "Contact history",
+        "result": "Result",
+        "reason": "Reason / note",
+        "calls": "Calls",
+        "noHistory": "No calls or results yet.",
+        "summary": "Summary",
+        "transcript": "Transcript",
+        "duration": "Duration",
+        "sentToArzoom": "Sent to Arzoom",
+        "notSent": "Not sent to Arzoom",
+        "loading": "Loading...",
+        "close": "Close",
+        "sec": "s"
+      }
     }
   },
   "admin": {
@@ -962,7 +1018,15 @@
       "dbResultPrefix": "Successfully imported",
       "dbResultMid": "customers and attached",
       "dbResultSuffix": "to campaign.",
-      "dbResultAlreadyAttachedSuffix": "were already attached."
+      "dbResultAlreadyAttachedSuffix": "were already attached.",
+      "arzoomTab": "Import from Arzoom",
+      "arzoomHint": "Add Arzoom credit applications to this campaign by status. Rejected applications are never called.",
+      "arzoomEligible": "Matching applications",
+      "arzoomCounting": "Counting…",
+      "arzoomAdded": "Added",
+      "arzoomAlready": "already in the campaign",
+      "arzoomImporting": "Adding…",
+      "arzoomImportButton": "Add applications to the campaign"
     }
   },
   "usage": {
@@ -996,5 +1060,180 @@
     "trunkAutoSelected": "Auto-selected (no trunk pinned)",
     "pricingInfo": "Hybrid plan:",
     "pricingDetail": "/month base + 0.20 /minute for answered calls. Only successful calls (customer answered) are billed — busy, no-answer, and invalid numbers are free."
+  },
+  "segments": {
+    "heading": "Segments",
+    "subtitle": "A ready instruction template for each use case. Add it in one click, then edit the text.",
+    "addTemplate": "Add template",
+    "templatesReady": "template(s)",
+    "addAnother": "Add another",
+    "adding": "Adding…",
+    "added": "Template added. You can edit it in the list below.",
+    "segment": "Segment",
+    "allSegments": "All segments",
+    "noSegment": "No segment",
+    "noTemplateForSegment": "No template for this segment yet. Add one in a click on the Instruction Templates page.",
+    "defaultTemplate": "Active (default) template",
+    "chooseSegmentHint": "Pick the call's purpose: the template list is filtered and the settings are set to match.",
+    "presetApplied": "Segment defaults applied (attempts, interval, days and hours). Change them if you need to.",
+    "paramsHeading": "Segment parameters",
+    "paramsHint": "The bot uses this information on the call. Empty fields are ignored."
+  },
+  "integrations": {
+    "heading": "Integrations",
+    "subtitle": "API keys and tokens live here, not in the code or the .env file. Secret keys are never shown again once saved.",
+    "loading": "Loading…",
+    "loadFailed": "Could not load settings",
+    "saveFailed": "Could not save",
+    "adminOnly": "Admins only.",
+    "set": "Connected",
+    "fromEnv": "From .env",
+    "notSet": "Not set",
+    "replacePlaceholder": "Paste a new one to replace",
+    "pastePlaceholder": "Paste the key",
+    "toggleVisibility": "Show / hide",
+    "save": "Save",
+    "saving": "Saving…",
+    "clear": "Clear",
+    "saved": "Saved",
+    "updated": "Updated",
+    "test": "Test",
+    "testing": "Testing…",
+    "testOk": "Key works",
+    "testFailed": "Error:",
+    "reload": "Reload",
+    "kbOff": "Not connected",
+    "kbChunks": "entries loaded",
+    "groups": {
+      "ai": {
+        "title": "Gemini (AI voice)",
+        "text": "Calls, summaries and analysis run on this key. The Google account it belongs to pays for usage."
+      },
+      "knowledge": {
+        "title": "Knowledge base",
+        "text": "The bot reads models, prices and terms from here during calls. The partner's webhook URL and token."
+      },
+      "whatsapp": {
+        "title": "WhatsApp (Evolution API)",
+        "text": "Lets the bot send the customer a WhatsApp message during a call."
+      },
+      "webhook": {
+        "title": "External webhook",
+        "text": "Callback, status and WhatsApp events are posted here."
+      },
+      "pks": {
+        "title": "PKS import",
+        "text": "For importing customers from the PKS database into campaigns."
+      },
+      "arzoom": {
+        "title": "Arzoom leasing applications",
+        "text": "Applications in Arzoom are pulled into ArzoomCall as customers every minute. Create the token in the Arzoom panel (Users → ArzoomCall integration) and paste it here."
+      }
+    },
+    "keys": {
+      "GEMINI_API_KEY": "Gemini API key",
+      "PARTNER_KB_URL": "Webhook URL",
+      "PARTNER_KB_TOKEN": "Token",
+      "RAG_SEARCH_URL": "Alternative search URL (RAG)",
+      "EVOLUTION_API_URL": "API URL",
+      "EVOLUTION_API_KEY": "API key",
+      "EVOLUTION_INSTANCE_NAME": "Instance name",
+      "WEBHOOK_URL": "Webhook URL",
+      "WEBHOOK_SECRET": "Webhook secret",
+      "PKS_DB_QUERY_URL": "Query URL",
+      "PKS_DB_QUERY_API_KEY": "API key",
+      "ARZOOM_API_URL": "Arzoom site address",
+      "ARZOOM_API_TOKEN": "Integration token",
+      "SALES_TRANSFER_GROUPS": "Sales reps (brand: extensions)",
+      "GEMINI_BALANCE_USD": "Gemini balance (USD)"
+    },
+    "arzoomOff": "Not connected",
+    "arzoomApplications": "applications",
+    "arzoomLastSync": "last sync",
+    "syncNow": "Sync now"
+  },
+  "analytics": {
+    "title": "Call analytics",
+    "subtitle": "Calls, conversation outcomes and the retry queue, refreshed every 30 seconds",
+    "updated": "updated",
+    "today": "Today",
+    "lastDays": "{n} days",
+    "allCampaigns": "All campaigns",
+    "refresh": "Refresh",
+    "loading": "Loading...",
+    "loadError": "Could not load analytics",
+    "empty": "No data yet",
+    "kpi": {
+      "attempts": "Call attempts",
+      "answered": "Answered",
+      "unanswered": "Unanswered",
+      "inProgress": "in progress",
+      "customers": "Customers reached",
+      "customersHint": "talked to / called",
+      "avgDuration": "Avg. talk time",
+      "totalMinutes": "Talk minutes",
+      "transfers": "Sent to sales"
+    },
+    "outcomes": "Conversation outcomes",
+    "queue": "Campaign queue",
+    "retryRule": "unanswered: retry after {h} h, max {n} attempts",
+    "nextRetry": "Next retry",
+    "queueStatus": {
+      "completed": "Talked",
+      "attempting": "Calling",
+      "retrying": "Waiting to retry",
+      "pending": "Queued",
+      "failed": "Not reached",
+      "cancelled": "Cancelled"
+    },
+    "byHour": "By hour (green: answered)",
+    "byDay": "By day (green: answered)",
+    "failures": "Why calls went unanswered",
+    "failure": {
+      "no_answer": "No answer",
+      "busy": "Busy",
+      "congestion": "Network / unreachable",
+      "stale": "Call cut off",
+      "unknown": "Unknown",
+      "other": "Other"
+    },
+    "transfers": "Transfers to sales reps",
+    "rep": "Rep",
+    "brand": "Brand",
+    "connected": "Connected",
+    "missed": "No answer",
+    "recent": "Latest conversations",
+    "col": {
+      "time": "Time",
+      "customer": "Customer",
+      "status": "Application status",
+      "call": "Call",
+      "outcome": "Outcome",
+      "analysis": "Conversation analysis"
+    },
+    "appStatus": {
+      "offer": "Offer sent",
+      "info": "Documents needed",
+      "accepted": "Sent to sales",
+      "declined": "Declined",
+      "cancelled": "Cancelled",
+      "review": "In review",
+      "rejected": "Rejected",
+      "reoffer": "Re-offer",
+      "guarantor": "Guarantor"
+    }
+  },
+  "geminiBalance": {
+    "title": "Gemini balance",
+    "notSet": "Not set",
+    "today": "Spent today",
+    "starting": "Entered balance",
+    "spentSince": "Spent since",
+    "lastHour": "Last hour",
+    "hoursLeft": "At the current rate it lasts about {h} hours",
+    "setAt": "Balance entered:",
+    "hint": "Google gives no balance API. The system detects a used-up balance automatically and pauses calls. To see the amount, enter the AI Studio balance in Integrations → Gemini balance (USD) when you top up; spend since then is taken off every minute.",
+    "depleted": "Balance used up",
+    "depletedHint": "Google is rejecting Gemini requests because the balance ran out. Campaign calls are paused and resume on their own within 3 minutes of a top-up."
   }
 }

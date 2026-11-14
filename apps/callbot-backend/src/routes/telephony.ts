@@ -1,4 +1,8 @@
+import { hasWorkerToken } from '../net-guard.js';
 import { randomUUID } from 'node:crypto';
+import { scheduleArzoomAnalyticsPush } from '../arzoom-analytics.js';
+import { applyCallbackSchedule } from '../arzoom-sync.js';
+import { applyResultCallback } from '../campaign-results.js';
 import { Router, type Request, type Response } from 'express';
 import { GoogleGenAI } from '@google/genai';
 import { eq, or, sql } from 'drizzle-orm';
@@ -32,7 +36,7 @@ function requireWorkerAuth(req: Request, res: Response): boolean {
   }
   const header = req.get('authorization') ?? '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : req.get('x-telephony-token');
-  if (token !== expected) {
+  if (!hasWorkerToken(token)) {
     res.status(401).json({ error: 'unauthorized' });
     return false;
   }
@@ -128,11 +132,9 @@ async function ensureUnreachedCallSummary(input: {
   const agentId = Number(input.agentId ?? input.agent_id ?? 0) || null;
   const customerId = Number(input.customerId ?? input.customer_id ?? 0) || null;
   const summary = input.summary || unreachedSummary(input.error, input.phone);
-  const error = String(input.error ?? '').replace(/\s+/g, ' ').trim();
-  const description = [
-    `Zəng müştəriyə çatmadı. Səbəb: ${summary}.`,
-    error && error !== summary ? `Texniki qeyd: ${error.slice(0, 500)}` : '',
-  ].filter(Boolean).join('\n');
+  // The raw Asterisk/AMI text stays in telephony_jobs.last_error for debugging; staff only
+  // see the plain reason.
+  const description = `Zəng müştəriyə çatmadı. Səbəb: ${summary}.`;
 
   if (telephonyJobId) {
     const [existing] = await db
@@ -213,7 +215,8 @@ export async function updateCampaignStatistics(campaignId: number) {
             completed_calls = ${completedCalls},
             successful_calls = ${successfulCalls},
             status = CASE 
-              WHEN ${shouldMarkComplete} AND status = 'active' THEN 'completed'
+              -- ARZOOM application campaigns run continuously: new applications keep arriving.
+              WHEN ${shouldMarkComplete} AND status = 'active' AND segment IS DISTINCT FROM 'application_status' THEN 'completed'
               ELSE status
             END,
             updated_at = now()
@@ -233,6 +236,7 @@ export async function updateCampaignStatistics(campaignId: number) {
  * Update campaign_calls status and campaign statistics after a telephony job completes.
  */
 async function handleJobCompletion(jobId: number, status: 'ended' | 'failed', answered: boolean) {
+  scheduleArzoomAnalyticsPush();
   try {
     // Find the campaign_call for this telephony job. Scoped to the job's own
     // campaign_id (not just customer_id) — a customer can be queued in more than
@@ -254,14 +258,40 @@ async function handleJobCompletion(jobId: number, status: 'ended' | 'failed', an
       const ccId = Number(campaignCall.id);
       const campaignId = Number(campaignCall.campaign_id);
       
-      // Update campaign_call status based on whether call was answered
-      const newStatus = answered && status === 'ended' ? 'completed' : 'failed';
-      await db.execute(sql`
-        UPDATE campaign_calls 
-        SET status = ${newStatus}, updated_at = now()
-        WHERE id = ${ccId}
-      `);
+      // Answered → completed. Not answered (no answer, busy, unreachable) → queue a
+      // retry after the campaign's retry interval while attempts remain; only the
+      // last unanswered attempt is final 'failed'.
+      // A call that produced a result (campaign / ARZOOM feedback) is done even when the
+      // worker reports the hang-up as 'failed' (e.g. the customer dropped the line first).
+      const [hasResult] = rowsFrom(await db.execute(sql`
+        SELECT 1 FROM campaign_results WHERE telephony_job_id = ${jobId}
+        UNION ALL
+        SELECT 1 FROM arzoom_feedback WHERE telephony_job_id = ${jobId}
+        LIMIT 1
+      `).catch(() => []));
+      if ((answered && status === 'ended') || hasResult) {
+        await db.execute(sql`
+          UPDATE campaign_calls
+          SET status = 'completed', updated_at = now()
+          WHERE id = ${ccId}
+        `);
+      } else {
+        await db.execute(sql`
+          UPDATE campaign_calls cc
+          SET status = CASE WHEN cc.attempt_number < c.max_attempts THEN 'retrying' ELSE 'failed' END,
+              call_after = CASE WHEN cc.attempt_number < c.max_attempts
+                                THEN now() + make_interval(hours => c.retry_interval_hours)
+                                ELSE cc.call_after END,
+              updated_at = now()
+          FROM campaigns c
+          WHERE cc.id = ${ccId} AND c.id = cc.campaign_id
+        `);
+      }
       
+      // The customer asked to be called back at a given time (ARZOOM result "callback").
+      await applyCallbackSchedule(jobId).catch((err) => console.error(`[callback] job ${jobId}`, err));
+      await applyResultCallback(jobId).catch((err) => console.error(`[callback] job ${jobId}`, err));
+
       // Recalculate campaign statistics
       if (campaignId) {
         await updateCampaignStatistics(campaignId);
@@ -565,7 +595,7 @@ telephonyRouter.get('/jobs/next', async (req, res) => {
   }
 
   // A trunk maps to a single physical channel with the provider, so at most
-  // one job per non-null trunk_id may be claimed/dialing/answered at a time.
+  // per non-null trunk_id at most trunk_capacity.max_calls (default 1) jobs may be claimed/dialing/answered at a time.
   // The advisory lock closes the race window that FOR UPDATE SKIP LOCKED
   // alone leaves open: it only locks the chosen row, not the rows the
   // correlated NOT EXISTS reads, so two concurrent claims for the same
@@ -586,8 +616,8 @@ telephonyRouter.get('/jobs/next', async (req, res) => {
         AND (t.trunk_id IS NULL OR pg_try_advisory_xact_lock(hashtext(t.trunk_id)))
         AND (
           t.trunk_id IS NULL
-          OR NOT EXISTS (
-            SELECT 1 FROM telephony_jobs busy
+          OR (
+            SELECT count(*) FROM telephony_jobs busy
             WHERE busy.trunk_id = t.trunk_id
               AND busy.id <> t.id
               AND (
@@ -605,7 +635,7 @@ telephonyRouter.get('/jobs/next', async (req, res) => {
                   AND busy.created_at > now() - (${staleDialingSeconds} * interval '1 second')
                 )
               )
-          )
+          ) < coalesce((SELECT cap.max_calls FROM trunk_capacity cap WHERE cap.trunk_id = t.trunk_id), 1)
         )
       ORDER BY t.created_at ASC
       FOR UPDATE OF t SKIP LOCKED

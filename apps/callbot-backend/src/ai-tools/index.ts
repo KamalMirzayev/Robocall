@@ -1,10 +1,15 @@
 import { Type } from '@google/genai';
+import { partnerKbConfigured, searchPartnerKb } from '../partner-kb.js';
+import { FEEDBACK_OUTCOMES, recordArzoomFeedback } from '../arzoom-sync.js';
+import { recordCampaignResult } from '../campaign-results.js';
 
 export type ToolName =
   | 'request_callback'
   | 'send_whatsapp_msg'
   | 'search_knowledge_base'
-  | 'update_status';
+  | 'update_status'
+  | 'record_application_feedback'
+  | 'record_campaign_result';
 
 export interface ToolContext {
   customer: {
@@ -219,6 +224,11 @@ async function searchKnowledgeBaseTool(args: Record<string, unknown>) {
 
   if (!query) throw new Error('query is required');
 
+  // The partner knowledge base, when configured, is the source for products, prices and terms.
+  if (partnerKbConfigured()) {
+    return searchPartnerKb(query, { brand: cleanText(args.brand) || undefined, limit });
+  }
+
   const ragSearchUrl = cleanText(process.env.RAG_SEARCH_URL);
   if (!ragSearchUrl) {
     return { results: [], message: 'RAG_SEARCH_URL not configured' };
@@ -290,7 +300,84 @@ async function updateStatusTool(args: Record<string, unknown>, ctx: ToolContext)
   };
 }
 
+// ARZOOM leasing applications: the customer's final word, sent back to ARZOOM.
+async function recordApplicationFeedbackTool(args: Record<string, unknown>, ctx: ToolContext) {
+  const outcome = cleanText(args.outcome);
+  const reason = cleanText(args.reason);
+  if (ctx.dryRun) return { ok: true, dryRun: true, outcome, reason };
+  const num = (v: unknown) => {
+    const n = Number(String(v ?? '').replace(',', '.').replace(/[^0-9.]/g, ''));
+    return v == null || v === '' || !Number.isFinite(n) || n <= 0 ? null : n;
+  };
+  const requestedTerms = {
+    down_payment_pct: num(args.requested_down_payment_pct),
+    down_payment: num(args.requested_down_payment),
+    monthly_payment: num(args.requested_monthly_payment),
+    months: num(args.requested_months),
+  };
+  const doNotCall = args.do_not_call === true || String(args.do_not_call).toLowerCase() === 'true';
+  const result = await recordArzoomFeedback({ customerId: ctx.customer.id, telephonyJobId: ctx.telephonyJobId, outcome, reason, requestedTerms, doNotCall, callbackAt: cleanText(args.callback_at) || null });
+  if (!result.ok) throw new Error(result.error);
+  return { ok: true, message: 'Feedback saved' };
+}
+
+async function recordCampaignResultTool(args: Record<string, unknown>, ctx: ToolContext) {
+  const outcome = cleanText(args.outcome);
+  const reason = cleanText(args.reason);
+  if (ctx.dryRun) return { ok: true, dryRun: true, outcome, reason };
+  const doNotCall = args.do_not_call === true || String(args.do_not_call).toLowerCase() === 'true';
+  const result = await recordCampaignResult({
+    customerId: ctx.customer.id,
+    telephonyJobId: ctx.telephonyJobId,
+    outcome,
+    reason,
+    callbackAt: cleanText(args.callback_at) || null,
+    doNotCall,
+    brand: cleanText(args.brand) || null,
+  });
+  if (!result.ok) throw new Error(result.error);
+  return { ok: true, message: 'Result saved' };
+}
+
 export const aiToolDeclarations = [
+  {
+    name: 'record_application_feedback',
+    description:
+      "Save the customer's final word about their credit application at the end of the call (before saying goodbye). Use it for every application call. When the customer declines, reason must say why, in the customer's words.",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        outcome: {
+          type: Type.STRING,
+          description: `One of: ${Object.entries(FEEDBACK_OUTCOMES).map(([k, v]) => `${k} (${v})`).join(', ')}`,
+        },
+        reason: { type: Type.STRING, description: 'Detailed note in Azerbaijani (2-4 sentences): what the customer said, their reason, any date/time, branch or document they mentioned, and the agreed next step' },
+        requested_down_payment_pct: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): down payment percent the customer wants' },
+        requested_down_payment: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): down payment amount in AZN the customer wants' },
+        requested_monthly_payment: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): monthly payment in AZN the customer wants' },
+        requested_months: { type: Type.NUMBER, description: 'Terms objections only (wants_lower_monthly, wants_lower_down, wants_other_terms): term in months the customer wants' },
+        callback_at: { type: Type.STRING, description: 'outcome=callback only: the day and time the customer wants to be called, "YYYY-MM-DD HH:MM" in Baku time; "unknown" if the customer will not name a time' },
+        do_not_call: { type: Type.BOOLEAN, description: 'true only when the customer explicitly asks never to be called again / not to be disturbed / to remove their number' },
+      },
+      required: ['outcome'],
+    },
+  },
+  {
+    name: 'record_campaign_result',
+    description:
+      "Save the result of a service or credit-offer campaign call at the end of the call (before saying goodbye). The allowed outcomes are listed in the customer data (NƏTİCƏ).",
+    parameters: {
+      type: Type.OBJECT,
+      properties: {
+        outcome: { type: Type.STRING, description: 'One of the outcomes listed for this campaign in the customer data' },
+        reason: { type: Type.STRING, description: 'Short note in Azerbaijani (1-3 sentences): what the customer said and the agreed next step' },
+        callback_at: { type: Type.STRING, description: 'outcome=callback only: "YYYY-MM-DD HH:MM" in Baku time, or "unknown"' },
+        do_not_call: { type: Type.BOOLEAN, description: 'true only when the customer explicitly asks never to be called again' },
+        brand: { type: Type.STRING, description: 'outcome=agrees_send_link only: the brand the customer chose (Toyota, BYD, Mazda or Mitsubishi); leave empty if none' },
+      },
+      required: ['outcome'],
+    },
+  },
   {
     name: 'request_callback',
     description: 'Schedule a callback request from a human agent instead of transferring the call.',
@@ -322,11 +409,13 @@ export const aiToolDeclarations = [
   },
   {
     name: 'search_knowledge_base',
-    description: 'Search knowledge base using semantic search backend.',
+    description:
+      'Search the company knowledge base: car brands, models, trims, prices, leasing terms (down payment, monthly payment, term), documents and branches. Call it before answering any question about products, prices or conditions.',
     parameters: {
       type: Type.OBJECT,
       properties: {
-        query: { type: Type.STRING, description: 'Search query text' },
+        query: { type: Type.STRING, description: 'What to look up, e.g. "Toyota RAV4 qiymət" or "lizinq üçün sənədlər"' },
+        brand: { type: Type.STRING, description: 'Optional brand filter in lowercase, e.g. byd, toyota, mitsubishi, mazda' },
         limit: { type: Type.NUMBER, description: 'Maximum number of results, default 5' },
       },
       required: ['query'],
@@ -352,6 +441,8 @@ const aiToolHandlers: Record<ToolName, (args: Record<string, unknown>, ctx: Tool
   send_whatsapp_msg: sendWhatsappTool,
   search_knowledge_base: searchKnowledgeBaseTool,
   update_status: updateStatusTool,
+  record_application_feedback: recordApplicationFeedbackTool,
+  record_campaign_result: recordCampaignResultTool,
 };
 
 export function isAiToolName(name: string): name is ToolName {

@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { geminiCreditStatus } from './gemini-credit.js';
 import { sql } from 'drizzle-orm';
 import { db } from './db/index.js';
 
@@ -128,7 +129,47 @@ export const aiUsageRouter = Router();
 
 aiUsageRouter.get('/', async (req, res) => {
   const period = String(req.query.period || 'today');
-  const from = periodSql(period);
+  res.json(await usageSince(periodSql(period), period));
+});
+
+// Remaining Gemini balance. Google exposes no balance API for Gemini keys, so the admin
+// enters the balance shown in Google AI Studio / Cloud Billing (GEMINI_BALANCE_USD in
+// Integrations); the moment it is saved is the starting point, and the estimated spend
+// since then (the same estimate as the usage page) is taken off it.
+aiUsageRouter.get('/balance', async (_req, res) => {
+  try {
+    const [row] = rowsFrom(await db.execute(sql`SELECT value, updated_at FROM app_settings WHERE key = 'GEMINI_BALANCE_USD'`));
+    const raw = String(row?.value ?? process.env.GEMINI_BALANCE_USD ?? '').replace(',', '.').trim();
+    const starting = Number(raw);
+    const today = await usageSince(sql`date_trunc('day', now() AT TIME ZONE 'Asia/Baku') AT TIME ZONE 'Asia/Baku'`, 'today');
+    const lastHour = await usageSince(sql`now() - interval '1 hour'`, 'hour');
+    if (!raw || !Number.isFinite(starting)) {
+      res.json({ configured: false, credit: geminiCreditStatus(), todaySpentUsd: today.estimatedCostUsd, lastHourSpentUsd: lastHour.estimatedCostUsd, checkedAt: new Date().toISOString() });
+      return;
+    }
+    const setAt = row?.updated_at ? new Date(row.updated_at as string).toISOString() : null;
+    const spent = setAt ? (await usageSince(sql`${setAt}::timestamptz`, 'since')).estimatedCostUsd : 0;
+    const remaining = starting - spent;
+    const perHour = lastHour.estimatedCostUsd;
+    res.json({
+      configured: true,
+      credit: geminiCreditStatus(),
+      startingBalanceUsd: starting,
+      setAt,
+      spentSinceSetUsd: spent,
+      remainingUsd: remaining,
+      todaySpentUsd: today.estimatedCostUsd,
+      lastHourSpentUsd: perHour,
+      hoursLeftAtCurrentRate: perHour > 0 ? Math.max(0, remaining) / perHour : null,
+      checkedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.error('[ai-usage/balance]', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+async function usageSince(from: ReturnType<typeof sql>, period: string) {
   const rows = rowsFrom(await db.execute(sql`
     SELECT
       coalesce(sum(prompt_tokens), 0)::int AS "promptTokens",
@@ -206,7 +247,7 @@ aiUsageRouter.get('/', async (req, res) => {
     .reduce((sum, row) => sum + Number(row.estimatedCostUsd || 0), 0);
   const estimatedCostUsd = postCallEstimatedCostUsd + liveEstimatedCostUsd;
   const effectiveUsdPerToken = postCallTotalTokens ? postCallEstimatedCostUsd / postCallTotalTokens : null;
-  res.json({
+  return {
     provider: 'gemini',
     period: period === 'month' || period === 'week' ? period : 'today',
     promptTokens: tokenNumber(totals.promptTokens) + (legacyLiveUsage?.promptTokens || 0),
@@ -233,5 +274,5 @@ aiUsageRouter.get('/', async (req, res) => {
     byModel,
     note: dailyLimit ? '' : 'AI_DAILY_TOKEN_LIMIT is not configured; remaining tokens are unavailable.',
     liveUsageNote: 'Gemini Live API does not expose exact token usage here; live audio is persisted as a duration-based billing estimate.',
-  });
-});
+  };
+}

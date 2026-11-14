@@ -3,8 +3,8 @@
     "loading": "Yüklənir..."
   },
   "login": {
-    "adminPortal": "Admin Paneli",
-    "title": "Robocall",
+    "adminPortal": "Əməkdaş girişi",
+    "title": "AI zəng paneli",
     "subtitle": "Səsli əməliyyatları və telefoniyanı idarə etmək üçün daxil olun.",
     "timedOut": "Fəaliyyətsizliyə görə sistemdən çıxarıldınız. Zəhmət olmasa yenidən daxil olun.",
     "username": "İstifadəçi adı",
@@ -13,7 +13,13 @@
     "passwordPlaceholder": "Şifrəni daxil edin",
     "loggingIn": "Daxil olunur...",
     "loginButton": "Daxil ol",
-    "loginFailed": "Daxil olma uğursuz oldu"
+    "loginFailed": "Daxil olma uğursuz oldu",
+    "engineEyebrow": "ArzoomCall",
+    "engineTitle": "Kampaniyadan satışa qədər zəngləri süni intellekt aparır",
+    "engineText": "Müştəri məmnuniyyəti sorğuları, ödəniş xatırlatmaları, telesales və marketinq zəngləri bir paneldə.",
+    "chipCalls": "kampaniyalar",
+    "chipLang": "Azərbaycan dilində",
+    "chipRec": "yazı və transkript"
   },
   "home": {
     "loading": "Yüklənir..."
@@ -37,7 +43,7 @@
   "protectedLayout": {
     "loading": "Yüklənir...",
     "openMenu": "Menyunu aç",
-    "appName": "Robocall",
+    "appName": "ArzoomCall",
     "closeMenu": "Menyunu bağla",
     "role": "Rol",
     "navCalls": "Zənglər",
@@ -58,7 +64,12 @@
     "dynamicContextCodes": "Dinamik Kontekst Kodları",
     "aiBotTools": "Alətlər",
     "admin": "Admin",
-    "logout": "Çıxış"
+    "logout": "Çıxış",
+    "brandSub": "AI zəng mərkəzi",
+    "mainSection": "Panel",
+    "themeToggle": "Tema dəyiş",
+    "integrations": "İnteqrasiyalar",
+    "navAnalytics": "Analitika"
   },
   "authLayout": {
     "loading": "Yüklənir..."
@@ -98,7 +109,7 @@
   },
   "aiBotResponses": {
     "heading": "AI BOT - Cavablar",
-    "description": "Cavab şablonları bölməsi artıq robocall frontend marşrutlaşdırmasında mövcuddur.",
+    "description": "Cavab şablonları bölməsi artıq ArzoomCall frontend marşrutlaşdırmasında mövcuddur.",
     "note": "Backend saxlama/yükləmə funksionallığı növbəti mərhələdə əlavə oluna bilər."
   },
   "aiBotScenarios": {
@@ -209,7 +220,7 @@
   },
   "dynamicContextCodes": {
     "heading": "Dinamik Kontekst Kodları",
-    "description": "Zəng başlatarkən xarici müraciət edənlərin (məsələn, mobil tətbiq backend-i) dynamicContext kimi göndərə biləcəyi kodların reyestri — hər biri sərbəst mətn əvəzinə şablonun {DYNAMIC_CONTEXT} yerinə qoyulan, Robocall tərəfindən yazılmış ifadəyə uyğun gəlir.",
+    "description": "Zəng başlatarkən xarici müraciət edənlərin (məsələn, mobil tətbiq backend-i) dynamicContext kimi göndərə biləcəyi kodların reyestri — hər biri sərbəst mətn əvəzinə şablonun {DYNAMIC_CONTEXT} yerinə qoyulan, ArzoomCall tərəfindən yazılmış ifadəyə uyğun gəlir.",
     "newCode": "Yeni Kod",
     "newCodeTitle": "Yeni Dinamik Kontekst Kodu",
     "editCodeTitle": "Dinamik Kontekst Kodunu Redaktə Et",
@@ -318,11 +329,11 @@
     "retryIntervalHours": "Təkrar Cəhd Intervalı (saat)",
     "settingsHeading": "Kampaniya Parametrləri",
     "paymentPriorityTitle": "Ən yüksək aylıq ödənişdən zəng etməyə başla",
-    "paymentPriorityDesc": "PKS müştəriləri idxal edildikdən sonra, zənglər ən yüksək `odenis_ayliq` dəyərinə görə prioritetləşdirilsin.",
+    "paymentPriorityDesc": "Zənglər ən böyük aylıq ödənişi olan müştərilərdən başlasın (PKS idxalı üçün).",
     "skipNextDayTitle": "Uğurlu zəngdən sonra növbəti gün zəng etmə",
     "skipNextDayDesc": "Dünənki zəng uğurlu olubsa, müştərini sabahkı növbəyə salma.",
     "dailyRefreshTitle": "Müştəri məlumatlarını hər gün yenilə",
-    "dailyRefreshDesc": "Hər səhər saat 08:30-da bu kampaniyada gözləyən müştərilərin borc/ödəniş məlumatları PKS-dən yenilənir. Yalnız PKS idxalı ilə yaradılmış kampaniyalar üçün işləyir.",
+    "dailyRefreshDesc": "Hər səhər 08:30-da gözləyən müştərilərin borc və ödəniş məlumatları PKS-dən yenilənsin. Yalnız PKS idxalı ilə yaradılmış kampaniyalarda işləyir.",
     "runWeekdays": "İcra Günləri",
     "selectWeekday": "Ən azı bir gün seçin.",
     "dailyStartTime": "Gündəlik Başlanğıc Vaxtı",
@@ -339,6 +350,12 @@
       "fri": "C",
       "sat": "Ş",
       "sun": "B"
+    },
+    "arzoom": {
+      "autoAddTitle": "Arzoom-dan gələn yeni müraciətləri avtomatik əlavə et",
+      "autoAddDesc": "Söndürülübsə, müraciətləri yalnız İdxal → Arzoom-dan İdxal ilə özünüz əlavə edirsiniz. Açılsa, seçilmiş statuslara uyğun bütün müraciətlər (yeniləri də) kampaniyaya düşür.",
+      "requeueTitle": "Müraciətin statusu dəyişəndə yenidən zəng et",
+      "requeueDesc": "Məsələn, əlavə sənəd gözlənilən müraciətə təklif göndəriləndə müştəriyə yeni statusla yenidən zəng edilir."
     }
   },
   "dialplan": {
@@ -561,7 +578,8 @@
     "active": "Aktiv",
     "inactive": "Qeyri-aktiv",
     "initiatingCall": "Zəng başladılır...",
-    "initiateCall": "Zəngi başlat"
+    "initiateCall": "Zəngi başlat",
+    "pickCustomerFromList": "Müştərini açılan siyahıdan seçin (və ya bazada olan telefon nömrəsini yazın) və agent seçin."
   },
   "customerForm": {
     "heading": "Yeni Müştəri Əlavə Et",
@@ -657,6 +675,44 @@
       "lastSyncedAt": "Son Sinxronizasiya",
       "createdAt": "Yaradılma Tarixi",
       "actions": "Əməliyyatlar"
+    },
+    "views": {
+      "arzoom": "Arzoom müraciətləri",
+      "pks": "PKS şablonu",
+      "arzoomHint": "Arzoom-dan avtomatik gələn kredit müraciətləri.",
+      "pksHint": "Kredit və borc yığımı üçün köhnə sütunlar (Arzoom-dan başqa müştərilər)."
+    },
+    "arzoom": {
+      "application": "Müraciət No",
+      "status": "Status",
+      "car": "Avtomobil",
+      "carPrice": "Avtomobilin qiyməti",
+      "terms": "Şərtlər",
+      "note": "Sənədlər / səbəb",
+      "guarantor": "Zamin",
+      "lastCall": "Son əlaqə",
+      "deleted": "Silinib",
+      "yes": "Var",
+      "no": "Yox",
+      "down": "ilkin",
+      "months": "ay",
+      "perMonth": "ay",
+      "history": {
+        "details": "Ətraflı",
+        "historyTitle": "Əlaqə tarixçəsi",
+        "result": "Nəticə",
+        "reason": "Səbəb / qeyd",
+        "calls": "Zənglər",
+        "noHistory": "Hələ zəng və ya nəticə yoxdur.",
+        "summary": "Xülasə",
+        "transcript": "Transkript",
+        "duration": "Müddət",
+        "sentToArzoom": "Arzoom-a göndərilib",
+        "notSent": "Arzoom-a göndərilməyib",
+        "loading": "Yüklənir...",
+        "close": "Bağla",
+        "sec": "san"
+      }
     }
   },
   "admin": {
@@ -962,7 +1018,15 @@
       "dbResultPrefix": "Uğurla idxal edildi:",
       "dbResultMid": "müştəri, kampaniyaya əlavə edildi:",
       "dbResultSuffix": "ədəd.",
-      "dbResultAlreadyAttachedSuffix": "artıq əlavə edilmişdi."
+      "dbResultAlreadyAttachedSuffix": "artıq əlavə edilmişdi.",
+      "arzoomTab": "Arzoom-dan İdxal",
+      "arzoomHint": "Arzoom-dan gələn kredit müraciətlərini statusa görə bu kampaniyaya əlavə edin. Rədd edilmiş müraciətlərə zəng edilmir.",
+      "arzoomEligible": "Uyğun müraciət",
+      "arzoomCounting": "Sayılır…",
+      "arzoomAdded": "Əlavə olundu",
+      "arzoomAlready": "artıq kampaniyada idi",
+      "arzoomImporting": "Əlavə olunur…",
+      "arzoomImportButton": "Müraciətləri kampaniyaya əlavə et"
     }
   },
   "usage": {
@@ -996,5 +1060,180 @@
     "trunkAutoSelected": "Avtomatik seçilib (trunk təyin edilməyib)",
     "pricingInfo": "Hibrid plan:",
     "pricingDetail": "/ay bazalıq + 0.20 /dəqiqə cavablanmış zənglər üçün. Yalnız uğurlu zənglər (müştəri cavab verdi) ödənişlidir — məşğul, cavabsız və səhv nömrələr pulsuzdur."
+  },
+  "segments": {
+    "heading": "Seqmentlər",
+    "subtitle": "Hər istifadə ssenarisi üçün hazır təlimat şablonu. Bir kliklə əlavə edin, sonra mətni redaktə edin.",
+    "addTemplate": "Şablonu əlavə et",
+    "templatesReady": "şablon",
+    "addAnother": "Yenisini yarat",
+    "adding": "Əlavə olunur…",
+    "added": "Şablon əlavə olundu. Aşağıdakı siyahıda redaktə edə bilərsiniz.",
+    "segment": "Seqment",
+    "allSegments": "Bütün seqmentlər",
+    "noSegment": "Seqmentsiz",
+    "noTemplateForSegment": "Bu seqment üçün şablon yoxdur. Təlimat Şablonları səhifəsində bir kliklə əlavə edin.",
+    "defaultTemplate": "Aktiv (standart) şablon",
+    "chooseSegmentHint": "Zəngin məqsədini seçin: şablon siyahısı süzülür, parametrlər ona uyğun qurulur.",
+    "presetApplied": "Seqmentə uyğun parametrlər tətbiq olundu (cəhd sayı, interval, günlər və saatlar). İstəsəniz dəyişin.",
+    "paramsHeading": "Seqment parametrləri",
+    "paramsHint": "Bot zəngdə bu məlumatdan istifadə edəcək. Boş sahələr nəzərə alınmır."
+  },
+  "integrations": {
+    "heading": "İnteqrasiyalar",
+    "subtitle": "API açarları və tokenlər burada saxlanır, kodda və .env faylında deyil. Gizli açarlar yazıldıqdan sonra bir daha göstərilmir.",
+    "loading": "Yüklənir…",
+    "loadFailed": "Ayarlar yüklənmədi",
+    "saveFailed": "Yadda saxlanmadı",
+    "adminOnly": "Bu bölmə yalnız admin üçündür.",
+    "set": "Qoşulub",
+    "fromEnv": ".env-dən",
+    "notSet": "Qoşulmayıb",
+    "replacePlaceholder": "Dəyişmək üçün yenisini yapışdırın",
+    "pastePlaceholder": "Açarı yapışdırın",
+    "toggleVisibility": "Göstər / gizlə",
+    "save": "Yadda saxla",
+    "saving": "Saxlanır…",
+    "clear": "Sil",
+    "saved": "Saxlanıldı",
+    "updated": "Yeniləndi:",
+    "test": "Yoxla",
+    "testing": "Yoxlanır…",
+    "testOk": "Açar işləyir",
+    "testFailed": "Xəta:",
+    "reload": "Yenidən yüklə",
+    "kbOff": "Qoşulmayıb",
+    "kbChunks": "qeyd yüklənib",
+    "groups": {
+      "ai": {
+        "title": "Gemini (AI səs)",
+        "text": "Zənglər, xülasə və analiz bu açarla işləyir. Açarın aid olduğu Google hesabı ödənişi qarşılayır."
+      },
+      "knowledge": {
+        "title": "Bilik bazası",
+        "text": "Bot zəng zamanı model, qiymət və şərtləri buradan oxuyur. Partnyorun webhook ünvanı və token-i."
+      },
+      "whatsapp": {
+        "title": "WhatsApp (Evolution API)",
+        "text": "Botun zəng zamanı müştəriyə WhatsApp mesajı göndərməsi üçün."
+      },
+      "webhook": {
+        "title": "Xarici webhook",
+        "text": "Geri zəng, status və WhatsApp hadisələri bu ünvana göndərilir."
+      },
+      "pks": {
+        "title": "PKS idxalı",
+        "text": "Kampaniyaya PKS bazasından müştəri idxalı üçün."
+      },
+      "arzoom": {
+        "title": "Arzoom kredit müraciətləri",
+        "text": "Arzoom-dakı müraciətlər hər dəqiqə müştəri kimi ArzoomCall-a çəkilir. Tokeni Arzoom panelində (İstifadəçilər → ArzoomCall inteqrasiyası) yaradın və buraya yapışdırın."
+      }
+    },
+    "keys": {
+      "GEMINI_API_KEY": "Gemini API açarı",
+      "PARTNER_KB_URL": "Webhook ünvanı",
+      "PARTNER_KB_TOKEN": "Token",
+      "RAG_SEARCH_URL": "Alternativ axtarış ünvanı (RAG)",
+      "EVOLUTION_API_URL": "API ünvanı",
+      "EVOLUTION_API_KEY": "API açarı",
+      "EVOLUTION_INSTANCE_NAME": "Instance adı",
+      "WEBHOOK_URL": "Webhook ünvanı",
+      "WEBHOOK_SECRET": "Webhook sirri",
+      "PKS_DB_QUERY_URL": "Sorğu ünvanı",
+      "PKS_DB_QUERY_API_KEY": "API açarı",
+      "ARZOOM_API_URL": "Arzoom sayt ünvanı",
+      "ARZOOM_API_TOKEN": "İnteqrasiya tokeni",
+      "SALES_TRANSFER_GROUPS": "Satış təmsilçiləri (marka: daxili nömrələr)",
+      "GEMINI_BALANCE_USD": "Gemini balansı (USD)"
+    },
+    "arzoomOff": "Qoşulmayıb",
+    "arzoomApplications": "müraciət",
+    "arzoomLastSync": "son yeniləmə",
+    "syncNow": "İndi yenilə"
+  },
+  "analytics": {
+    "title": "Zəng analitikası",
+    "subtitle": "Zənglər, danışıqların nəticəsi və təkrar cəhd növbəsi, hər 30 saniyədən bir yenilənir",
+    "updated": "yeniləndi",
+    "today": "Bu gün",
+    "lastDays": "{n} gün",
+    "allCampaigns": "Bütün kampaniyalar",
+    "refresh": "Yenilə",
+    "loading": "Yüklənir...",
+    "loadError": "Analitikanı yükləmək olmadı",
+    "empty": "Hələ məlumat yoxdur",
+    "kpi": {
+      "attempts": "Zəng cəhdi",
+      "answered": "Cavablandı",
+      "unanswered": "Cavabsız",
+      "inProgress": "davam edir",
+      "customers": "Əlaqə saxlanılan müştəri",
+      "customersHint": "danışılan / zəng edilən",
+      "avgDuration": "Orta danışıq",
+      "totalMinutes": "Danışıq dəqiqəsi",
+      "transfers": "Satışa qoşuldu"
+    },
+    "outcomes": "Danışıqların nəticəsi",
+    "queue": "Kampaniya növbəsi",
+    "retryRule": "cavabsız: {h} saatdan sonra, maks. {n} cəhd",
+    "nextRetry": "Növbəti təkrar zəng",
+    "queueStatus": {
+      "completed": "Danışılıb",
+      "attempting": "Zəng gedir",
+      "retrying": "Təkrar gözləyir",
+      "pending": "Növbədə",
+      "failed": "Əlaqə alınmadı",
+      "cancelled": "Ləğv"
+    },
+    "byHour": "Saatlar üzrə (yaşıl: cavablanan)",
+    "byDay": "Günlər üzrə (yaşıl: cavablanan)",
+    "failures": "Cavabsız zənglərin səbəbi",
+    "failure": {
+      "no_answer": "Cavab vermədi",
+      "busy": "Məşğul",
+      "congestion": "Şəbəkə / nömrə əlçatmaz",
+      "stale": "Zəng yarımçıq qaldı",
+      "unknown": "Naməlum",
+      "other": "Digər"
+    },
+    "transfers": "Satış təmsilçilərinə ötürmələr",
+    "rep": "Təmsilçi",
+    "brand": "Marka",
+    "connected": "Qoşuldu",
+    "missed": "Cavab vermədi",
+    "recent": "Son danışıqlar",
+    "col": {
+      "time": "Vaxt",
+      "customer": "Müştəri",
+      "status": "Müraciət statusu",
+      "call": "Zəng",
+      "outcome": "Nəticə",
+      "analysis": "Danışığın təhlili"
+    },
+    "appStatus": {
+      "offer": "Təklif göndərilib",
+      "info": "Əlavə sənəd",
+      "accepted": "Satışa ötürülüb",
+      "declined": "İmtina",
+      "cancelled": "Ləğv",
+      "review": "Baxılır",
+      "rejected": "Rədd",
+      "reoffer": "Təkrar təklif",
+      "guarantor": "Zamin"
+    }
+  },
+  "geminiBalance": {
+    "title": "Gemini balansı",
+    "notSet": "Daxil edilməyib",
+    "today": "Bu gün xərc",
+    "starting": "Daxil edilən balans",
+    "spentSince": "O vaxtdan xərc",
+    "lastHour": "Son 1 saat",
+    "hoursLeft": "İndiki sürətlə təxminən {h} saata çatar",
+    "setAt": "Balans daxil edilib:",
+    "hint": "Google balansı API ilə vermir. Sistem balansın bitməsini avtomatik aşkar edir və zəngləri dayandırır. Qalığı rəqəmlə görmək üçün AI Studio-dakı balansı İnteqrasiyalar → Gemini balansı (USD) sahəsinə yazın (yalnız balans artırılanda), sistem sonrakı xərci hər dəqiqə çıxır.",
+    "depleted": "Balans bitib",
+    "depletedHint": "Google Gemini sorğuları balans bitdiyinə görə rədd edir. Kampaniya zəngləri dayandırılıb, balans artırılan kimi (3 dəqiqə ərzində) özü bərpa olunacaq."
   }
 }

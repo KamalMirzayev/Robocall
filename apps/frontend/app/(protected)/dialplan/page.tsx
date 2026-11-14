@@ -81,7 +81,7 @@ export default function DialplanPage() {
                 console.error(err);
               }
             }}
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded font-medium"
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-[#fff] rounded font-medium"
           >
             {t('dialplan.generateReload')}
           </button>
@@ -97,7 +97,7 @@ export default function DialplanPage() {
               });
               setEditing({});
             }}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded"
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-[#fff] rounded"
           >
             {t('dialplan.addRule')}
           </button>
@@ -171,7 +171,7 @@ export default function DialplanPage() {
           <div className="flex gap-2 mt-6">
             <button
               onClick={handleSaveRule}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded"
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-[#fff] rounded"
             >
               {t('dialplan.saveRule')}
             </button>

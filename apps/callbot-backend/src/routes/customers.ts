@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { requireRole } from '../auth.js';
 import { db } from '../db/index.js';
 import { customers } from '../db/schema.js';
-import { desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, or, sql, type SQL } from 'drizzle-orm';
 
 export const customersRouter = Router();
 
@@ -219,7 +219,15 @@ function searchCondition(search: string): SQL | undefined {
 // `search` too, so InitiateCallForm's dropdown doesn't need to fetch everyone either).
 customersRouter.get('/', async (req, res) => {
   const search = String(req.query.search ?? '');
-  const where = searchCondition(search);
+  // source=arzoom lists only ARZOOM applications; source=other everything else.
+  const source = String(req.query.source ?? '');
+  const sourceWhere = source === 'arzoom'
+    ? sql`${customers.sourceSystem} = 'arzoom'`
+    : source === 'other'
+      ? sql`${customers.sourceSystem} IS DISTINCT FROM 'arzoom'`
+      : undefined;
+  const searchWhere = searchCondition(search);
+  const where = searchWhere && sourceWhere ? and(searchWhere, sourceWhere) : searchWhere ?? sourceWhere;
   const hasPaging = req.query.page != null || req.query.pageSize != null;
 
   if (!hasPaging && !where) {
@@ -239,6 +247,37 @@ customersRouter.get('/', async (req, res) => {
   ]);
 
   res.json({ data: rows, total: count, page, pageSize });
+});
+
+// Contact history for one customer: every call (with its AI summary) and every recorded
+// application result, newest first. Feeds the "Son əlaqə" details dialog.
+customersRouter.get('/:id/contact-history', async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) {
+    res.status(400).json({ error: 'Invalid id' });
+    return;
+  }
+  const rows = (r: unknown) => ((r as { rows?: unknown[] }).rows ?? (r as unknown[])) as Record<string, unknown>[];
+  const callRows = rows(await db.execute(sql`
+    SELECT c.id, c.telephony_job_id AS "telephonyJobId", c.started_at AS "startedAt", c.ended_at AS "endedAt",
+      c.duration_seconds AS "durationSeconds", c.summary, c.transcript,
+      tj.status AS "jobStatus", tj.phone
+    FROM calls c LEFT JOIN telephony_jobs tj ON tj.id = c.telephony_job_id
+    WHERE c.customer_id = ${id}
+    ORDER BY c.started_at DESC LIMIT 30
+  `));
+  let feedbackRows: Record<string, unknown>[] = [];
+  try {
+    feedbackRows = rows(await db.execute(sql`
+      SELECT id, telephony_job_id AS "telephonyJobId", outcome, outcome_label AS "outcomeLabel", reason,
+        created_at AS "createdAt", pushed_at AS "pushedAt", push_error AS "pushError"
+      FROM arzoom_feedback WHERE customer_id = ${id}
+      ORDER BY id DESC LIMIT 50
+    `));
+  } catch {
+    feedbackRows = [];
+  }
+  res.json({ calls: callRows, feedback: feedbackRows });
 });
 
 customersRouter.get('/:id', async (req, res) => {

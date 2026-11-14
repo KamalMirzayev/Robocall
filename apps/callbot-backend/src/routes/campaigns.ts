@@ -5,6 +5,9 @@ import { sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { type PksRow, validateFin } from '../pks-utils.js';
 import { buildWorkbook, HEADER_STYLE, type XlsxCellInput } from '../xlsx.js';
+import { isCampaignSegment, sanitizeSegmentParams } from '../campaign-segments.js';
+import { importArzoomToCampaign } from '../arzoom-sync.js';
+import { importCustomerSheet } from '../excel-import.js';
 
 export type PksFilters = Record<string, string>;
 export type PksFilterMode = 'and' | 'or' | 'grouped';
@@ -535,7 +538,7 @@ async function ensureCampaignExistsOrCreate(campaignId: number, seed: CampaignSe
     ? seed.trunkIds.filter(Boolean).slice(0, 50).join(',')
     : null;
   const runWeekdays = Array.isArray(seed?.runWeekdays) ? seed?.runWeekdays.filter(Boolean).slice(0, 7) : [];
-  const runWindowStart = cleanText(seed?.runWindowStart) || '09:00';
+  const runWindowStart = cleanText(seed?.runWindowStart) || '10:30';
   const runWindowEnd = cleanText(seed?.runWindowEnd) || '19:00';
   const scheduleConfig = {
     runWeekdays,
@@ -1368,7 +1371,7 @@ campaignsRouter.get('/', async (req, res) => {
              new_customer_matches_count, new_customer_matches_checked_at,
              run_weekdays, run_window_start, run_window_end,
              run_start_date::text, run_end_date::text,
-             base_template_id, agent_id, trunk_id, trunk_ids,
+             base_template_id, agent_id, trunk_id, trunk_ids, segment, segment_params,
              total_customers, completed_calls, successful_calls,
              created_at, updated_at
       FROM campaigns
@@ -1392,6 +1395,8 @@ campaignsRouter.get('/', async (req, res) => {
       runStartDate: c.run_start_date,
       runEndDate: c.run_end_date,
       baseTemplateId: c.base_template_id,
+      segment: c.segment ?? null,
+      segmentParams: c.segment_params ?? null,
       agentId: c.agent_id,
       trunkId: c.trunk_id,
       trunkIds: String(c.trunk_ids || '').split(',').map((t: string) => t.trim()).filter(Boolean),
@@ -1467,7 +1472,7 @@ campaignsRouter.get('/:id', async (req, res) => {
              new_customer_matches_count, new_customer_matches_checked_at,
              run_weekdays, run_window_start, run_window_end,
              run_start_date::text, run_end_date::text,
-             base_template_id, agent_id, trunk_id, trunk_ids,
+             base_template_id, agent_id, trunk_id, trunk_ids, segment, segment_params,
              total_customers, completed_calls, successful_calls,
              created_at, updated_at
       FROM campaigns
@@ -1497,6 +1502,8 @@ campaignsRouter.get('/:id', async (req, res) => {
       runStartDate: c.run_start_date,
       runEndDate: c.run_end_date,
       baseTemplateId: c.base_template_id,
+      segment: c.segment ?? null,
+      segmentParams: c.segment_params ?? null,
       agentId: c.agent_id,
       trunkId: c.trunk_id,
       trunkIds: String(c.trunk_ids || '').split(',').map((t: string) => t.trim()).filter(Boolean),
@@ -1529,9 +1536,16 @@ campaignsRouter.get('/:id/calls', async (req, res) => {
       SELECT
         cc.id,
         cc.customer_id AS "customerId",
-        concat_ws(' ', c.name, c.surname, c.father_name) AS "customerName",
+        nullif(trim(concat_ws(' ', c.name, nullif(c.surname, '-'), c.father_name)), '') AS "customerName",
         c.fin AS "fin",
         coalesce(c.mobile_phone, c.phone) AS phone,
+        -- Excel-imported customers: brand and model from the uploaded sheet.
+        nullif(trim(concat_ws(' ',
+          CASE WHEN lower(coalesce(c.import_data->>'model', '')) LIKE lower(coalesce(c.import_data->>'brand', '')) || '%'
+                    AND coalesce(c.import_data->>'brand', '') <> '' THEN NULL ELSE c.import_data->>'brand' END,
+          coalesce(c.import_data->>'model',
+            (SELECT e.value FROM jsonb_each_text(CASE WHEN jsonb_typeof(c.import_data->'extra') = 'object' THEN c.import_data->'extra' ELSE '{}'::jsonb END) e
+             WHERE e.key ILIKE '%model%' LIMIT 1)))), '') AS car,
         cc.status,
         cc.attempt_number AS "attemptNumber",
         cc.updated_at AS "updatedAt",
@@ -1539,17 +1553,35 @@ campaignsRouter.get('/:id/calls', async (req, res) => {
         lc.started_at AS "lastCallStartedAt",
         lc.ended_at AS "lastCallEndedAt",
         lc.duration_seconds AS "lastCallDurationSeconds",
-        lc.summary AS "lastCallSummary",
+        -- ARZOOM application calls: the result the bot recorded for that very call, not the
+        -- generic (debt-collection) transcript summary.
+        CASE WHEN c.source_system = 'arzoom' THEN fb.text
+             WHEN c.source_system = 'excel' THEN coalesce(cr.text, lc.summary)
+             ELSE lc.summary END AS "lastCallSummary",
         lc.description AS "lastCallDescription"
       FROM campaign_calls cc
       LEFT JOIN customers c ON c.id = cc.customer_id
       LEFT JOIN LATERAL (
-        SELECT ca.id, ca.started_at, ca.ended_at, ca.duration_seconds, ca.summary, ca.description
+        SELECT ca.id, ca.started_at, ca.ended_at, ca.duration_seconds, ca.summary, ca.description, ca.telephony_job_id
         FROM calls ca
         WHERE ca.customer_id = cc.customer_id
         ORDER BY ca.started_at DESC, ca.id DESC
         LIMIT 1
       ) lc ON true
+      LEFT JOIN LATERAL (
+        SELECT concat_ws(' — ', f.outcome_label, nullif(f.reason, '')) AS text
+        FROM arzoom_feedback f
+        WHERE lc.telephony_job_id IS NOT NULL AND f.telephony_job_id = lc.telephony_job_id
+        ORDER BY f.id DESC
+        LIMIT 1
+      ) fb ON true
+      LEFT JOIN LATERAL (
+        SELECT concat_ws(' — ', r.outcome_label, nullif(r.reason, '')) AS text
+        FROM campaign_results r
+        WHERE r.customer_id = cc.customer_id AND (r.campaign_id = cc.campaign_id OR r.campaign_id IS NULL)
+        ORDER BY r.id DESC
+        LIMIT 1
+      ) cr ON true
       WHERE cc.campaign_id = ${campaignId}
       ORDER BY cc.updated_at DESC, cc.id DESC
     `));
@@ -1689,7 +1721,7 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
   const runWeekdays = Array.isArray(req.body?.runWeekdays)
     ? req.body.runWeekdays.filter(Boolean).slice(0, 7).join(',')
     : '';
-  const runWindowStart = cleanText(req.body?.runWindowStart) || '09:00';
+  const runWindowStart = cleanText(req.body?.runWindowStart) || '10:30';
   const runWindowEnd = cleanText(req.body?.runWindowEnd) || '19:00';
   const runStartDate = cleanText(req.body?.runStartDate) || null;
   const runEndDate = cleanText(req.body?.runEndDate) || null;
@@ -1699,6 +1731,8 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
   }
   const description = cleanText(req.body?.description) || null;
   const baseTemplateId = req.body?.baseTemplateId || null;
+  const segment = isCampaignSegment(req.body?.segment) ? req.body.segment : null;
+  const segmentParams = sanitizeSegmentParams(segment, req.body?.segmentParams);
   const agentId = req.body?.agentId || null;
   const trunkId = req.body?.trunkId || null;
   const trunkIds = Array.isArray(req.body?.trunkIds)
@@ -1711,19 +1745,19 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
         name, description, status, max_attempts, retry_interval_hours,
         order_by_monthly_payment_desc, skip_next_day_after_success, daily_customer_refresh,
         run_weekdays, run_window_start, run_window_end, run_start_date, run_end_date,
-        base_template_id, agent_id, trunk_id, trunk_ids,
+        base_template_id, agent_id, trunk_id, trunk_ids, segment, segment_params,
         total_customers, completed_calls, successful_calls, created_at, updated_at
       ) VALUES (
         ${name}, ${description}, ${status}, ${maxAttempts}, ${retryIntervalHours},
         ${orderByMonthlyPaymentDesc}, ${skipNextDayAfterSuccess}, ${dailyCustomerRefresh},
         ${runWeekdays}, ${runWindowStart}, ${runWindowEnd}, ${runStartDate}::date, ${runEndDate}::date,
-        ${baseTemplateId}, ${agentId}, ${trunkId}, ${trunkIds},
+        ${baseTemplateId}, ${agentId}, ${trunkId}, ${trunkIds}, ${segment}::varchar, ${segmentParams ? JSON.stringify(segmentParams) : null}::jsonb,
         0, 0, 0, now(), now()
       )
       RETURNING id, name, description, status, max_attempts, retry_interval_hours,
                 order_by_monthly_payment_desc, skip_next_day_after_success, daily_customer_refresh,
                 run_weekdays, run_window_start, run_window_end, run_start_date::text, run_end_date::text,
-                base_template_id, agent_id, trunk_id, trunk_ids,
+                base_template_id, agent_id, trunk_id, trunk_ids, segment, segment_params,
                 total_customers, completed_calls, successful_calls,
                 created_at, updated_at
     `));
@@ -1732,6 +1766,10 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
       return;
     }
     const c = inserted[0];
+    // A "loan application result" campaign starts with the ARZOOM applications that fit it.
+    if (c.segment === 'application_status' && (c.segment_params as { autoAdd?: string } | null)?.autoAdd === 'on') {
+      await importArzoomToCampaign(Number(c.id)).catch((err) => console.error('ARZOOM import failed', err));
+    }
     res.status(201).json({
       id: c.id,
       name: c.name,
@@ -1748,6 +1786,8 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
       runStartDate: c.run_start_date,
       runEndDate: c.run_end_date,
       baseTemplateId: c.base_template_id,
+      segment: c.segment ?? null,
+      segmentParams: c.segment_params ?? null,
       agentId: c.agent_id,
       trunkId: c.trunk_id,
       trunkIds: String(c.trunk_ids || '').split(',').map((t: string) => t.trim()).filter(Boolean),
@@ -1759,6 +1799,52 @@ campaignsRouter.post('/', requireRole('admin', 'campaign_manager'), async (req, 
     });
   } catch (err) {
     res.status(500).json(buildRouteError(err, 'failed to create campaign'));
+  }
+});
+
+// ARZOOM applications -> this campaign, by application status. body: { statuses?: string[], dryRun?: boolean }
+campaignsRouter.post('/:id/import-arzoom', requireRole('admin', 'campaign_manager'), async (req, res) => {
+  const campaignId = Number(req.params.id);
+  if (!Number.isInteger(campaignId) || campaignId <= 0) {
+    res.status(400).json({ error: 'invalid campaign id' });
+    return;
+  }
+  const statuses = Array.isArray(req.body?.statuses) ? req.body.statuses.map((s: unknown) => String(s)).slice(0, 10) : undefined;
+  try {
+    res.json(await importArzoomToCampaign(campaignId, { statuses, dryRun: req.body?.dryRun === true }));
+  } catch (err) {
+    res.status(500).json(buildRouteError(err, 'failed to import ARZOOM applications'));
+  }
+});
+
+// POST /:id/import/excel { file: base64 .xlsx, dryRun } — customers for the service and
+// credit-offer campaigns (excel-import.ts). dryRun shows the recognised columns and counts.
+campaignsRouter.post('/:id/import/excel', requireRole('admin', 'campaign_manager'), async (req, res) => {
+  const campaignId = Number(req.params.id);
+  if (!Number.isInteger(campaignId) || campaignId <= 0) {
+    res.status(400).json({ error: 'invalid campaign id' });
+    return;
+  }
+  const b64 = String(req.body?.file ?? '').replace(/^data:[^,]*,/, '');
+  if (!b64) {
+    res.status(400).json({ error: 'file is required' });
+    return;
+  }
+  try {
+    const [campaign] = rowsFrom(await db.execute(sql`SELECT id FROM campaigns WHERE id = ${campaignId} LIMIT 1`));
+    if (!campaign) {
+      res.status(404).json({ error: 'campaign not found' });
+      return;
+    }
+    const buffer = Buffer.from(b64, 'base64');
+    if (buffer.length < 100 || buffer.length > 20 * 1024 * 1024) {
+      res.status(400).json({ error: 'Fayl boşdur və ya çox böyükdür (20 MB-dan çox)' });
+      return;
+    }
+    res.json(await importCustomerSheet(campaignId, buffer, req.body?.dryRun === true));
+  } catch (err) {
+    const message = (err as Error)?.message || 'failed to import Excel';
+    res.status(400).json({ error: /zip|central directory|end of data|corrupted/i.test(message) ? 'Fayl .xlsx formatında deyil' : message });
   }
 });
 
@@ -1790,6 +1876,10 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
   const runStartDate = req.body?.runStartDate !== undefined ? cleanText(req.body.runStartDate) : null;
   const runEndDate = req.body?.runEndDate !== undefined ? cleanText(req.body.runEndDate) : null;
   const baseTemplateId = req.body?.baseTemplateId !== undefined ? req.body.baseTemplateId : null;
+  // The segment and its parameters are saved together; '' clears the segment.
+  const segmentGiven = req.body?.segment !== undefined;
+  const segment = segmentGiven && isCampaignSegment(req.body.segment) ? (req.body.segment as string) : null;
+  const segmentParams = segmentGiven ? sanitizeSegmentParams(segment, req.body?.segmentParams) : null;
   const agentId = req.body?.agentId !== undefined ? req.body.agentId : null;
   const trunkId = req.body?.trunkId !== undefined ? req.body.trunkId : null;
   const trunkIds = req.body?.trunkIds !== undefined
@@ -1814,6 +1904,7 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
     && agentId === null
     && trunkId === null
     && trunkIds === null
+    && !segmentGiven
   ) {
     res.status(400).json({ error: 'no fields to update' });
     return;
@@ -1844,12 +1935,14 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
           agent_id = coalesce(${agentId}::integer, agent_id),
           trunk_id = coalesce(${trunkId}, trunk_id),
           trunk_ids = coalesce(${trunkIds}, trunk_ids),
+          segment = CASE WHEN ${segmentGiven}::boolean THEN ${segment}::varchar ELSE segment END,
+          segment_params = CASE WHEN ${segmentGiven}::boolean THEN ${segmentParams ? JSON.stringify(segmentParams) : null}::jsonb ELSE segment_params END,
           updated_at = now()
       WHERE id = ${campaignId}
       RETURNING id, name, description, status, max_attempts, retry_interval_hours,
                 order_by_monthly_payment_desc, skip_next_day_after_success, daily_customer_refresh,
                 run_weekdays, run_window_start, run_window_end, run_start_date::text, run_end_date::text,
-                base_template_id, agent_id, trunk_id, trunk_ids,
+                base_template_id, agent_id, trunk_id, trunk_ids, segment, segment_params,
                 total_customers, completed_calls, successful_calls,
                 created_at, updated_at
     `));
@@ -1860,6 +1953,9 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
     }
 
     const c = updated[0];
+    if (segmentGiven && c.segment === 'application_status' && (c.segment_params as { autoAdd?: string } | null)?.autoAdd === 'on') {
+      await importArzoomToCampaign(Number(c.id)).catch((err) => console.error('ARZOOM import failed', err));
+    }
     res.json({
       id: c.id,
       name: c.name,
@@ -1876,6 +1972,8 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
       runStartDate: c.run_start_date,
       runEndDate: c.run_end_date,
       baseTemplateId: c.base_template_id,
+      segment: c.segment ?? null,
+      segmentParams: c.segment_params ?? null,
       agentId: c.agent_id,
       trunkId: c.trunk_id,
       trunkIds: String(c.trunk_ids || '').split(',').map((t: string) => t.trim()).filter(Boolean),
@@ -1891,7 +1989,8 @@ campaignsRouter.put('/:id', requireRole('admin', 'campaign_manager'), async (req
 });
 
 // DELETE campaign
-campaignsRouter.delete('/:id', requireRole('admin', 'campaign_manager'), async (req, res) => {
+// Deleting a campaign removes its queue and history: admins only.
+campaignsRouter.delete('/:id', requireRole('admin'), async (req, res) => {
   const campaignId = Number(req.params.id);
   if (!Number.isInteger(campaignId) || campaignId <= 0) {
     res.status(400).json({ error: 'invalid campaign id' });

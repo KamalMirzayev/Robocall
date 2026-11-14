@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
 import { calls, agents, customers } from '../db/schema.js';
+import { computeCallAnalytics } from '../call-analytics.js';
 
 export const callsRouter = Router();
 
@@ -21,17 +22,25 @@ function pageParams(query: Record<string, unknown>) {
   const q = String(query.q || '').trim();
   const agentId = Number(query.agentId || 0) || null;
   const customerId = Number(query.customerId || 0) || null;
-  return { page, pageSize, offset, q, agentId, customerId };
+  // campaignId: a campaign id, or "none" for calls outside any campaign.
+  const campaignRaw = String(query.campaignId || '').trim();
+  const campaignId = campaignRaw === 'none' ? 'none' : Number(campaignRaw) || null;
+  const day = (v: unknown) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? String(v) : null);
+  return { page, pageSize, offset, q, agentId, customerId, campaignId, from: day(query.from), to: day(query.to) };
 }
 
 callsRouter.get('/', async (req, res) => {
   try {
-    const { page, pageSize, offset, q, agentId, customerId } = pageParams(req.query);
+    const { page, pageSize, offset, q, agentId, customerId, campaignId, from, to } = pageParams(req.query);
     const like = `%${q}%`;
     const filters = [];
     if (q) filters.push(sql`concat_ws(' ', c.name, c.surname, c.phone, a.name, ca.summary, ca.description) ILIKE ${like}`);
     if (agentId) filters.push(sql`ca.agent_id = ${agentId}`);
     if (customerId) filters.push(sql`ca.customer_id = ${customerId}`);
+    if (campaignId === 'none') filters.push(sql`tj.campaign_id IS NULL`);
+    else if (campaignId) filters.push(sql`tj.campaign_id = ${campaignId}`);
+    if (from) filters.push(sql`ca.started_at >= (${from}::date)::timestamp AT TIME ZONE 'Asia/Baku'`);
+    if (to) filters.push(sql`ca.started_at < (${to}::date + 1)::timestamp AT TIME ZONE 'Asia/Baku'`);
     const where = filters.length > 0
       ? sql`WHERE ${sql.join(filters, sql` AND `)}`
       : sql``;
@@ -40,6 +49,8 @@ callsRouter.get('/', async (req, res) => {
       FROM calls ca
       LEFT JOIN agents a ON ca.agent_id = a.id
       LEFT JOIN customers c ON ca.customer_id = c.id
+      LEFT JOIN telephony_jobs tj ON tj.id = ca.telephony_job_id
+      LEFT JOIN campaigns cp ON cp.id = tj.campaign_id
       ${where}
     `));
     const rows = rowsFrom(await db.execute(sql`
@@ -48,10 +59,12 @@ callsRouter.get('/', async (req, res) => {
              c.contract_no AS "customerContractNo", c.mobile_phone AS "customerMobilePhone",
              ca.started_at AS "startedAt",
              ca.ended_at AS "endedAt", ca.duration_seconds AS "durationSeconds", ca.summary,
-             ca.description
+             ca.description, c.phone AS "customerPhone", tj.campaign_id AS "campaignId", cp.name AS "campaignName"
       FROM calls ca
       LEFT JOIN agents a ON ca.agent_id = a.id
       LEFT JOIN customers c ON ca.customer_id = c.id
+      LEFT JOIN telephony_jobs tj ON tj.id = ca.telephony_job_id
+      LEFT JOIN campaigns cp ON cp.id = tj.campaign_id
       ${where}
       ORDER BY ca.started_at DESC, ca.id DESC
       LIMIT ${pageSize} OFFSET ${offset}
@@ -83,6 +96,18 @@ callsRouter.get('/stats', async (_req, res) => {
     });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Call analytics for the dashboard (see call-analytics.ts). Registered before GET /:id.
+callsRouter.get('/analytics', async (req, res) => {
+  try {
+    const days = Math.max(1, Math.min(90, Number(req.query.days || 7)));
+    const campaignId = Number(req.query.campaignId || 0) || null;
+    res.json(await computeCallAnalytics({ days, campaignId }));
+  } catch (err) {
+    console.error('[calls/analytics]', err);
     res.status(500).json({ error: 'Internal server error' });
   }
 });
