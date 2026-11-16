@@ -311,7 +311,9 @@ export async function ensureCampaignResultFromTranscript(params: {
   transcript: string | null;
 }): Promise<void> {
   const transcript = String(params.transcript || '').trim();
-  if (!transcript) return;
+  // The customer never spoke (voicemail, silence, picked up and dropped): no result, so the
+  // unanswered-call retry still applies.
+  if (!/^C:\s*\S/m.test(transcript)) return;
   const [existing] = rowsFrom(await db.execute(sql`
     SELECT 1 FROM campaign_results WHERE customer_id = ${params.customerId}
       AND (telephony_job_id = ${params.telephonyJobId} OR created_at >= ${params.startedAt.toISOString()}::timestamptz)
