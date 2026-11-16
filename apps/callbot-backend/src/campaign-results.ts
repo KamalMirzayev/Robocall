@@ -263,6 +263,15 @@ export async function recordCampaignResult(params: {
   } else if (params.outcome === 'callback') {
     await applyResultCallback(params.telephonyJobId);
   }
+  // A final result closes the customer's place in the campaign, whichever finishes first:
+  // this write or the telephony worker's end-of-call report (which may say "failed" when the
+  // customer hung up first and would otherwise queue a retry).
+  if (campaignId && params.outcome !== 'callback') {
+    await db.execute(sql`
+      UPDATE campaign_calls SET status = 'completed', call_after = NULL, updated_at = now()
+      WHERE campaign_id = ${campaignId} AND customer_id = ${params.customerId} AND status IN ('retrying', 'pending', 'failed')
+    `);
+  }
   if (wantsSms) void sendPendingApplicationSms().catch((err) => console.error('[campaign-results] sms failed', err));
   scheduleArzoomAnalyticsPush();
   return { ok: true };

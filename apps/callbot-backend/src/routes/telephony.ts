@@ -264,7 +264,9 @@ async function handleJobCompletion(jobId: number, status: 'ended' | 'failed', an
       // A call that produced a result (campaign / ARZOOM feedback) is done even when the
       // worker reports the hang-up as 'failed' (e.g. the customer dropped the line first).
       const [hasResult] = rowsFrom(await db.execute(sql`
-        SELECT 1 FROM campaign_results WHERE telephony_job_id = ${jobId}
+        SELECT 1 FROM campaign_results r, telephony_jobs j
+        WHERE j.id = ${jobId} AND r.outcome <> 'callback'
+          AND (r.telephony_job_id = j.id OR (r.customer_id = j.customer_id AND r.campaign_id = j.campaign_id AND r.created_at >= j.created_at))
         UNION ALL
         SELECT 1 FROM arzoom_feedback WHERE telephony_job_id = ${jobId}
         LIMIT 1
