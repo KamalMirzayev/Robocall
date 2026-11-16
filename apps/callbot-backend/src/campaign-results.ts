@@ -117,6 +117,31 @@ export async function ensureCampaignResultsSchema(): Promise<void> {
       WHERE id = ${Number(row.id)}
     `);
   }
+  // Calls closed as "other" only because the customer never spoke (before that was detected):
+  // drop those results and put the customers back in the retry queue.
+  await db.execute(sql`
+    WITH bad AS (
+      DELETE FROM campaign_results
+      WHERE outcome = 'other' AND reason LIKE 'Bot zəng zamanı nəticəni qeyd etməyib%'
+      RETURNING customer_id, campaign_id
+    )
+    UPDATE campaign_calls cc
+    SET status = CASE WHEN cc.attempt_number < c.max_attempts THEN 'retrying' ELSE 'failed' END,
+        call_after = CASE WHEN cc.attempt_number < c.max_attempts THEN now() + interval '2 hours' ELSE cc.call_after END,
+        updated_at = now()
+    FROM campaigns c, bad
+    WHERE c.id = cc.campaign_id AND cc.campaign_id = bad.campaign_id AND cc.customer_id = bad.customer_id AND cc.status = 'completed'
+  `);
+  await db.execute(sql`
+    UPDATE customers SET pks_status = NULL, pks_comment = NULL
+    WHERE source_system = 'excel' AND pks_comment LIKE 'Bot zəng zamanı nəticəni qeyd etməyib%'
+  `);
+  // Customers with a final result that a late hang-up report left in the retry queue.
+  await db.execute(sql`
+    UPDATE campaign_calls cc SET status = 'completed', call_after = NULL, updated_at = now()
+    WHERE cc.status IN ('retrying', 'failed')
+      AND EXISTS (SELECT 1 FROM campaign_results r WHERE r.customer_id = cc.customer_id AND r.campaign_id = cc.campaign_id AND r.outcome <> 'callback')
+  `);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS campaign_results_job_idx ON campaign_results (telephony_job_id)`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS campaign_results_customer_idx ON campaign_results (customer_id)`);
 }
