@@ -7,7 +7,7 @@ SRC="${ROBOCALL_SRC:-$(getent passwd "${SUDO_USER:-toor}" | cut -d: -f6)/robocal
 APP=/opt/robocall
 
 echo "==> Kod: $SRC -> $APP"
-git -C "$SRC" -c safe.directory='*' fetch -q origin "$BRANCH"
+sudo -u "${SUDO_USER:-toor}" git -C "$SRC" fetch -q origin "$BRANCH"
 git -C "$APP" -c safe.directory='*' pull -q --ff-only "$SRC" "refs/remotes/origin/$BRANCH"
 git -C "$APP" -c safe.directory='*' log --oneline -1
 chown -R callbot:callbot "$APP"
