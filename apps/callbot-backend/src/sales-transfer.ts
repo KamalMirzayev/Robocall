@@ -177,6 +177,8 @@ export function startSalesTransferApp(): void {
 
 export interface TransferHandle {
   cancel(): Promise<void>;
+  // While the bot briefs the rep: the customer neither hears nor is heard.
+  setCustomerPrivate(on: boolean): Promise<void>;
 }
 
 export interface TransferCallbacks {
@@ -193,6 +195,7 @@ export async function startSalesTransfer(
   let repChannelId: string | null = null;
   let transferRowId: number | null = null;
   let bridgeId: string | null = null;
+  let customerChannel: string | null = null;
 
   const hangupRep = async () => {
     if (repChannelId) {
@@ -214,6 +217,11 @@ export async function startSalesTransfer(
       cancelled = true;
       await hangupRep();
     },
+    async setCustomerPrivate(on: boolean) {
+      if (!customerChannel) return;
+      await ari(`/channels/${encodeURIComponent(customerChannel)}/mute?direction=both`, on ? 'POST' : 'DELETE')
+        .catch((err) => console.warn('[sales-transfer] customer mute failed', (err as Error).message));
+    },
   };
 
   void (async () => {
@@ -224,6 +232,7 @@ export async function startSalesTransfer(
       const [job] = rowsFrom(await db.execute(sql`SELECT channel_id FROM telephony_jobs WHERE id = ${params.telephonyJobId}`));
       const customerChannelId = String(job?.channel_id || '');
       if (!customerChannelId) throw new Error('customer channel unknown');
+      customerChannel = customerChannelId;
       const channel = await ari<{ name: string }>(`/channels/${encodeURIComponent(customerChannelId)}`);
       // "PJSIP/trunk-<id>-0000001a" -> dial reps through the same trunk the customer is on.
       const endpoint = String(channel.name || '').replace(/^PJSIP\//, '').replace(/-[0-9a-f]{8}$/i, '');
@@ -292,6 +301,7 @@ export async function startSalesTransfer(
           continue;
         }
 
+        await handle.setCustomerPrivate(true);
         await stopMoh();
         await ari(`/bridges/${encodeURIComponent(bridgeId)}/addChannel?channel=${encodeURIComponent(rep.id)}`, 'POST');
         const [row] = rowsFrom(await db.execute(sql`

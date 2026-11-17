@@ -446,6 +446,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             if (briefingTimer) clearTimeout(briefingTimer);
             briefingTimer = null;
             transferState = 'connected';
+            void transferHandle?.setCustomerPrivate(false);
             if (!sessionClosed && session) {
               try {
                 session.close();
@@ -461,7 +462,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             : 'ARZOOM kredit müraciəti';
           try {
             session.sendClientContent({
-              turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu, müştəri də xəttdədir. Nümayəndəyə müraciət et və cəmi 1-2 qısa cümlə ilə de: "Salam, bu Robocall-dır. ${campaignText} üzrə müştəri xəttdədir" və müştərinin nə istədiyini (və maşını haqqında dediklərini) qısa xülasə et. Sonra "Sizi müştəri ilə tanış edirəm, xoş danışıqlar" de və susun. Heç bir alət çağırma.`,
+              turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu. Müştəri hələ səni və nümayəndəni EŞİTMİR (gözləmədədir), indi yalnız nümayəndə ilə danışırsan. Nümayəndəyə 2-3 qısa cümlə ilə de: "Salam, bu Robocall-dır. ${campaignText} üzrə müştəri xəttdədir", sonra müştərinin nə istədiyini və maşını, şərtlər haqqında dediklərini qısa xülasə et. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`,
               turnComplete: true,
             });
             briefingTimer = setTimeout(leave, 15000);
@@ -754,6 +755,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             briefingTimer = setTimeout(() => {
               briefingTimer = null;
               transferState = 'connected';
+              void transferHandle?.setCustomerPrivate(false);
               if (!sessionClosed && session) {
                 try {
                   session.close();
