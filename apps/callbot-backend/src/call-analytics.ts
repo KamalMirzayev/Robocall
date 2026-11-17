@@ -111,6 +111,67 @@ export async function computeCallAnalytics(opts: { days: number; campaignId?: nu
     GROUP BY st.extension ORDER BY 3 DESC, 1
   `).catch(() => []));
 
+  // Why a transfer to sales did not end with the customer talking to a rep. One row per
+  // dial attempt or issue; a connection under 20 seconds (e.g. a queue that picked up and
+  // dropped) is counted apart from a real conversation.
+  const transferReasons = rowsFrom(await db.execute(sql`
+    SELECT CASE
+             WHEN st.status = 'answered' AND st.ended_at IS NOT NULL AND st.ended_at - st.created_at < interval '20 seconds' THEN 'answered_short'
+             ELSE st.status
+           END AS reason,
+           count(*)::int AS count,
+           count(DISTINCT st.telephony_job_id)::int AS calls
+    FROM sales_transfers st
+    LEFT JOIN customers cu ON cu.id = st.customer_id
+    LEFT JOIN telephony_jobs tj ON tj.id = st.telephony_job_id
+    WHERE st.created_at >= ${since} ${campaignId ? sql`AND tj.campaign_id = ${campaignId}` : sql``}
+      ${arzoomOnly ? sql`AND cu.source_system = 'arzoom'` : sql``}
+    GROUP BY 1 ORDER BY 2 DESC
+  `).catch(() => []));
+
+  const transferFailures = rowsFrom(await db.execute(sql`
+    SELECT st.id, st.created_at, st.extension, st.status, st.reason, st.telephony_job_id AS call_id,
+           c.name AS campaign_name, ${arzoomOnly ? sql`NULL` : sql`cu.phone`} AS phone,
+           extract(epoch FROM (st.ended_at - st.created_at))::int AS seconds
+    FROM sales_transfers st
+    LEFT JOIN customers cu ON cu.id = st.customer_id
+    LEFT JOIN telephony_jobs tj ON tj.id = st.telephony_job_id
+    LEFT JOIN campaigns c ON c.id = tj.campaign_id
+    WHERE st.created_at >= ${since} ${campaignId ? sql`AND tj.campaign_id = ${campaignId}` : sql``}
+      ${arzoomOnly ? sql`AND cu.source_system = 'arzoom'` : sql``}
+      AND (st.status <> 'answered' OR (st.ended_at IS NOT NULL AND st.ended_at - st.created_at < interval '20 seconds'))
+    ORDER BY st.id DESC LIMIT 30
+  `).catch(() => []));
+
+  // Per campaign over the period: dialing, reach, results, SMS links and transfers.
+  const campaignStats = arzoomOnly ? [] : rowsFrom(await db.execute(sql`
+    SELECT c.id, c.name, c.segment, c.status,
+           (SELECT count(*) FROM telephony_jobs tj WHERE tj.campaign_id = c.id AND tj.created_at >= ${since})::int AS attempts,
+           (SELECT count(*) FROM telephony_jobs tj WHERE tj.campaign_id = c.id AND tj.created_at >= ${since} AND tj.answered_at IS NOT NULL)::int AS answered,
+           (SELECT count(DISTINCT tj.customer_id) FROM telephony_jobs tj WHERE tj.campaign_id = c.id AND tj.created_at >= ${since} AND tj.answered_at IS NOT NULL)::int AS reached,
+           (SELECT coalesce(round(avg(tj.duration_seconds) FILTER (WHERE tj.answered_at IS NOT NULL AND tj.duration_seconds > 0)), 0) FROM telephony_jobs tj WHERE tj.campaign_id = c.id AND tj.created_at >= ${since})::int AS avg_duration,
+           (SELECT count(*) FROM campaign_calls cc WHERE cc.campaign_id = c.id AND cc.status IN ('pending', 'retrying', 'attempting'))::int AS queued,
+           (SELECT count(*) FROM (
+              SELECT r.telephony_job_id FROM campaign_results r WHERE r.campaign_id = c.id AND r.created_at >= ${since}
+              UNION ALL
+              SELECT f.telephony_job_id FROM arzoom_feedback f JOIN telephony_jobs tj ON tj.id = f.telephony_job_id WHERE tj.campaign_id = c.id AND f.created_at >= ${since}
+            ) x)::int AS results,
+           (SELECT count(*) FROM campaign_results r WHERE r.campaign_id = c.id AND r.created_at >= ${since} AND r.sms_status = 'sent')::int AS sms_sent,
+           (SELECT count(DISTINCT st.telephony_job_id) FROM sales_transfers st JOIN telephony_jobs tj ON tj.id = st.telephony_job_id WHERE tj.campaign_id = c.id AND st.created_at >= ${since})::int AS transfer_calls,
+           (SELECT count(DISTINCT st.telephony_job_id) FROM sales_transfers st JOIN telephony_jobs tj ON tj.id = st.telephony_job_id WHERE tj.campaign_id = c.id AND st.created_at >= ${since}
+              AND st.status = 'answered' AND (st.ended_at IS NULL OR st.ended_at - st.created_at >= interval '20 seconds'))::int AS transfer_connected,
+           (SELECT coalesce(json_agg(o ORDER BY o.count DESC), '[]'::json) FROM (
+              SELECT max(outcome_label) AS label, outcome, count(*)::int AS count FROM (
+                SELECT r.outcome, r.outcome_label FROM campaign_results r WHERE r.campaign_id = c.id AND r.created_at >= ${since}
+                UNION ALL
+                SELECT f.outcome, f.outcome_label FROM arzoom_feedback f JOIN telephony_jobs tj ON tj.id = f.telephony_job_id WHERE tj.campaign_id = c.id AND f.created_at >= ${since}
+              ) y GROUP BY outcome
+            ) o) AS outcomes
+    FROM campaigns c
+    WHERE ${campaignId ? sql`c.id = ${campaignId}` : sql`c.status <> 'cancelled' AND EXISTS (SELECT 1 FROM telephony_jobs tj WHERE tj.campaign_id = c.id AND tj.created_at >= ${since})`}
+    ORDER BY c.id
+  `).catch((err) => { console.error('[analytics] campaign stats', err); return []; }));
+
   const recent = rowsFrom(await db.execute(sql`
     SELECT tj.id, tj.created_at, tj.phone, tj.status, tj.answered_at IS NOT NULL AS answered,
            tj.duration_seconds, tj.last_error,
@@ -134,5 +195,5 @@ export async function computeCallAnalytics(opts: { days: number; campaignId?: nu
     SELECT id, name, status FROM campaigns WHERE status <> 'cancelled' ${arzoomOnly ? sql`AND segment = 'application_status'` : sql``} ORDER BY id DESC LIMIT 50
   `));
 
-  return { days, campaignId, generatedAt: new Date().toISOString(), kpi, daily, hourly, outcomes, failures, queue, transfers, recent, campaigns };
+  return { days, campaignId, generatedAt: new Date().toISOString(), kpi, daily, hourly, outcomes, failures, queue, transfers, transferReasons, transferFailures, campaignStats, recent, campaigns };
 }

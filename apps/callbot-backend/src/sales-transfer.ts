@@ -80,6 +80,16 @@ export async function ensureSalesTransferSchema(): Promise<void> {
       ended_at timestamptz
     )
   `);
+  // Why a transfer did not reach a rep, shown in the analytics report.
+  await db.execute(sql`ALTER TABLE sales_transfers ADD COLUMN IF NOT EXISTS reason text`);
+}
+
+// A transfer that never rang a rep (none set, all busy, call already gone...).
+export async function recordTransferIssue(p: { telephonyJobId: number | null; customerId: number | null; brand: string | null; extension?: string; status: string; reason: string }): Promise<void> {
+  await db.execute(sql`
+    INSERT INTO sales_transfers (telephony_job_id, customer_id, brand, extension, status, reason, ended_at)
+    VALUES (${p.telephonyJobId}, ${p.customerId}, ${p.brand}, ${(p.extension || '-').slice(0, 20)}, ${p.status.slice(0, 20)}, ${p.reason.slice(0, 500)}, now())
+  `).catch(() => {});
 }
 
 // Fewest answered transfers today first, then the one whose last transfer is oldest.
@@ -240,9 +250,11 @@ export async function startSalesTransfer(
           rep = await ari<{ id: string }>(`/channels?${qs.toString()}`, 'POST');
         } catch (err) {
           console.warn(`[sales-transfer] dial ${ext} failed`, (err as Error).message);
+          await recordTransferIssue({ telephonyJobId: params.telephonyJobId, customerId: params.customerId, brand: params.brand, extension: ext, status: 'dial_failed', reason: (err as Error).message });
           continue;
         }
         repChannelId = rep.id;
+        let endCause = '';
         const answered = await new Promise<boolean>((resolve) => {
           const timer = setTimeout(() => {
             waiters.delete(rep.id);
@@ -255,20 +267,24 @@ export async function startSalesTransfer(
             } else if (['ChannelDestroyed', 'StasisEnd', 'ChannelHangupRequest'].includes(event.type)) {
               clearTimeout(timer);
               waiters.delete(rep.id);
+              endCause = event.cause || '';
               resolve(false);
             }
           });
         });
         if (cancelled) {
           await hangupRep();
+          await recordTransferIssue({ telephonyJobId: params.telephonyJobId, customerId: params.customerId, brand: params.brand, extension: ext, status: 'customer_left', reason: 'Müştəri nümayəndə gözlənilərkən zəngi bitirdi' });
           return;
         }
         if (!answered) {
           await ari(`/channels/${encodeURIComponent(rep.id)}`, 'DELETE').catch(() => {});
           repChannelId = null;
           await db.execute(sql`
-            INSERT INTO sales_transfers (telephony_job_id, customer_id, brand, extension, status, ended_at)
-            VALUES (${params.telephonyJobId}, ${params.customerId}, ${params.brand}, ${ext}, 'no_answer', now())
+            INSERT INTO sales_transfers (telephony_job_id, customer_id, brand, extension, status, reason, ended_at)
+            VALUES (${params.telephonyJobId}, ${params.customerId}, ${params.brand}, ${ext},
+              ${/busy|reject|declin/i.test(endCause) ? 'rejected' : /unallocated|no route|not found|unavailable|congest/i.test(endCause) ? 'unreachable' : 'no_answer'},
+              ${endCause || `${ringSeconds} saniyə çaldı, cavab yoxdur`}, now())
           `).catch(() => {});
           continue;
         }
@@ -298,6 +314,12 @@ export async function startSalesTransfer(
     } catch (err) {
       await stopMoh();
       console.warn('[sales-transfer] failed', (err as Error).message);
+      const msg = (err as Error).message || 'error';
+      if (!cancelled) await recordTransferIssue({
+        telephonyJobId: params.telephonyJobId, customerId: params.customerId, brand: params.brand,
+        status: /no sales reps set/.test(msg) ? 'not_configured' : /busy/.test(msg) ? 'all_busy' : /channel unknown|bridge not found|no telephony job/.test(msg) ? 'call_gone' : 'error',
+        reason: msg,
+      });
       if (!cancelled) cb.onFailed((err as Error).message);
     }
   })();

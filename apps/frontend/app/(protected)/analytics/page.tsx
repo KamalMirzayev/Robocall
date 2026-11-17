@@ -245,6 +245,98 @@ export default function AnalyticsPage() {
             </Card>
           </div>
 
+          {(data.campaignStats || []).length > 0 ? (
+            <Card title={t('analytics.byCampaign')} className="mb-6">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[900px] text-sm">
+                  <thead className="text-left text-xs text-slate-400">
+                    <tr>
+                      <th className="py-1 pr-3">{t('analytics.campaignCol.name')}</th>
+                      <th className="pr-3">{t('analytics.campaignCol.attempts')}</th>
+                      <th className="pr-3">{t('analytics.campaignCol.answered')}</th>
+                      <th className="pr-3">{t('analytics.campaignCol.reached')}</th>
+                      <th className="pr-3">{t('analytics.campaignCol.queued')}</th>
+                      <th className="pr-3">{t('analytics.campaignCol.sms')}</th>
+                      <th className="pr-3">{t('analytics.campaignCol.transfers')}</th>
+                      <th>{t('analytics.campaignCol.outcomes')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.campaignStats || []).map((c) => {
+                      const total = c.outcomes.reduce((n, o) => n + o.count, 0);
+                      return (
+                        <tr key={c.id} className="border-t border-slate-700 align-top">
+                          <td className="py-2 pr-3 text-slate-200">
+                            {c.name}
+                            <div className="text-xs text-slate-500">{c.status} · {fmtDuration(c.avg_duration)}</div>
+                          </td>
+                          <td className="pr-3 tabular-nums text-slate-200">{c.attempts}</td>
+                          <td className="pr-3 tabular-nums text-emerald-400">{c.answered} <span className="text-xs text-slate-500">{pct(c.answered, c.attempts)}%</span></td>
+                          <td className="pr-3 tabular-nums text-slate-200">{c.reached}</td>
+                          <td className="pr-3 tabular-nums text-slate-300">{c.queued}</td>
+                          <td className="pr-3 tabular-nums text-sky-300">{c.sms_sent}</td>
+                          <td className="pr-3 tabular-nums">
+                            <span className="text-teal-300">{c.transfer_connected}</span>
+                            <span className="text-slate-500"> / {c.transfer_calls}</span>
+                          </td>
+                          <td className="text-xs text-slate-300">
+                            {total === 0 ? '—' : c.outcomes.slice(0, 6).map((o) => (
+                              <div key={o.outcome} className="flex justify-between gap-3">
+                                <span>{o.label}</span>
+                                <span className="tabular-nums text-slate-400">{o.count} · {pct(o.count, total)}%</span>
+                              </div>
+                            ))}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-xs text-slate-500">{t('analytics.byCampaignHint')}</p>
+            </Card>
+          ) : null}
+
+          <Card title={t('analytics.transferWhy')} className="mb-6">
+            {(data.transferReasons || []).length === 0 ? <p className="text-sm text-slate-500">{t('analytics.empty')}</p> : (
+              <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+                <ul className="space-y-2 text-sm">
+                  {(data.transferReasons || []).map((r) => (
+                    <li key={r.reason} className="flex justify-between gap-3">
+                      <span className={r.reason === 'answered' ? 'text-emerald-400' : 'text-slate-200'}>
+                        {t(`analytics.transferReason.${r.reason}`).replace(`analytics.transferReason.${r.reason}`, r.reason)}
+                      </span>
+                      <span className="tabular-nums text-slate-400">{r.count}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead className="text-left text-slate-400">
+                      <tr><th className="py-1 pr-2">{t('analytics.col.time')}</th><th className="pr-2">{t('analytics.rep')}</th><th className="pr-2">{t('analytics.col.status')}</th><th>{t('analytics.transferDetail')}</th></tr>
+                    </thead>
+                    <tbody>
+                      {(data.transferFailures || []).map((f) => {
+                        const key = f.status === 'answered' ? 'answered_short' : f.status;
+                        return (
+                          <tr key={f.id} className="border-t border-slate-700 align-top">
+                            <td className="whitespace-nowrap py-1.5 pr-2 text-slate-400">{fmtTime(f.created_at)}</td>
+                            <td className="pr-2 text-slate-200">{f.extension}</td>
+                            <td className="pr-2 text-rose-300">{t(`analytics.transferReason.${key}`).replace(`analytics.transferReason.${key}`, key)}</td>
+                            <td className="text-slate-400">
+                              {f.reason || (f.seconds != null ? `${f.seconds} s` : '')}
+                              <div className="text-slate-500">{f.campaign_name || ''}{f.phone ? ` · ${f.phone}` : ''}</div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </Card>
+
           <Card title={t('analytics.transfers')} className="mb-6">
             {data.transfers.length === 0 ? <p className="text-sm text-slate-500">{t('analytics.empty')}</p> : (
               <div className="overflow-x-auto">

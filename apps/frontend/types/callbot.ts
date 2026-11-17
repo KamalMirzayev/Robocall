@@ -299,6 +299,9 @@ export interface CallAnalytics {
   failures: { reason: string; count: number }[];
   queue: { id: number; name: string; campaign_status: string; max_attempts: number; retry_interval_hours: number; total: number; pending: number; attempting: number; retrying: number; completed: number; failed: number; cancelled: number; next_call_after: string | null }[];
   transfers: { extension: string; brand: string | null; answered: number; missed: number }[];
+  transferReasons?: { reason: string; count: number; calls: number }[];
+  transferFailures?: { id: number; created_at: string; extension: string; status: string; reason: string | null; call_id: number | null; campaign_name: string | null; phone: string | null; seconds: number | null }[];
+  campaignStats?: { id: number; name: string; segment: string | null; status: string; attempts: number; answered: number; reached: number; avg_duration: number; queued: number; results: number; sms_sent: number; transfer_calls: number; transfer_connected: number; outcomes: { label: string; outcome: string; count: number }[] }[];
   recent: { id: number; created_at: string; phone: string; status: string; answered: boolean; duration_seconds: number | null; last_error: string | null; customer_name: string | null; application_status: string | null; application_id: string | null; outcome: string | null; outcome_label: string | null; reason: string | null; summary: string | null }[];
   campaigns: { id: number; name: string; status: string }[];
 }

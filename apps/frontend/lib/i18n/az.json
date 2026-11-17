@@ -1221,6 +1221,34 @@
       "rejected": "Rədd",
       "reoffer": "Təkrar təklif",
       "guarantor": "Zamin"
+    },
+    "byCampaign": "Kampaniyalar üzrə analiz",
+    "byCampaignHint": "Seçilmiş dövr üçün. Ötürmə: nümayəndə ilə danışan / ötürülməyə çalışılan zənglər.",
+    "transferWhy": "Satışa ötürmə: niyə qoşulmadı",
+    "transferDetail": "Səbəb",
+    "campaignCol": {
+      "name": "Kampaniya",
+      "attempts": "Zəng",
+      "answered": "Cavab",
+      "reached": "Danışılan müştəri",
+      "queued": "Növbədə",
+      "sms": "SMS link",
+      "transfers": "Ötürmə",
+      "outcomes": "Nəticələr"
+    },
+    "transferReason": {
+      "answered": "Nümayəndə ilə danışdı",
+      "answered_short": "Qoşuldu, amma 20 saniyədən tez kəsildi (queue götürüb ötürmədi və ya nümayəndə dərhal bağladı)",
+      "no_answer": "Nümayəndə telefonu açmadı",
+      "rejected": "Nümayəndə məşğul idi / rədd etdi",
+      "unreachable": "Nümayəndə nömrəsinə çatmaq olmadı (nömrə yoxdur və ya xətt əlçatmaz)",
+      "all_busy": "Bütün nümayəndələr başqa zəngdə idi",
+      "not_configured": "Nümayəndə nömrəsi yazılmayıb",
+      "dial_failed": "Nümayəndəyə zəng başlamadı (sistem xətası)",
+      "customer_left": "Müştəri gözləyərkən zəngi bitirdi",
+      "call_gone": "Müştərinin zəngi artıq bitmişdi",
+      "error": "Digər texniki xəta",
+      "missed": "Qoşulmadı (köhnə qeyd)"
     }
   },
   "geminiBalance": {

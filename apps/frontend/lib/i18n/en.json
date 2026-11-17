@@ -1221,6 +1221,34 @@
       "rejected": "Rejected",
       "reoffer": "Re-offer",
       "guarantor": "Guarantor"
+    },
+    "byCampaign": "By campaign",
+    "byCampaignHint": "For the selected period. Transfers: talked to a rep / transfer attempted.",
+    "transferWhy": "Sales transfers: why not connected",
+    "transferDetail": "Reason",
+    "campaignCol": {
+      "name": "Campaign",
+      "attempts": "Calls",
+      "answered": "Answered",
+      "reached": "Customers reached",
+      "queued": "Queued",
+      "sms": "SMS link",
+      "transfers": "Transfers",
+      "outcomes": "Outcomes"
+    },
+    "transferReason": {
+      "answered": "Talked to a rep",
+      "answered_short": "Connected but dropped within 20 s (queue picked up, or rep hung up)",
+      "no_answer": "Rep did not answer",
+      "rejected": "Rep busy / rejected",
+      "unreachable": "Rep number unreachable",
+      "all_busy": "All reps were on other calls",
+      "not_configured": "No rep numbers set",
+      "dial_failed": "Could not dial the rep (system error)",
+      "customer_left": "Customer hung up while waiting",
+      "call_gone": "Customer call had already ended",
+      "error": "Other technical error",
+      "missed": "Not connected (old record)"
     }
   },
   "geminiBalance": {

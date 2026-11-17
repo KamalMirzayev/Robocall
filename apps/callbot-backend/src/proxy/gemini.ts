@@ -18,7 +18,7 @@ import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
 import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
 import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, recordCampaignResult, tradeInTerms } from '../campaign-results.js';
-import { pinnedExtensions, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
+import { pinnedExtensions, recordTransferIssue, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
 type Customer = InferSelectModel<typeof customers>;
 type Agent = InferSelectModel<typeof agents>;
@@ -611,6 +611,13 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             if (functionName === 'transfer_to_sales') {
               const exts = transferExtensions();
               const ok = transferState === 'idle' && !endCallRequested && exts.length > 0 && Boolean(telephonyJobId);
+              if (!ok && transferState === 'idle') {
+                void recordTransferIssue({
+                  telephonyJobId, customerId: customer.id, brand,
+                  status: exts.length ? 'call_gone' : 'not_configured',
+                  reason: exts.length ? 'Zəng bitmək üzrə idi, ötürmə başlamadı' : 'Bu kampaniya/marka üçün nümayəndə nömrəsi yazılmayıb',
+                });
+              }
               if (ok) {
                 transferState = 'pending';
                 // Start once the hold sentence has been spoken (turnComplete); fallback after 4s.
