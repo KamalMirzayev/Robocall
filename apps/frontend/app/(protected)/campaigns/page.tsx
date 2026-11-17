@@ -309,7 +309,7 @@ export default function CampaignsPage() {
   const openImportModal = (campaign: CampaignRow) => {
     setImportCampaign(campaign);
     setImportOpen(true);
-    setImportMode(['service_return', 'credit_offer'].includes(String((campaign as { segment?: string | null }).segment ?? '')) ? 'excel' : 'pks');
+    setImportMode(['service_return', 'credit_offer', 'trade_in'].includes(String((campaign as { segment?: string | null }).segment ?? '')) ? 'excel' : 'pks');
     setSelectedCustomers(new Set());
     setDatabaseImportResult(null);
     pksImport.clear();

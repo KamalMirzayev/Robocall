@@ -13,7 +13,8 @@ export type SegmentKey =
   | 'satisfaction'
   | 'marketing'
   | 'service_return'
-  | 'credit_offer';
+  | 'credit_offer'
+  | 'trade_in';
 
 export interface Segment {
   key: SegmentKey;
@@ -254,6 +255,32 @@ Danışığın gedişi:
 6. Maraq yoxdursa, səbəbini öyrən, nəzakətlə təşəkkür et.
 7. Nəticəni record_campaign_result aləti ilə yaz və sağollaş.`,
   },
+  {
+    key: 'trade_in',
+    tone: 'ok',
+    title: { az: 'Trade-in kampaniyası (köhnəni yeniyə dəyiş)', en: 'Trade-in campaign (old for new)' },
+    summary: {
+      az: 'Müəyyən modelin (məs. Corolla) sahiblərinə köhnə maşını yenisi ilə dəyişməyi və ya yenisini kreditlə almağı təklif edir; kredit istəyənə ARZOOM linki SMS ilə gedir, dəyişmək istəyəni nümayəndəyə qoşur və ya geri zəng üçün qeyd edir.',
+      en: 'Offers owners of a model (e.g. Corolla) to trade the old car for a new one or buy the new one on credit; credit link by SMS, trade-in leads go to a sales rep.',
+    },
+    content: `Sənin adın {AGENT_NAME}-dır. Sən {COMPANY_NAME} şirkətinin satış şöbəsinin əməkdaşısan və Azərbaycan dilində danışırsan.
+
+Zəngin məqsədi: müştəriyə kampaniya modelini təklif etmək: köhnə maşınını gətirib yenisi ilə dəyişmək (trade-in) və ya yenisini kreditlə almaq.
+
+${COMMON_RULES}
+- Qiymət, faiz və komissiya rəqəmi uydurma; bilik bazasında yoxdursa, nümayəndənin dəqiqləşdirəcəyini de
+- Təzyiq etmə, amma tərəddüd edəndə üstünlükləri izah et; ən çox iki dəfə, qəti imtinaya hörmət et
+
+Kampaniya məlumatı:
+{DYNAMIC_CONTEXT}
+
+Danışığın gedişi (müştəri məlumatlarındakı TRADE-IN SSENARİSİ əsasdır):
+1. "Hörmətli müştəri, [mərkəz]-dən narahat edirik, [model] ilə bağlı əla təklifimiz var" (ada görə müraciət etmə).
+2. Köhnə maşını gətirib yenisi ilə əvəz etmək və ya yenisini kredit şərtləri ilə almaq imkanını izah et.
+3. Trade-in istəsə: nümayəndəyə qoş və ya nümayəndənin zəng edəcəyini de.
+4. Kredit istəsə: müraciət linkini SMS ilə göndər, 1-2 dəqiqəyə cavab gələcəyini de.
+5. Nəticəni record_campaign_result aləti ilə yaz və sağollaş.`,
+  },
 );
 
 export function getSegment(key: string | null | undefined): Segment | undefined {
@@ -330,6 +357,11 @@ export const SEGMENT_CAMPAIGN_PRESETS: Record<SegmentKey, SegmentCampaignPreset>
     flags: ['skipNextDayAfterSuccess'],
     defaults: { skipNextDayAfterSuccess: true },
   },
+  trade_in: {
+    maxAttempts: 3, retryIntervalHours: 24, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:30', runWindowEnd: '19:00',
+    flags: ['skipNextDayAfterSuccess'],
+    defaults: { skipNextDayAfterSuccess: true },
+  },
   marketing: {
     maxAttempts: 1, retryIntervalHours: 72, runWeekdays: WORKDAYS_SAT, runWindowStart: '10:30', runWindowEnd: '19:00',
     flags: ['skipNextDayAfterSuccess'],
@@ -381,6 +413,40 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
       ],
     },
     { key: 'deadline', type: 'date', label: { az: 'Təklifin son tarixi', en: 'Offer ends on' } },
+    { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
+  ],
+  trade_in: [
+    {
+      key: 'company', type: 'text',
+      label: { az: 'Zəng edən mərkəz, "-dən" şəkilçisi ilə ("… narahat edirik" kimi deyilir)', en: 'Calling centre, as said in "… narahat edirik"' },
+      placeholder: { az: 'Toyota Abşeron Mərkəzindən', en: 'Toyota Abşeron Mərkəzindən' },
+    },
+    {
+      key: 'model', type: 'text',
+      label: { az: 'Kampaniya modeli', en: 'Campaign model' },
+      placeholder: { az: 'Corolla', en: 'Corolla' },
+    },
+    {
+      key: 'brand', type: 'select',
+      label: { az: 'Marka (SMS linki üçün)', en: 'Brand (for the SMS link)' },
+      options: [
+        { value: 'Toyota', label: { az: 'Toyota', en: 'Toyota' } },
+        { value: 'Mitsubishi', label: { az: 'Mitsubishi', en: 'Mitsubishi' } },
+        { value: 'Mazda', label: { az: 'Mazda', en: 'Mazda' } },
+        { value: 'BYD', label: { az: 'BYD', en: 'BYD' } },
+      ],
+    },
+    {
+      key: 'offer', type: 'textarea',
+      label: { az: 'Kampaniya təklifi (hər kampaniyada əl ilə yazın)', en: 'Campaign offer (type it for each campaign)' },
+      placeholder: { az: 'Məs. köhnə Corolla-nı gətirin, bazar qiymətindən 2000 AZN artıq qiymətləndirək', en: 'E.g. trade in your old Corolla, valued 2000 AZN above market' },
+    },
+    { key: 'location', type: 'text', label: { az: 'Mərkəzin ünvanı və iş saatları', en: 'Centre address and hours' } },
+    {
+      key: 'repExtensions', type: 'text',
+      label: { az: 'Satış nümayəndələrinin daxili nömrələri (trade-in istəyəni canlı qoşmaq üçün; boş qalsa nümayəndə geri zəng edir)', en: 'Sales rep extensions for live transfer (empty = rep calls back)' },
+      placeholder: { az: 'Məs. 301, 302', en: 'E.g. 301, 302' },
+    },
     { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
   ],
   sales: [

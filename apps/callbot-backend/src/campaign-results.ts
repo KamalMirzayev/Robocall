@@ -8,7 +8,7 @@ import { scheduleArzoomAnalyticsPush } from './arzoom-analytics.js';
 // ARZOOM applications keep their own arzoom_feedback table; these campaigns write here.
 
 export const EXCEL_SOURCE = 'excel';
-export const EXCEL_SEGMENTS = new Set(['service_return', 'credit_offer']);
+export const EXCEL_SEGMENTS = new Set(['service_return', 'credit_offer', 'trade_in']);
 
 export const RESULT_OUTCOMES: Record<string, Record<string, string>> = {
   service_return: {
@@ -21,6 +21,16 @@ export const RESULT_OUTCOMES: Record<string, Record<string, string>> = {
     sold_car: 'Maşını satıb / istifadə etmir',
     not_interested: 'Maraqlanmır',
     complaint: 'Narazılığı var',
+    wrong_person: 'Səhv nömrə / başqa şəxs',
+    other: 'Digər',
+  },
+  trade_in: {
+    agrees_send_link: 'Kreditlə almaq istəyir, müraciət linki göndərilsin',
+    wants_rep_contact: 'Maşınını dəyişmək istəyir, əməkdaş əlaqə saxlasın',
+    transferred_to_rep: 'Satış nümayəndəsinə qoşuldu',
+    callback: 'Sonra zəng edilməsini istədi',
+    thinking: 'Düşünəcək',
+    not_interested: 'Maraqlanmır',
     wrong_person: 'Səhv nömrə / başqa şəxs',
     other: 'Digər',
   },
@@ -176,7 +186,16 @@ function bakuText(at: Date): string {
 // ---------------------------------------------------------------------------------------
 // What the bot is told about an imported customer.
 
-export function excelCustomerLines(data: unknown, segment: string | null, opts: { canTransfer?: boolean } = {}): string[] {
+// Trade-in campaign wording, from the campaign's parameters.
+export function tradeInTerms(params: Record<string, unknown> | null | undefined): { company: string; model: string; brand: string } {
+  const p = params ?? {};
+  const t = (v: unknown, d: string) => String(v ?? '').trim() || d;
+  const model = t(p.model, 'Corolla');
+  // company is said as "<company> narahat edirik", so it carries the "-dən" ending.
+  return { company: t(p.company, 'Toyota Abşeron Mərkəzindən'), model, brand: t(p.brand, brandOfModel(model) ?? 'Toyota') };
+}
+
+export function excelCustomerLines(data: unknown, segment: string | null, opts: { canTransfer?: boolean; params?: Record<string, unknown> | null } = {}): string[] {
   if (!data || typeof data !== 'object') return [];
   const d = data as Record<string, unknown>;
   const lines: string[] = [];
@@ -192,7 +211,7 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
   const car = sc.model && sc.model.toLowerCase().startsWith(sc.brand.toLowerCase())
     ? sc.model
     : [sc.brand, sc.model && !sc.brand.toLowerCase().includes(sc.model.toLowerCase()) ? sc.model : ''].filter(Boolean).join(' ');
-  if (car) lines.push(segment === 'credit_offer' ? `- Əvvəl kredit üçün müraciət etdiyi avtomobil (marka və model): ${car}` : `- Avtomobil: ${car}`);
+  if (car) lines.push(segment === 'credit_offer' ? `- Əvvəl kredit üçün müraciət etdiyi avtomobil (marka və model): ${car}` : segment === 'trade_in' ? `- Müştərinin hazırkı avtomobili: ${car}` : `- Avtomobil: ${car}`);
   if (s(d.last_service_date)) lines.push(`- Son dəfə servisə gəlib: ${s(d.last_service_date)}`);
   if (s(d.last_talk)) lines.push(`- Əvvəlki danışıq (müştəri ilə son əlaqənin qeydi): ${s(d.last_talk).slice(0, 800)}`);
   const extra = d.extra && typeof d.extra === 'object' ? (d.extra as Record<string, unknown>) : {};
@@ -209,6 +228,20 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
     lines.push(opts.canTransfer
       ? '- SERVİS NÜMAYƏNDƏSİ: Müştəri təklifə razıdırsa və servisə gəlmək üçün nümayəndə ilə danışmaq istəsə: "Zəhmət olmasa bir neçə saniyə xətdə qalın, sizi servis nümayəndəsinə qoşuram" de və dərhal transfer_to_sales alətini çağır, bundan sonra heç nə demə. Alət uğursuz olsa, nümayəndənin ona tezliklə geri zəng edəcəyini de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır.'
       : '- SERVİS NÜMAYƏNDƏSİ: Müştəri servisə gəlmək üçün nümayəndə ilə əlaqə istəsə, servis nümayəndəsinin ona tezliklə zəng edəcəyini de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır; reason-a müştərinin uyğun vaxtını yaz.');
+  }
+  if (segment === 'trade_in') {
+    const { company, model, brand } = tradeInTerms(opts.params);
+    lines.push([
+      `- TRADE-IN SSENARİSİ (agent təlimatından üstündür, bu ardıcıllıqla danış). Zəng edən: ${company.replace(/(n)?dən$/, '')}. Kampaniya modeli: ${brand} ${model}.`,
+      `  1) Salamlaşmada artıq dedin: "Hörmətli müştəri, ${company} narahat edirik, ${model} ilə bağlı əla təklifimiz var." Müştəriyə adı ilə müraciət etmə, həmişə "hörmətli müştəri" de. Model adını Azərbaycan dilinin qaydası ilə şəkilçi qoşaraq təbii tələffüz et.`,
+      `  2) Təklifi izah et: "Köhnə ${model}-nızı gətirin, qiymətləndirək və yeni ${model} ilə əvəz edək; fərqi kreditlə də ödəmək olar. Yeni ${model}-nı ayrıca kredit şərtləri ilə də almaq mümkündür." Paneldə kampaniya təklifi yazılıbsa, onu da qısa əlavə et.`,
+      opts.canTransfer
+        ? '  3) Maşınını dəyişmək (trade-in) istəsə: "Bir neçə saniyə xətdə qalın, sizi satış nümayəndəmizə qoşuram" de və dərhal transfer_to_sales alətini çağır, sonra heç nə demə. Alət uğursuz olsa, nümayəndənin tezliklə zəng edəcəyini de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır.'
+        : '  3) Maşınını dəyişmək (trade-in) istəsə: maşını nə vaxt gətirə biləcəyini və ya nə vaxt zəng etməyin uyğun olduğunu soruş, nümayəndənin onunla əlaqə saxlayacağını de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır; reason-a maşın haqqında dediklərini (il, yürüş, vəziyyət) və uyğun vaxtı yaz.',
+      `  4) Yeni ${model}-nı kreditlə almaq istəsə: "Sizə SMS ilə kredit müraciəti linki göndərirəm, linkə daxil olub müraciət edin, 1-2 dəqiqə ərzində cavab gələcək" de və record_campaign_result alətini outcome=agrees_send_link, brand=${brand} ilə çağır.`,
+      '  5) Hər ikisi maraqlıdırsa, əvvəl kredit linkini göndər (addım 4), sonra trade-in üçün nümayəndə əlaqəsini təklif et (addım 3).',
+      '  MƏQSƏD: müştərini təklifdən yararlanmağa razı salmaq. Tərəddüd etsə, nəzakətlə cavablandır və üstünlükləri de: köhnə maşın dəyərində qiymətləndirilir, fərq kreditlə ödənə bilər, kredit müraciəti onlayndır və 1-2 dəqiqəyə cavab gəlir, öhdəlik yaratmır. Ən çox iki dəfə israr et; qəti imtina etsə, hörmətlə qəbul et, nəticəni yaz və sağollaş. Qiymət, faiz və ya komissiya rəqəmi uydurma; bilik bazasında yoxdursa, nümayəndənin dəqiqləşdirəcəyini de.',
+    ].join('\n'));
   }
   if (segment === 'credit_offer') {
     const applied = car;
@@ -271,7 +304,7 @@ export async function recordCampaignResult(params: {
     }
     reason = [reason, callbackAt ? `Zəng vaxtı: ${bakuText(callbackAt)}` : 'Zəng vaxtı: müştəri dəqiq vaxt deməyib'].filter(Boolean).join('. ');
   }
-  const wantsSms = segment === 'credit_offer' && params.outcome === 'agrees_send_link';
+  const wantsSms = (segment === 'credit_offer' || segment === 'trade_in') && params.outcome === 'agrees_send_link';
   const brand = wantsSms ? linkBrand(params.brand) : null;
   if (brand) reason = [reason, `Seçdiyi marka: ${brand}`].filter(Boolean).join('. ');
   await db.execute(sql`
@@ -454,12 +487,17 @@ export function startApplicationSmsRetry(): void {
 }
 
 // Segment and service-rep extensions for a call to an imported customer.
-export async function excelCallContext(telephonyJobId: number | null, customerId: number): Promise<{ segment: string | null; transferExtensions: string[] }> {
+export async function excelCallContext(telephonyJobId: number | null, customerId: number): Promise<{ segment: string | null; transferExtensions: string[]; params: Record<string, unknown> | null }> {
   const { campaignId, segment } = await segmentOfJob(telephonyJobId, customerId);
   let transferExtensions: string[] = [];
-  if (campaignId && segment === 'service_return') {
-    const [row] = rowsFrom(await db.execute(sql`SELECT segment_params->>'repExtensions' AS exts FROM campaigns WHERE id = ${campaignId}`));
-    transferExtensions = String(row?.exts || '').split(/[\s,;]+/).map((x) => x.trim()).filter((x) => /^\d{2,6}$/.test(x)).slice(0, 20);
+  let params: Record<string, unknown> | null = null;
+  if (campaignId) {
+    const [row] = rowsFrom(await db.execute(sql`SELECT segment_params FROM campaigns WHERE id = ${campaignId}`));
+    const raw = row?.segment_params;
+    params = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, unknown> | null;
+    if (segment === 'service_return' || segment === 'trade_in') {
+      transferExtensions = String(params?.repExtensions || '').split(/[\s,;]+/).map((x) => x.trim()).filter((x) => /^\d{2,6}$/.test(x)).slice(0, 20);
+    }
   }
-  return { segment, transferExtensions };
+  return { segment, transferExtensions, params };
 }

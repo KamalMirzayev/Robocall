@@ -69,6 +69,17 @@ const SEGMENT_FIELDS: Record<string, FieldDef[]> = {
     { key: 'deadline', label: 'Təklifin son tarixi' },
     { key: 'note', label: 'Əlavə qeyd' },
   ],
+  // Trade-in of a model (e.g. Corolla) for a new one, or the new one on credit (Excel list).
+  trade_in: [
+    { key: 'company', label: 'Zəng edən mərkəz' },
+    { key: 'model', label: 'Kampaniya modeli' },
+    { key: 'brand', label: 'Marka', options: { Toyota: 'Toyota', Mitsubishi: 'Mitsubishi', Mazda: 'Mazda', BYD: 'BYD' } },
+    { key: 'offer', label: 'Kampaniya təklifi' },
+    { key: 'location', label: 'Mərkəzin ünvanı və iş saatları' },
+    { key: 'note', label: 'Əlavə qeyd' },
+    // Live transfer to sales reps when the customer wants to trade in (campaign-results.ts reads it).
+    { key: 'repExtensions', label: '', hidden: true },
+  ],
   satisfaction: [
     {
       key: 'serviceType',

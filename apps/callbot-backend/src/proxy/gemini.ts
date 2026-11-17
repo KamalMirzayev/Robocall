@@ -17,7 +17,7 @@ import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, load
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
 import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
-import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, recordCampaignResult } from '../campaign-results.js';
+import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, recordCampaignResult, tradeInTerms } from '../campaign-results.js';
 import { pinnedExtensions, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
 type Customer = InferSelectModel<typeof customers>;
@@ -194,7 +194,7 @@ const transferFunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: {} },
 };
 
-async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null, excel: { segment: string | null; canTransfer: boolean } | null = null): Promise<string> {
+async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null, excel: { segment: string | null; canTransfer: boolean; params?: Record<string, unknown> | null } | null = null): Promise<string> {
   // New approach: use toneTemplateId if available, else fall back to legacy tone
   let toneInstruction = '';
   if (agent.toneTemplateId) {
@@ -268,13 +268,13 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
   // ARZOOM leasing application (status, car, offer terms, requested documents).
   parts.push(...arzoomCustomerLines(customer.arzoomData));
   // Customers imported from Excel (service / credit-offer campaigns).
-  if (excel) parts.push(...excelCustomerLines((customer as { importData?: unknown }).importData, excel.segment, { canTransfer: excel.canTransfer }));
+  if (excel) parts.push(...excelCustomerLines((customer as { importData?: unknown }).importData, excel.segment, { canTransfer: excel.canTransfer, params: excel.params }));
   const legacyGuide = customer.sourceSystem === 'arzoom' || customer.sourceSystem === EXCEL_SOURCE ? '' : buildSummaryCategoryGuide();
   
   return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${legacyGuide}`;
 }
 
-function buildInitialGreetingPrompt(customer: Customer, segment: string | null = null) {
+function buildInitialGreetingPrompt(customer: Customer, segment: string | null = null, params: Record<string, unknown> | null = null) {
   const fullName = [customer.name, customer.surname]
     .filter((p) => p && p.trim() !== '-')
     .join(' ')
@@ -282,6 +282,10 @@ function buildInitialGreetingPrompt(customer: Customer, segment: string | null =
   // Churn campaign: the company greeting comes first (see CHURN SSENARİSİ in the customer data).
   if (segment === 'credit_offer') {
     return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, sizi Group Motors şirkətindən salamlayıram. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə, sonra CHURN SSENARİSİ ilə davam et.`;
+  }
+  if (segment === 'trade_in') {
+    const { company, model } = tradeInTerms(params);
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, ${company} narahat edirik. ${model} ilə bağlı sizə əla təklifimiz var: köhnə maşınınızı yeni ${model}-ya dəyişə və ya yeni ${model}-nı kreditlə ala bilərsiniz. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə, sonra TRADE-IN SSENARİSİ ilə davam et.`;
   }
   // ARZOOM applications carry no name: greet without one and ask for the application owner.
   if (!fullName || fullName === '-') {
@@ -347,7 +351,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   const pinnedReps = pinnedExtensions((customer as { arzoomData?: unknown }).arzoomData);
   const isExcel = customer.sourceSystem === EXCEL_SOURCE;
   // Service campaigns: the campaign's service-rep extensions (empty = no live transfer).
-  let excelCtx: { segment: string | null; transferExtensions: string[] } | null = null;
+  let excelCtx: { segment: string | null; transferExtensions: string[]; params?: Record<string, unknown> | null } | null = null;
   const transferExtensions = () => (isExcel ? excelCtx?.transferExtensions ?? [] : pinnedReps.length ? pinnedReps : salesExtensionsFor(brand));
   const rawSend = (msg: ServerMessage) => {
     if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(msg));
@@ -416,13 +420,13 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         onConnected: (ext) => {
           transferState = 'connected';
           transferConnectedAt = new Date();
-          transcriptLines.push(`[${isExcel ? 'Servis nümayəndəsinə' : 'Satış təmsilçisinə'} qoşuldu: ${ext}]`);
+          transcriptLines.push(`[${isExcel && excelCtx?.segment !== 'trade_in' ? 'Servis nümayəndəsinə' : 'Satış təmsilçisinə'} qoşuldu: ${ext}]`);
           if (isExcel) {
             void recordCampaignResult({
               customerId: customer.id,
               telephonyJobId,
               outcome: 'transferred_to_rep',
-              reason: `Müştəri təklifə razılaşdı və ${ext} daxili nömrəli servis nümayəndəsinə qoşuldu.`,
+              reason: `Müştəri təklifə razılaşdı və ${ext} daxili nömrəli ${excelCtx?.segment === 'trade_in' ? 'satış' : 'servis'} nümayəndəsinə qoşuldu.`,
             }).catch(() => {});
           } else void recordArzoomFeedback({
             customerId: customer.id,
@@ -448,7 +452,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           try {
             session.sendClientContent({
               turns: isExcel
-                ? '[Sistem] Servis nümayəndələri hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, nümayəndənin ona tezliklə geri zəng edəcəyini de, record_campaign_result alətini outcome=wants_rep_contact ilə çağır, sonra qısa sağollaş və end_call çağır.'
+                ? '[Sistem] Nümayəndələr hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, nümayəndənin ona tezliklə geri zəng edəcəyini de, record_campaign_result alətini outcome=wants_rep_contact ilə çağır, sonra qısa sağollaş və end_call çağır.'
                 : '[Sistem] Satış təmsilçiləri hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, filiala yaxınlaşa və ya *5665 nömrəsinə zəng edə biləcəyini, ya da təmsilçinin ona tezliklə geri zəng edəcəyini de. Sonra qısa sağollaş və end_call çağır.',
               turnComplete: true,
             });
@@ -467,7 +471,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
   let session: Awaited<ReturnType<typeof ai.live.connect>> | null = null;
   const callMemoryContext = await buildCallMemoryContextBounded(customer, agent);
-  if (isExcel) excelCtx = await excelCallContext(jobId, customer.id).catch(() => ({ segment: null, transferExtensions: [] }));
+  if (isExcel) excelCtx = await excelCallContext(jobId, customer.id).catch(() => ({ segment: null, transferExtensions: [], params: null }));
 
   const forwardCustomerAudio = (data: string) => {
     if (transferState === 'dialing' || transferState === 'connected') {
@@ -550,7 +554,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           send({ type: 'connected' });
           if (initialGreetingEnabled) {
             session?.sendClientContent({
-              turns: buildInitialGreetingPrompt(customer, isExcel ? excelCtx?.segment ?? null : null),
+              turns: buildInitialGreetingPrompt(customer, isExcel ? excelCtx?.segment ?? null : null, isExcel ? excelCtx?.params ?? null : null),
               turnComplete: true,
             });
           }
@@ -754,7 +758,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         // and defaults can change between versions.
         thinkingConfig: { thinkingLevel: geminiThinkingLevel },
         systemInstruction: await buildSystemInstruction(customer, agent, callMemoryContext, baseTemplateId, dynamicContext,
-          isExcel ? { segment: excelCtx?.segment ?? null, canTransfer: (excelCtx?.transferExtensions.length ?? 0) > 0 } : null),
+          isExcel ? { segment: excelCtx?.segment ?? null, canTransfer: (excelCtx?.transferExtensions.length ?? 0) > 0, params: excelCtx?.params ?? null } : null),
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         realtimeInputConfig: {
