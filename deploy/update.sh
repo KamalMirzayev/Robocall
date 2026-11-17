@@ -44,7 +44,16 @@ if [ ! -e "$PAUSE" ]; then
   sudo -u callbot touch "$PAUSE"
   OWN_PAUSE=1
 fi
-trap '[ "$OWN_PAUSE" = 1 ] && rm -f "$PAUSE"' EXIT
+# Older API builds do not read the pause file: also hold the active campaigns for the wait.
+HELD=$(sudo -u postgres psql -qtAX robocall_callbot -c "UPDATE campaigns SET status='paused' WHERE status='active' RETURNING id" 2>/dev/null | paste -sd, - || true)
+release() {
+  [ "$OWN_PAUSE" = 1 ] && rm -f "$PAUSE"
+  if [ -n "$HELD" ]; then
+    sudo -u postgres psql -qtAX robocall_callbot -c "UPDATE campaigns SET status='active' WHERE id IN ($HELD) AND status='paused'" >/dev/null 2>&1 || true
+    HELD=""
+  fi
+}
+trap release EXIT
 
 active() {
   sudo -u postgres psql -qtAX robocall_callbot -c "SELECT count(*) FROM telephony_jobs WHERE status IN ('pending','claimed','dialing','answered') AND created_at > now() - interval '3 hours'" 2>/dev/null || echo 0
@@ -61,6 +70,7 @@ done
 
 echo "==> Restart"
 systemctl restart robocall-api robocall-frontend
+release
 for i in $(seq 1 20); do
   sleep 2
   if curl -fs localhost:4000/health >/dev/null; then
