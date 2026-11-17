@@ -35,11 +35,13 @@ deps "$APP/apps/callbot-backend"
 (cd "$APP/apps/callbot-backend" && sudo -u callbot -H npm run build >/tmp/robocall-backend-build.log 2>&1) \
   || { echo "Backend build alınmadı:"; tail -30 /tmp/robocall-backend-build.log; exit 1; }
 deps "$APP/apps/frontend"
+# The running panel breaks as soon as its .next folder is rebuilt under it, and it carries
+# no calls: stop it, build from a clean .next, start it (the panel is down 1-2 minutes).
+systemctl stop robocall-frontend
+rm -rf "$APP/apps/frontend/.next"
 (cd "$APP/apps/frontend" && sudo -u callbot -H npm run build >/tmp/robocall-frontend-build.log 2>&1) \
-  || { echo "Frontend build alınmadı:"; tail -30 /tmp/robocall-frontend-build.log; exit 1; }
-# The running panel breaks once its .next folder is rebuilt, and it carries no calls:
-# restart it now instead of after the call drain.
-systemctl restart robocall-frontend
+  || { echo "Frontend build alınmadı:"; tail -30 /tmp/robocall-frontend-build.log; systemctl start robocall-frontend; exit 1; }
+systemctl start robocall-frontend
 
 # A pause that was already there (a planned break) is left in place.
 OWN_PAUSE=0
