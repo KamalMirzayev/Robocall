@@ -1,5 +1,28 @@
 import 'dotenv/config';
 import { geminiCreditsDepleted } from './gemini-credit.js';
+import fs from 'node:fs';
+
+// Pause new dialing (calls in progress go on): a file, written by deploy/update.sh while it
+// waits for live calls to end, or by hand for a planned break. Empty = until removed;
+// otherwise an ISO time after which dialing resumes on its own.
+const PAUSE_FILE = process.env.DIALING_PAUSE_FILE || '/opt/robocall/.dialing-paused';
+
+function dialingPause(): string | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(PAUSE_FILE, 'utf8').trim();
+  } catch {
+    return null;
+  }
+  if (!text) return 'until resumed';
+  const until = Date.parse(text);
+  if (!Number.isFinite(until)) return 'until resumed';
+  if (until <= Date.now()) {
+    try { fs.unlinkSync(PAUSE_FILE); } catch { /* not ours to remove */ }
+    return null;
+  }
+  return `until ${new Date(until).toISOString()}`;
+}
 import { sql, eq, and, lt, gte } from 'drizzle-orm';
 import { db } from './db/index.js';
 import { campaigns, campaignCalls, customers, agents, telephonyJobs } from './db/schema.js';
@@ -216,6 +239,11 @@ export async function campaignSchedulerTick() {
   try {
     console.log(`[Campaign Scheduler] Tick at ${new Date().toISOString()}`);
     await reapStaleJobs();
+    const pause = dialingPause();
+    if (pause) {
+      console.log(`[Campaign Scheduler] Dialing paused (${pause}); no new calls`);
+      return;
+    }
     if (geminiCreditsDepleted()) {
       console.warn('[Campaign Scheduler] Gemini credits are depleted; not dialing until they are back');
       return;
