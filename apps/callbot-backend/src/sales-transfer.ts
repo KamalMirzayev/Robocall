@@ -93,8 +93,10 @@ async function orderByLoad(exts: string[]): Promise<string[]> {
   `));
   const stat = new Map(rows.map((r) => [String(r.extension), r]));
   const shuffled = [...exts].sort(() => Math.random() - 0.5);
+  // A single number is a queue or ring group (e.g. "Toyota: 6434"): it takes several calls
+  // at once, so it is never skipped as busy.
   return shuffled
-    .filter((e) => !stat.get(e)?.busy)
+    .filter((e) => exts.length === 1 || !stat.get(e)?.busy)
     .sort((a, b) => {
       const sa = stat.get(a);
       const sb = stat.get(b);
