@@ -285,7 +285,7 @@ function buildInitialGreetingPrompt(customer: Customer, segment: string | null =
   }
   if (segment === 'trade_in') {
     const { company, model } = tradeInTerms(params);
-    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, ${company} narahat edirik. ${model} ilə bağlı sizə əla təklifimiz var: köhnə maşınınızı yeni ${model}-ya dəyişə və ya yeni ${model}-nı kreditlə ala bilərsiniz. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə, sonra TRADE-IN SSENARİSİ ilə davam et.`;
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, ${company} narahat edirik. ${model} ilə bağlı sizə əla təklifimiz var: köhnə ${model}-nızı gətirin, onu yeni ${model} ilə əvəz edək. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə, sonra TRADE-IN SSENARİSİ ilə davam et.`;
   }
   // ARZOOM applications carry no name: greet without one and ask for the application owner.
   if (!fullName || fullName === '-') {

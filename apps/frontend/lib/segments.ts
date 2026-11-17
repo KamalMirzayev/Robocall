@@ -276,9 +276,9 @@ Kampaniya məlumatı:
 
 Danışığın gedişi (müştəri məlumatlarındakı TRADE-IN SSENARİSİ əsasdır):
 1. "Hörmətli müştəri, [mərkəz]-dən narahat edirik, [model] ilə bağlı əla təklifimiz var" (ada görə müraciət etmə).
-2. Köhnə maşını gətirib yenisi ilə əvəz etmək və ya yenisini kredit şərtləri ilə almaq imkanını izah et.
-3. Trade-in istəsə: nümayəndəyə qoş və ya nümayəndənin zəng edəcəyini de.
-4. Kredit istəsə: müraciət linkini SMS ilə göndər, 1-2 dəqiqəyə cavab gələcəyini de.
+2. Əvvəlcə satışı təklif et: köhnə maşını gətirib yenisi ilə əvəz etmək. Krediti hələ demə.
+3. Kreditsiz razı olsa: satış nümayəndəsinə qoş və ya nümayəndənin zəng edəcəyini de.
+4. Tərəddüd etsə və ya kredit soruşsa: kredit şərtləri ilə də mümkün olduğunu de; razı olsa müraciət linkini SMS ilə göndər, 1-2 dəqiqəyə cavab gələcəyini de.
 5. Nəticəni record_campaign_result aləti ilə yaz və sağollaş.`,
   },
 );
