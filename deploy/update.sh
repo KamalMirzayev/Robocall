@@ -60,8 +60,9 @@ release() {
 }
 trap release EXIT
 
+# A job left 'dialing' for minutes (lost by a restart) is not a live call and must not hold the deploy.
 active() {
-  sudo -u postgres psql -qtAX robocall_callbot -c "SELECT count(*) FROM telephony_jobs WHERE status IN ('pending','claimed','dialing','answered') AND created_at > now() - interval '3 hours'" 2>/dev/null || echo 0
+  sudo -u postgres psql -qtAX robocall_callbot -c "SELECT count(*) FROM telephony_jobs WHERE (status IN ('pending','claimed','dialing') AND created_at > now() - interval '5 minutes') OR (status = 'answered' AND created_at > now() - interval '45 minutes')" 2>/dev/null || echo 0
 }
 echo "==> Yeni zənglər dayandırıldı, aktiv zənglərin bitməsi gözlənilir (ən çox $DRAIN_MIN dəq)"
 deadline=$(( $(date +%s) + DRAIN_MIN * 60 ))
