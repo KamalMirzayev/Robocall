@@ -177,8 +177,8 @@ export function startSalesTransferApp(): void {
 
 export interface TransferHandle {
   cancel(): Promise<void>;
-  // While the bot briefs the rep: the customer neither hears nor is heard.
-  setCustomerPrivate(on: boolean): Promise<void>;
+  // Ends the private briefing: the rep and the bot's media join the customer's bridge.
+  joinCustomer(): Promise<void>;
 }
 
 export interface TransferCallbacks {
@@ -196,8 +196,26 @@ export async function startSalesTransfer(
   let transferRowId: number | null = null;
   let bridgeId: string | null = null;
   let customerChannel: string | null = null;
+  // While the bot briefs the rep, the bot's media channel and the rep sit in a private
+  // bridge; the customer stays alone in the call bridge with hold music.
+  let privateBridgeId: string | null = null;
+  let mediaChannel: string | null = null;
+  let joined = false;
+  let joinTimer: ReturnType<typeof setTimeout> | null = null;
 
   const hangupRep = async () => {
+    if (joinTimer) clearTimeout(joinTimer);
+    joinTimer = null;
+    if (privateBridgeId) {
+      const pb = privateBridgeId;
+      privateBridgeId = null;
+      // Put the bot's media back so the call bridge is whole again before it ends.
+      if (mediaChannel && bridgeId) {
+        await ari(`/bridges/${encodeURIComponent(pb)}/removeChannel?channel=${encodeURIComponent(mediaChannel)}`, 'POST').catch(() => {});
+        await ari(`/bridges/${encodeURIComponent(bridgeId)}/addChannel?channel=${encodeURIComponent(mediaChannel)}`, 'POST').catch(() => {});
+      }
+      await ari(`/bridges/${encodeURIComponent(pb)}`, 'DELETE').catch(() => {});
+    }
     if (repChannelId) {
       const id = repChannelId;
       repChannelId = null;
@@ -217,10 +235,25 @@ export async function startSalesTransfer(
       cancelled = true;
       await hangupRep();
     },
-    async setCustomerPrivate(on: boolean) {
-      if (!customerChannel) return;
-      await ari(`/channels/${encodeURIComponent(customerChannel)}/mute?direction=both`, on ? 'POST' : 'DELETE')
-        .catch((err) => console.warn('[sales-transfer] customer mute failed', (err as Error).message));
+    async joinCustomer() {
+      if (joined) return;
+      joined = true;
+      if (joinTimer) clearTimeout(joinTimer);
+      joinTimer = null;
+      if (!privateBridgeId || !bridgeId) return;
+      const pb = privateBridgeId;
+      privateBridgeId = null;
+      await stopMoh();
+      const move = async (ch: string | null) => {
+        if (!ch) return;
+        await ari(`/bridges/${encodeURIComponent(pb)}/removeChannel?channel=${encodeURIComponent(ch)}`, 'POST').catch(() => {});
+        await ari(`/bridges/${encodeURIComponent(bridgeId!)}/addChannel?channel=${encodeURIComponent(ch)}`, 'POST')
+          .catch((err) => console.warn('[sales-transfer] join failed', (err as Error).message));
+      };
+      await move(mediaChannel);
+      await move(repChannelId);
+      await ari(`/bridges/${encodeURIComponent(pb)}`, 'DELETE').catch(() => {});
+      console.log(`[sales-transfer] job ${params.telephonyJobId} rep joined the customer`);
     },
   };
 
@@ -301,9 +334,36 @@ export async function startSalesTransfer(
           continue;
         }
 
-        await handle.setCustomerPrivate(true);
-        await stopMoh();
-        await ari(`/bridges/${encodeURIComponent(bridgeId)}/addChannel?channel=${encodeURIComponent(rep.id)}`, 'POST');
+        // Private briefing: move the bot's media channel next to the rep; the customer keeps
+        // the hold music. Without a media channel to move, join the rep straight away.
+        try {
+          const b = await ari<{ channels: string[] }>(`/bridges/${encodeURIComponent(bridgeId)}`);
+          mediaChannel = (b.channels || []).find((c) => c !== customerChannelId) || null;
+          if (mediaChannel) {
+            const pb = await ari<{ id: string }>('/bridges?type=mixing', 'POST');
+            privateBridgeId = pb.id;
+            await ari(`/bridges/${encodeURIComponent(bridgeId)}/removeChannel?channel=${encodeURIComponent(mediaChannel)}`, 'POST');
+            await ari(`/bridges/${encodeURIComponent(pb.id)}/addChannel?channel=${encodeURIComponent(mediaChannel)}`, 'POST');
+            await ari(`/bridges/${encodeURIComponent(pb.id)}/addChannel?channel=${encodeURIComponent(rep.id)}`, 'POST');
+            joinTimer = setTimeout(() => void handle.joinCustomer(), 20000);
+          }
+        } catch (err) {
+          console.warn('[sales-transfer] private briefing failed, joining directly', (err as Error).message);
+          if (privateBridgeId) {
+            const pb = privateBridgeId;
+            privateBridgeId = null;
+            if (mediaChannel) {
+              await ari(`/bridges/${encodeURIComponent(pb)}/removeChannel?channel=${encodeURIComponent(mediaChannel)}`, 'POST').catch(() => {});
+              await ari(`/bridges/${encodeURIComponent(bridgeId)}/addChannel?channel=${encodeURIComponent(mediaChannel)}`, 'POST').catch(() => {});
+            }
+            await ari(`/bridges/${encodeURIComponent(pb)}`, 'DELETE').catch(() => {});
+          }
+        }
+        if (!privateBridgeId) {
+          joined = true;
+          await stopMoh();
+          await ari(`/bridges/${encodeURIComponent(bridgeId)}/addChannel?channel=${encodeURIComponent(rep.id)}`, 'POST');
+        }
         const [row] = rowsFrom(await db.execute(sql`
           INSERT INTO sales_transfers (telephony_job_id, customer_id, brand, extension, status)
           VALUES (${params.telephonyJobId}, ${params.customerId}, ${params.brand}, ${ext}, 'answered') RETURNING id

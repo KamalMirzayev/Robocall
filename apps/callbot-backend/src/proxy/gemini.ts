@@ -419,7 +419,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
       {
         telephonyJobId, customerId: customer.id, brand, callerId: customer.phone || null,
         // Shown on the rep's phone while it rings, so the rep knows a robocall customer is coming.
-        callerName: `Robocall ${isExcel ? (excelCtx?.segment === 'trade_in' ? String(excelCtx?.params?.model || 'Trade-in') : excelCtx?.segment === 'credit_offer' ? 'Kredit' : 'Servis') : 'Kredit'}`.slice(0, 20),
+        callerName: `ArzoomCall ${isExcel ? (excelCtx?.segment === 'trade_in' ? String(excelCtx?.params?.model || 'Trade-in') : excelCtx?.segment === 'credit_offer' ? 'Kredit' : 'Servis') : 'Kredit'}`.slice(0, 20),
         extensions: isExcel ? transferExtensions() : pinnedReps,
       },
       {
@@ -446,7 +446,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             if (briefingTimer) clearTimeout(briefingTimer);
             briefingTimer = null;
             transferState = 'connected';
-            void transferHandle?.setCustomerPrivate(false);
+            void transferHandle?.joinCustomer();
             if (!sessionClosed && session) {
               try {
                 session.close();
@@ -462,7 +462,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             : 'ARZOOM kredit müraciəti';
           try {
             session.sendClientContent({
-              turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu. Müştəri hələ səni və nümayəndəni EŞİTMİR (gözləmədədir), indi yalnız nümayəndə ilə danışırsan. Nümayəndəyə 2-3 qısa cümlə ilə de: "Salam, bu Robocall-dır. ${campaignText} üzrə müştəri xəttdədir", sonra müştərinin nə istədiyini və maşını, şərtlər haqqında dediklərini qısa xülasə et. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`,
+              turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu. Müştəri hələ səni və nümayəndəni EŞİTMİR (gözləmə musiqisindədir), indi yalnız nümayəndə ilə danışırsan. Nümayəndəyə 2-3 qısa cümlə ilə de: "Salam, bu ArzoomCall-dır. ${campaignText} üzrə müştəri xəttdədir", sonra müştərinin nə istədiyini və maşını, şərtlər haqqında dediklərini qısa xülasə et. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`,
               turnComplete: true,
             });
             briefingTimer = setTimeout(leave, 15000);
@@ -755,7 +755,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             briefingTimer = setTimeout(() => {
               briefingTimer = null;
               transferState = 'connected';
-              void transferHandle?.setCustomerPrivate(false);
+              void transferHandle?.joinCustomer();
               if (!sessionClosed && session) {
                 try {
                   session.close();
