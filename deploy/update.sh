@@ -37,6 +37,9 @@ deps "$APP/apps/callbot-backend"
 deps "$APP/apps/frontend"
 (cd "$APP/apps/frontend" && sudo -u callbot -H npm run build >/tmp/robocall-frontend-build.log 2>&1) \
   || { echo "Frontend build alınmadı:"; tail -30 /tmp/robocall-frontend-build.log; exit 1; }
+# The running panel breaks once its .next folder is rebuilt, and it carries no calls:
+# restart it now instead of after the call drain.
+systemctl restart robocall-frontend
 
 # A pause that was already there (a planned break) is left in place.
 OWN_PAUSE=0
@@ -69,7 +72,7 @@ while :; do
 done
 
 echo "==> Restart"
-systemctl restart robocall-api robocall-frontend
+systemctl restart robocall-api
 release
 for i in $(seq 1 20); do
   sleep 2
