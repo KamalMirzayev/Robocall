@@ -186,7 +186,7 @@ export interface TransferCallbacks {
 }
 
 export async function startSalesTransfer(
-  params: { telephonyJobId: number | null; customerId: number; brand: string | null; callerId: string | null; extensions?: string[] },
+  params: { telephonyJobId: number | null; customerId: number; brand: string | null; callerId: string | null; callerName?: string; extensions?: string[] },
   cb: TransferCallbacks
 ): Promise<TransferHandle> {
   let cancelled = false;
@@ -244,7 +244,10 @@ export async function startSalesTransfer(
           app: ARI_APP,
           timeout: String(ringSeconds),
         });
-        if (params.callerId) qs.set('callerId', params.callerId);
+        if (params.callerId) {
+          const name = String(params.callerName || '').replace(/["<>]/g, '').trim();
+          qs.set('callerId', name ? `"${name}" <${params.callerId}>` : params.callerId);
+        }
         let rep: { id: string };
         try {
           rep = await ari<{ id: string }>(`/channels?${qs.toString()}`, 'POST');

@@ -343,7 +343,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   const pendingAudio: string[] = [];
   // Sales transfer: 'pending' waits for the hold sentence to finish, 'dialing' plays hold music
   // while reps ring, 'connected' means the rep is in the call and the bot is out.
-  let transferState: 'idle' | 'pending' | 'dialing' | 'connected' = 'idle';
+  let transferState: 'idle' | 'pending' | 'dialing' | 'briefing' | 'connected' = 'idle';
+  let briefingTimer: ReturnType<typeof setTimeout> | null = null;
   let transferHandle: TransferHandle | null = null;
   let transferStartTimer: NodeJS.Timeout | null = null;
   let transferConnectedAt: Date | null = null;
@@ -415,7 +416,12 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     clearFinalSilenceEndTimer();
     console.log(`Sales transfer started for telephony job ${telephonyJobId ?? 'none'} brand=${brand ?? '-'}`);
     transferHandle = await startSalesTransfer(
-      { telephonyJobId, customerId: customer.id, brand, callerId: customer.phone || null, extensions: isExcel ? transferExtensions() : pinnedReps },
+      {
+        telephonyJobId, customerId: customer.id, brand, callerId: customer.phone || null,
+        // Shown on the rep's phone while it rings, so the rep knows a robocall customer is coming.
+        callerName: `Robocall ${isExcel ? (excelCtx?.segment === 'trade_in' ? String(excelCtx?.params?.model || 'Trade-in') : excelCtx?.segment === 'credit_offer' ? 'Kredit' : 'Servis') : 'Kredit'}`.slice(0, 20),
+        extensions: isExcel ? transferExtensions() : pinnedReps,
+      },
       {
         onConnected: (ext) => {
           transferState = 'connected';
@@ -434,11 +440,33 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             outcome: 'transferred_to_sales',
             reason: `Müştəri şərtlərlə razılaşdı və ${ext} daxili nömrəli satış təmsilçisinə qoşuldu.`,
           }).catch(() => {});
-          // The bot is done; the call itself stays up until the customer or the rep hangs up.
-          if (!sessionClosed && session) {
-            try {
-              session.close();
-            } catch {}
+          // Warm hand-off: the bot tells the rep in one or two sentences who is on the line and
+          // what they want, then leaves; the call stays up until the customer or the rep hangs up.
+          const leave = () => {
+            if (briefingTimer) clearTimeout(briefingTimer);
+            briefingTimer = null;
+            transferState = 'connected';
+            if (!sessionClosed && session) {
+              try {
+                session.close();
+              } catch {}
+            }
+          };
+          if (sessionClosed || !session) return leave();
+          transferState = 'briefing';
+          const campaignText = isExcel
+            ? excelCtx?.segment === 'trade_in'
+              ? `${String(excelCtx?.params?.model || 'Corolla')} trade-in kampaniyası`
+              : excelCtx?.segment === 'credit_offer' ? 'kredit (churn) kampaniyası' : 'servis kampaniyası'
+            : 'ARZOOM kredit müraciəti';
+          try {
+            session.sendClientContent({
+              turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu, müştəri də xəttdədir. Nümayəndəyə müraciət et və cəmi 1-2 qısa cümlə ilə de: "Salam, bu Robocall-dır. ${campaignText} üzrə müştəri xəttdədir" və müştərinin nə istədiyini (və maşını haqqında dediklərini) qısa xülasə et. Sonra "Sizi müştəri ilə tanış edirəm, xoş danışıqlar" de və susun. Heç bir alət çağırma.`,
+              turnComplete: true,
+            });
+            briefingTimer = setTimeout(leave, 15000);
+          } catch {
+            leave();
           }
         },
         onFailed: (reason) => {
@@ -474,7 +502,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   if (isExcel) excelCtx = await excelCallContext(jobId, customer.id).catch(() => ({ segment: null, transferExtensions: [], params: null }));
 
   const forwardCustomerAudio = (data: string) => {
-    if (transferState === 'dialing' || transferState === 'connected') {
+    if (transferState === 'dialing' || transferState === 'briefing' || transferState === 'connected') {
       // Hold music and the rep conversation: keep recording, keep the bot out of it.
       broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'customer', rate: 16000, data });
       recording?.add('customer', 16000, data);
@@ -720,6 +748,19 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               send({ type: 'transcription', role: 'model', text: currentAgentTurn });
             }
           }
+          if (message.serverContent?.turnComplete && transferState === 'briefing' && currentAgentTurn.trim()) {
+            if (briefingTimer) clearTimeout(briefingTimer);
+            // Let the last words play out, then the bot leaves the call.
+            briefingTimer = setTimeout(() => {
+              briefingTimer = null;
+              transferState = 'connected';
+              if (!sessionClosed && session) {
+                try {
+                  session.close();
+                } catch {}
+              }
+            }, 1500);
+          }
           if (message.serverContent?.turnComplete && transferState === 'pending') {
             if (transferStartTimer) clearTimeout(transferStartTimer);
             // Let the queued hold sentence finish playing before the hold music starts.
@@ -729,7 +770,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             const completedAgentTurn = currentAgentTurn.trim();
             transcriptLines.push(`A: ${completedAgentTurn}`);
             if (endCallRequested) scheduleEndCallAfterTurn();
-            else if (isFinalGoodbye(completedAgentTurn)) scheduleFinalSilenceEnd();
+            else if (transferState !== 'briefing' && transferState !== 'connected' && isFinalGoodbye(completedAgentTurn)) scheduleFinalSilenceEnd();
             currentAgentTurn = '';
           } else if (message.serverContent?.turnComplete && endCallRequested) {
             scheduleEndCallAfterTurn();
@@ -746,7 +787,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           reportGeminiError((event as any)?.reason);
           sessionClosed = true;
           // During a transfer the call continues without the bot.
-          if (transferState === 'dialing' || transferState === 'connected' || transferState === 'pending') return;
+          if (transferState === 'dialing' || transferState === 'briefing' || transferState === 'connected' || transferState === 'pending') return;
           if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
         },
         onerror: (err) => {
