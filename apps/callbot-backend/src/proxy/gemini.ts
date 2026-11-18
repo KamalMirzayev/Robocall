@@ -613,9 +613,17 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     }
   });
 
+  // Live model: GEMINI_LIVE_MODEL for everyone; GEMINI_LIVE_TEST_MODEL only for the numbers in
+  // GEMINI_LIVE_TEST_PHONES (last digits are enough), to try a new model on a test call first.
+  const testPhones = String(process.env.GEMINI_LIVE_TEST_PHONES || '').split(/[,\s]+/).map((p) => p.replace(/\D/g, '')).filter((p) => p.length >= 7);
+  const phoneDigits = String(customer.phone || '').replace(/\D/g, '');
+  const isTestPhone = !!process.env.GEMINI_LIVE_TEST_MODEL && testPhones.some((p) => phoneDigits.endsWith(p));
+  const liveModel = (isTestPhone ? process.env.GEMINI_LIVE_TEST_MODEL : process.env.GEMINI_LIVE_MODEL) || 'gemini-3.1-flash-live-preview';
+  if (isTestPhone) console.log(`Live test model ${liveModel} for job ${telephonyJobId ?? 'none'}`);
+
   try {
     session = await ai.live.connect({
-      model: 'gemini-3.1-flash-live-preview',
+      model: liveModel,
       callbacks: {
         onopen: async () => {
           console.log('Gemini session opened');
@@ -858,7 +866,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         // Pin the thinking level explicitly (env-configurable) rather than
         // relying on the model's default, since this is a preview model
         // and defaults can change between versions.
-        thinkingConfig: { thinkingLevel: geminiThinkingLevel },
+        ...(liveModel.startsWith('gemini-3') ? { thinkingConfig: { thinkingLevel: geminiThinkingLevel } } : {}),
         systemInstruction: await buildSystemInstruction(customer, agent, callMemoryContext, baseTemplateId, dynamicContext,
           isExcel ? { segment: excelCtx?.segment ?? null, canTransfer: (excelCtx?.transferExtensions.length ?? 0) > 0, params: excelCtx?.params ?? null } : null),
         // Optional hint for the written transcript (short Azerbaijani words came out as Portuguese).
