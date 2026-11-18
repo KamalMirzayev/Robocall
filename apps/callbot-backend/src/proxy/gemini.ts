@@ -38,8 +38,14 @@ const autoEndCallDelayMs = Number(process.env.AUTO_END_CALL_DELAY_MS || 1500);
 const finalSilenceEndMs = Number(process.env.FINAL_SILENCE_END_MS || 1500);
 const finalSilenceSpeechRms = Number(process.env.FINAL_SILENCE_SPEECH_RMS || 800);
 const finalSilenceSpeechFrames = Number(process.env.FINAL_SILENCE_SPEECH_FRAMES || 15);
-const geminiVadSilenceDurationMs = Number(process.env.GEMINI_VAD_SILENCE_DURATION_MS || 250);
-const geminiVadPrefixPaddingMs = Number(process.env.GEMINI_VAD_PREFIX_PADDING_MS || 40);
+// How long the customer must be silent before the bot answers. 250 ms cut people off mid-sentence
+// (the bot answered early, then got interrupted and repeated itself); 700 ms lets them finish.
+const geminiVadSilenceDurationMs = Number(process.env.GEMINI_VAD_SILENCE_DURATION_MS || 700);
+// Audio kept from before speech was detected, so the first syllable is not lost.
+const geminiVadPrefixPaddingMs = Number(process.env.GEMINI_VAD_PREFIX_PADDING_MS || 200);
+// LOW: a short pause inside a sentence does not count as the end of the customer's turn.
+const geminiVadEndSensitivity = String(process.env.GEMINI_VAD_END_SENSITIVITY || 'low').toLowerCase() === 'high'
+  ? EndSensitivity.END_SENSITIVITY_HIGH : EndSensitivity.END_SENSITIVITY_LOW;
 const maxPendingAudioFrames = Number(process.env.GEMINI_PENDING_AUDIO_FRAMES || 600);
 const geminiThinkingLevelMap: Record<string, ThinkingLevel> = {
   minimal: ThinkingLevel.MINIMAL,
@@ -825,9 +831,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         realtimeInputConfig: {
           automaticActivityDetection: {
             startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
-            endOfSpeechSensitivity: EndSensitivity.END_SENSITIVITY_HIGH,
+            endOfSpeechSensitivity: geminiVadEndSensitivity,
             prefixPaddingMs: Math.max(40, Math.min(geminiVadPrefixPaddingMs, 300)),
-            silenceDurationMs: Math.max(150, Math.min(geminiVadSilenceDurationMs, 1000)),
+            silenceDurationMs: Math.max(150, Math.min(geminiVadSilenceDurationMs, 1500)),
           },
         },
         tools: [{ functionDeclarations: [endCallFunctionDeclaration,

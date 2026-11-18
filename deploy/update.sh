@@ -74,8 +74,28 @@ while :; do
   sleep 10
 done
 
+# Voice tuning (listening): set in the services' .env files; only lines that differ are rewritten.
+#  API: the bot waits 700 ms of silence before answering (was 250 ms, it cut customers off).
+#  Telephony: quieter speech reaches the bot and the end of each phrase is not clipped.
+TEL_CHANGED=0
+setenv() { # file key value -> returns 0 if changed
+  local f="$1" k="$2" v="$3"
+  [ -f "$f" ] || { sudo -u callbot touch "$f"; chmod 600 "$f"; }
+  grep -qx "$k=$v" "$f" && return 1
+  sed -i "/^$k=/d" "$f"; echo "$k=$v" >> "$f"; return 0
+}
+API_ENV="$APP/apps/callbot-backend/.env"; TEL_ENV="$APP/apps/telephony/.env"
+setenv "$API_ENV" GEMINI_VAD_SILENCE_DURATION_MS 700 || true
+setenv "$API_ENV" GEMINI_VAD_PREFIX_PADDING_MS 200 || true
+setenv "$API_ENV" GEMINI_VAD_END_SENSITIVITY low || true
+setenv "$TEL_ENV" CALLBOT_INBOUND_SPEECH_RMS 450 && TEL_CHANGED=1
+setenv "$TEL_ENV" CALLBOT_INBOUND_SPEECH_RELEASE_MS 1200 && TEL_CHANGED=1
+setenv "$TEL_ENV" CALLBOT_INBOUND_SPEECH_MIN_FRAMES 4 && TEL_CHANGED=1
+chown callbot:callbot "$API_ENV" "$TEL_ENV"
+
 echo "==> Restart"
 systemctl restart robocall-api
+if [ "$TEL_CHANGED" = 1 ]; then echo "   telefoniya ayarları dəyişdi, robocall-telephony də yenidən başlayır"; systemctl restart robocall-telephony; sleep 5; fi
 release
 for i in $(seq 1 20); do
   sleep 2
