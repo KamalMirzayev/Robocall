@@ -201,6 +201,18 @@ const transferFunctionDeclaration = {
   parameters: { type: Type.OBJECT, properties: {} },
 };
 
+// Phone line, Azerbaijani speakers: how to listen. Short or unclear replies were taken as "yes",
+// and the bot repeated whole sentences after being cut off.
+const LISTENING_INSTRUCTION = `
+
+DİNLƏMƏ QAYDALARI:
+- Müştəri Azərbaycan dilində danışır (bəzən rus dilində). Telefon xətti zəifdir: eşitdiyin başqa dilə (portuqal, ispan və s.) oxşayırsa, bu, Azərbaycan dilində qısa bir sözdür ("alo", "bəli", "hə", "buyurun", "yox").
+- Müştərinin cavabını aydın başa düşmədinsə, razılıq kimi qəbul etmə. Nəzakətlə bir dəfə qısa soruş: "Bağışlayın, xətt bir az zəifdir, təkrar edə bilərsiniz?"
+- Müştəri danışarkən heç vaxt danışma, onun cümləsini bitirməsini gözlə.
+- Müştəri sözünü kəssə, əvvəlki cümləni əvvəldən təkrarlama. Onun dediyinə cavab ver, lazım olsa yarımçıq fikri bir qısa cümlə ilə tamamla.
+- Eyni cümləni və ya təklifi iki dəfə eyni sözlərlə demə.
+- Müştəri sual veribsə, əvvəl onun sualına cavab ver, sonra ssenari ilə davam et.`;
+
 async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null, excel: { segment: string | null; canTransfer: boolean; params?: Record<string, unknown> | null } | null = null): Promise<string> {
   // New approach: use toneTemplateId if available, else fall back to legacy tone
   let toneInstruction = '';
@@ -278,7 +290,7 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
   if (excel) parts.push(...excelCustomerLines((customer as { importData?: unknown }).importData, excel.segment, { canTransfer: excel.canTransfer, params: excel.params }));
   const legacyGuide = customer.sourceSystem === 'arzoom' || customer.sourceSystem === EXCEL_SOURCE ? '' : buildSummaryCategoryGuide();
   
-  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${legacyGuide}`;
+  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${LISTENING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${legacyGuide}`;
 }
 
 function buildInitialGreetingPrompt(customer: Customer, segment: string | null = null, params: Record<string, unknown> | null = null) {
@@ -826,7 +838,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         thinkingConfig: { thinkingLevel: geminiThinkingLevel },
         systemInstruction: await buildSystemInstruction(customer, agent, callMemoryContext, baseTemplateId, dynamicContext,
           isExcel ? { segment: excelCtx?.segment ?? null, canTransfer: (excelCtx?.transferExtensions.length ?? 0) > 0, params: excelCtx?.params ?? null } : null),
-        inputAudioTranscription: {},
+        // Optional hint for the written transcript (short Azerbaijani words came out as Portuguese).
+        // Off by default until confirmed on a test call: an unknown setup field would fail every call.
+        inputAudioTranscription: process.env.GEMINI_TRANSCRIPTION_LANGUAGE_HINT === 'on' ? { languageCodes: ['az-AZ', 'ru-RU'] } : {},
         outputAudioTranscription: {},
         realtimeInputConfig: {
           automaticActivityDetection: {
