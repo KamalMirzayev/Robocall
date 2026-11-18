@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import { DEFAULT_TEXT_MODEL } from './text-model.js';
 import { GoogleGenAI } from '@google/genai';
 import { db } from './db/index.js';
 import { recordAiTokenUsage } from './ai-usage.js';
@@ -233,6 +234,7 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
     const { company, model, brand } = tradeInTerms(opts.params);
     lines.push([
       `- TRADE-IN SSENARİSİ (agent təlimatından üstündür, bu ardıcıllıqla danış). Zəng edən: ${company.replace(/(n)?dən$/, '')}. Kampaniya modeli: ${brand} ${model}.`,
+      `  KİMLİK: bu zəngdə sən ${company.replace(/(n)?dən$/, '')}nin əməkdaşısan. Agent təlimatındakı başqa şirkət adını (məs. Arzoom Avto) və "Müştəri Bələdçisi" vəzifəsini çəkmə. "Kimsiniz, hardan zəng edirsiniz?" soruşsalar: "${company} zəng edirəm, ${brand}-nın rəsmi dileriyik" de.`,
       `  1) Salamlaşmada artıq dedin: "Hörmətli müştəri, ${company} narahat edirik, ${model} ilə bağlı əla təklifimiz var." Müştəriyə adı ilə müraciət etmə, həmişə "hörmətli müştəri" de. Model adını Azərbaycan dilinin qaydası ilə şəkilçi qoşaraq təbii tələffüz et.`,
       `  2) Əvvəlcə SATIŞI təklif et, krediti hələ demə: "Köhnə ${model}-nızı gətirin, qiymətləndirək və yeni ${model} ilə əvəz edək." Paneldə kampaniya təklifi yazılıbsa, onu da qısa əlavə et. Üstünlükləri izah et (köhnə maşın dəyərində qiymətləndirilir, yeni maşın, rahat proses) və müştərini razı salmağa çalış.`,
       opts.canTransfer
@@ -388,7 +390,7 @@ export async function ensureCampaignResultFromTranscript(params: {
   const key = String(process.env.GEMINI_API_KEY || '').trim();
   if (key) {
     try {
-      const model = process.env.POST_CALL_SUMMARY_MODEL || 'gemini-2.5-flash';
+      const model = process.env.POST_CALL_SUMMARY_MODEL || DEFAULT_TEXT_MODEL;
       const ai = new GoogleGenAI({ apiKey: key });
       const when = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Baku', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(params.startedAt);
       const prompt = `Bu, telefon zənginin transkriptidir (A: bot, C: müştəri). Zəng vaxtı (Bakı): ${when}.

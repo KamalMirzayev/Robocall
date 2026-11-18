@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { DEFAULT_TEXT_MODEL } from './text-model.js';
 import { recordAiTokenUsage } from './ai-usage.js';
 
 export type SummaryCategory = {
@@ -78,7 +79,7 @@ const FAMILY_RELATION_RE = /\b(men\s+)?(atasiyam|anasiyam|qardasiyam|bacisiyam|o
 const PAYMENT_RE = /\b(ode|odem|odenis|odeyecem|odeyecem|odeyerem|oduyecem|eleyecem|eleyeceyem|bagla|baglayacam|baglayaram|hell edecem|hell ederem|yatr|yatir|verecem|vererem)\b/;
 const FUTURE_DATE_RE = /\b(sabah|gelen hefte|gelen ay|heftesonu|ayin|gun|gune|cum[eə]|iki gun|bir iki gun|yaxin gun|vaxt|sonra|maas gunu|pensiya alan kimi|kartima pul dusende)\b/;
 const postCallSummaryAiEnabled = process.env.POST_CALL_SUMMARY_AI_ENABLED !== "false";
-const postCallSummaryModel = process.env.POST_CALL_SUMMARY_MODEL || "gemini-2.5-flash";
+const postCallSummaryModel = process.env.POST_CALL_SUMMARY_MODEL || DEFAULT_TEXT_MODEL;
 const postCallSummaryTimeoutMs = Number(process.env.POST_CALL_SUMMARY_TIMEOUT_MS || 25000);
 const postCallSummaryMaxTranscriptChars = Number(process.env.POST_CALL_SUMMARY_MAX_TRANSCRIPT_CHARS || 12000);
 

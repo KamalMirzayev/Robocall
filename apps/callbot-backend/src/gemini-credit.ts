@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { DEFAULT_TEXT_MODEL } from './text-model.js';
 
 // Google gives no API for the Gemini prepay balance, but when it runs out every request
 // fails with 402 Payment Required or 429 "prepayment credits are depleted". We watch for
@@ -6,7 +7,7 @@ import { GoogleGenAI } from '@google/genai';
 // (a customer would otherwise get a silent call), and a tiny probe request every few
 // minutes clears the flag as soon as credits are back.
 const PROBE_MS = 3 * 60_000;
-const PROBE_MODEL = process.env.GEMINI_CREDIT_PROBE_MODEL || 'gemini-2.5-flash-lite';
+const PROBE_MODEL = process.env.GEMINI_CREDIT_PROBE_MODEL || DEFAULT_TEXT_MODEL;
 
 let depletedAt: Date | null = null;
 let lastError = '';
