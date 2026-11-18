@@ -7,7 +7,7 @@ import apiClient from '@/lib/api-client';
 import { useAuth } from '@/lib/auth';
 import { useLanguage } from '@/lib/language';
 
-type Group = 'ai' | 'knowledge' | 'arzoom' | 'email' | 'whatsapp' | 'webhook' | 'pks';
+type Group = 'ai' | 'knowledge' | 'arzoom' | 'whatsapp' | 'webhook' | 'pks';
 
 interface SettingRow {
   key: string;
@@ -37,7 +37,7 @@ interface KbStatus {
   error: string | null;
 }
 
-const GROUPS: Group[] = ['ai', 'knowledge', 'arzoom', 'email', 'whatsapp', 'webhook', 'pks'];
+const GROUPS: Group[] = ['ai', 'knowledge', 'arzoom', 'whatsapp', 'webhook', 'pks'];
 
 function errorText(err: unknown, fallback: string) {
   return (err as AxiosError<{ error?: string }>)?.response?.data?.error || fallback;
@@ -158,7 +158,7 @@ export default function IntegrationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [geminiTest, setGeminiTest] = useState<{ ok: boolean; error?: string } | null>(null);
-  const [testing, setTesting] = useState<'gemini' | 'kb' | 'arzoom' | 'mail' | 'mail-daily' | null>(null);
+  const [testing, setTesting] = useState<'gemini' | 'kb' | 'arzoom' | null>(null);
 
   const apply = (data: { settings: SettingRow[]; knowledgeBase: KbStatus; arzoom?: ArzoomStatus }) => {
     setRows(data.settings);
@@ -182,19 +182,6 @@ export default function IntegrationsPage() {
       setGeminiTest(data);
     } catch (err) {
       setGeminiTest({ ok: false, error: errorText(err, 'error') });
-    } finally {
-      setTesting(null);
-    }
-  };
-
-  const [mailTest, setMailTest] = useState<{ ok: boolean; error?: string } | null>(null);
-  const testMail = async (daily: boolean) => {
-    setTesting(daily ? 'mail-daily' : 'mail');
-    try {
-      const { data } = await apiClient.post(`/callbot/settings/test/mail${daily ? '?daily=1' : ''}`);
-      setMailTest(data);
-    } catch (err) {
-      setMailTest({ ok: false, error: errorText(err, 'error') });
     } finally {
       setTesting(null);
     }
@@ -278,23 +265,6 @@ export default function IntegrationsPage() {
                       className="px-3 py-1.5 rounded-lg border border-slate-600 text-gray-300 hover:bg-slate-700 text-xs disabled:opacity-50"
                     >
                       {testing === 'arzoom' ? t('integrations.testing') : t('integrations.syncNow')}
-                    </button>
-                  </div>
-                )}
-                {group === 'email' && (
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {mailTest && (
-                      <span className={`text-xs ${mailTest.ok ? 'text-green-300' : 'text-red-300'}`}>
-                        {mailTest.ok ? t('integrations.mailSent') : `${t('integrations.testFailed')} ${mailTest.error ?? ''}`}
-                      </span>
-                    )}
-                    <button onClick={() => testMail(false)} disabled={testing !== null}
-                      className="px-3 py-1.5 rounded-lg border border-slate-600 text-gray-300 hover:bg-slate-700 text-xs disabled:opacity-50">
-                      {testing === 'mail' ? t('integrations.testing') : t('integrations.mailTest')}
-                    </button>
-                    <button onClick={() => testMail(true)} disabled={testing !== null}
-                      className="px-3 py-1.5 rounded-lg border border-slate-600 text-gray-300 hover:bg-slate-700 text-xs disabled:opacity-50">
-                      {testing === 'mail-daily' ? t('integrations.testing') : t('integrations.mailDaily')}
                     </button>
                   </div>
                 )}
