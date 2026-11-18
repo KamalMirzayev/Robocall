@@ -1128,6 +1128,10 @@
       "arzoom": {
         "title": "Arzoom kredit müraciətləri",
         "text": "Arzoom-dakı müraciətlər hər dəqiqə müştəri kimi ArzoomCall-a çəkilir. Tokeni Arzoom panelində (İstifadəçilər → ArzoomCall inteqrasiyası) yaradın və buraya yapışdırın."
+      },
+      "email": {
+        "title": "E-poçt hesabatları (Microsoft 365)",
+        "text": "ARZOOM lizinq müştərisi satış nümayəndəsinə qoşulanda rəhbərlərə dərhal məktub gedir, hər gün (B.e.–Şənbə) isə günlük hesabat göndərilir. Microsoft 365 üçün ya Graph (Tenant ID, Client ID, Client secret + göndərən poçt), ya da SMTP (smtp.office365.com, 587, istifadəçi və parol) doldurun."
       }
     },
     "keys": {
@@ -1145,12 +1149,25 @@
       "ARZOOM_API_URL": "Arzoom sayt ünvanı",
       "ARZOOM_API_TOKEN": "İnteqrasiya tokeni",
       "SALES_TRANSFER_GROUPS": "Satış təmsilçiləri (marka: daxili nömrələr)",
-      "GEMINI_BALANCE_USD": "Gemini balansı (USD)"
+      "GEMINI_BALANCE_USD": "Gemini balansı (USD)",
+      "REPORT_EMAILS": "Rəhbərlərin e-poçtları (vergüllə)",
+      "REPORT_DAILY_AT": "Günlük hesabat saatı (Bakı)",
+      "MAIL_FROM": "Göndərən poçt ünvanı",
+      "MS365_TENANT_ID": "Microsoft 365 Tenant ID",
+      "MS365_CLIENT_ID": "Microsoft 365 Client (App) ID",
+      "MS365_CLIENT_SECRET": "Microsoft 365 Client secret",
+      "SMTP_HOST": "SMTP server",
+      "SMTP_PORT": "SMTP port",
+      "SMTP_USER": "SMTP istifadəçi",
+      "SMTP_PASSWORD": "SMTP parol"
     },
     "arzoomOff": "Qoşulmayıb",
     "arzoomApplications": "müraciət",
     "arzoomLastSync": "son yeniləmə",
-    "syncNow": "İndi yenilə"
+    "syncNow": "İndi yenilə",
+    "mailTest": "Test məktubu",
+    "mailDaily": "Bugünkü hesabatı göndər",
+    "mailSent": "Göndərildi"
   },
   "analytics": {
     "title": "Zəng analitikası",

@@ -34,6 +34,7 @@ import { settingsRouter } from './routes/settings.js';
 import { ensureCampaignSegmentSchema, segmentContext } from './campaign-segments.js';
 import { ensureArzoomSchema, startArzoomSync } from './arzoom-sync.js';
 import { ensureSalesTransferSchema, startSalesTransferApp } from './sales-transfer.js';
+import { startMailReports } from './mailer.js';
 import { startArzoomAnalyticsPush } from './arzoom-analytics.js';
 import { ensureCampaignResultsSchema, startApplicationSmsRetry } from './campaign-results.js';
 import { ensureTrunkCapacitySchema } from './trunk-capacity.js';
@@ -263,6 +264,7 @@ server.listen(PORT, () => {
   startPartnerKbRefresher();
   startArzoomSync();
   startSalesTransferApp();
+  void startMailReports();
   startArzoomAnalyticsPush();
   startGeminiCreditWatch();
   startApplicationSmsRetry();

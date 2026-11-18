@@ -18,6 +18,7 @@ import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
 import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
 import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, recordCampaignResult, tradeInTerms } from '../campaign-results.js';
+import { notifyTransfer } from '../mailer.js';
 import { pinnedExtensions, recordTransferIssue, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
 type Customer = InferSelectModel<typeof customers>;
@@ -434,7 +435,14 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               outcome: 'transferred_to_rep',
               reason: `Müştəri təklifə razılaşdı və ${ext} daxili nömrəli ${excelCtx?.segment === 'trade_in' ? 'satış' : 'servis'} nümayəndəsinə qoşuldu.`,
             }).catch(() => {});
-          } else void recordArzoomFeedback({
+          } else void notifyTransfer({
+            customerId: customer.id,
+            telephonyJobId,
+            extension: ext,
+            brand: brand ?? null,
+            customerSaid: transcriptLines.filter((l) => l.startsWith('C:')).map((l) => l.slice(2).trim()),
+          }).catch(() => {});
+          if (!isExcel) void recordArzoomFeedback({
             customerId: customer.id,
             telephonyJobId,
             outcome: 'transferred_to_sales',

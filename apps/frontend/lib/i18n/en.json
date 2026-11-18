@@ -1128,6 +1128,10 @@
       "arzoom": {
         "title": "Arzoom leasing applications",
         "text": "Applications in Arzoom are pulled into ArzoomCall as customers every minute. Create the token in the Arzoom panel (Users → ArzoomCall integration) and paste it here."
+      },
+      "email": {
+        "title": "E-mail reports (Microsoft 365)",
+        "text": "When an ARZOOM leasing customer is connected to a sales rep, managers get an e-mail at once, plus a daily report (Mon–Sat). Fill in either Graph (tenant, client ID, secret + sender mailbox) or SMTP (smtp.office365.com, 587, user and password)."
       }
     },
     "keys": {
@@ -1145,12 +1149,25 @@
       "ARZOOM_API_URL": "Arzoom site address",
       "ARZOOM_API_TOKEN": "Integration token",
       "SALES_TRANSFER_GROUPS": "Sales reps (brand: extensions)",
-      "GEMINI_BALANCE_USD": "Gemini balance (USD)"
+      "GEMINI_BALANCE_USD": "Gemini balance (USD)",
+      "REPORT_EMAILS": "Manager e-mails (comma separated)",
+      "REPORT_DAILY_AT": "Daily report time (Baku)",
+      "MAIL_FROM": "Sender mailbox",
+      "MS365_TENANT_ID": "Microsoft 365 tenant ID",
+      "MS365_CLIENT_ID": "Microsoft 365 client (app) ID",
+      "MS365_CLIENT_SECRET": "Microsoft 365 client secret",
+      "SMTP_HOST": "SMTP server",
+      "SMTP_PORT": "SMTP port",
+      "SMTP_USER": "SMTP user",
+      "SMTP_PASSWORD": "SMTP password"
     },
     "arzoomOff": "Not connected",
     "arzoomApplications": "applications",
     "arzoomLastSync": "last sync",
-    "syncNow": "Sync now"
+    "syncNow": "Sync now",
+    "mailTest": "Send test mail",
+    "mailDaily": "Send today's report",
+    "mailSent": "Sent"
   },
   "analytics": {
     "title": "Call analytics",

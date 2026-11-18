@@ -8,7 +8,7 @@ import { db } from './db/index.js';
 
 export interface SettingDef {
   key: string;
-  group: 'ai' | 'knowledge' | 'arzoom' | 'whatsapp' | 'webhook' | 'pks';
+  group: 'ai' | 'knowledge' | 'arzoom' | 'email' | 'whatsapp' | 'webhook' | 'pks';
   secret: boolean;
   url?: boolean;
   placeholder?: string;
@@ -25,6 +25,17 @@ export const SETTINGS: SettingDef[] = [
   { key: 'ARZOOM_API_TOKEN', group: 'arzoom', secret: true },
   // Sales reps a customer who agrees is connected to, by car brand: "BYD: 161,162; Toyota: 334,305".
   { key: 'SALES_TRANSFER_GROUPS', group: 'arzoom', secret: false, placeholder: 'BYD: 161,162,125,163; Toyota: 334,305,324,306,325; Mitsubishi/Mazda: 514,241,220' },
+  // E-mail reports to managers (mailer.ts): Microsoft 365 via Graph or SMTP.
+  { key: 'REPORT_EMAILS', group: 'email', secret: false, placeholder: 'rehber1@acb.az, rehber2@acb.az' },
+  { key: 'REPORT_DAILY_AT', group: 'email', secret: false, placeholder: '19:05' },
+  { key: 'MAIL_FROM', group: 'email', secret: false, placeholder: 'arzoomcall@acb.az' },
+  { key: 'MS365_TENANT_ID', group: 'email', secret: false },
+  { key: 'MS365_CLIENT_ID', group: 'email', secret: false },
+  { key: 'MS365_CLIENT_SECRET', group: 'email', secret: true },
+  { key: 'SMTP_HOST', group: 'email', secret: false, placeholder: 'smtp.office365.com' },
+  { key: 'SMTP_PORT', group: 'email', secret: false, placeholder: '587' },
+  { key: 'SMTP_USER', group: 'email', secret: false },
+  { key: 'SMTP_PASSWORD', group: 'email', secret: true },
   { key: 'EVOLUTION_API_URL', group: 'whatsapp', secret: false, url: true },
   { key: 'EVOLUTION_API_KEY', group: 'whatsapp', secret: true },
   { key: 'EVOLUTION_INSTANCE_NAME', group: 'whatsapp', secret: false },
@@ -72,6 +83,9 @@ export function validateSetting(key: string, value: string): string | null {
   if (!def) return 'unknown setting';
   if (value.length > 2000) return 'value is too long';
   if (key === 'GEMINI_BALANCE_USD' && value && !Number.isFinite(Number(value.replace(',', '.')))) return 'enter a number, e.g. 250.00';
+  if (key === 'REPORT_DAILY_AT' && value && !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)) return 'enter a time, e.g. 19:05';
+  if (key === 'SMTP_PORT' && value && !/^\d{2,5}$/.test(value)) return 'enter a port, e.g. 587';
+  if (key === 'REPORT_EMAILS' && value && value.split(/[,;\s]+/).filter(Boolean).some((x) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x))) return 'enter e-mail addresses separated by commas';
   if (def.url && value) {
     try {
       const u = new URL(value);
