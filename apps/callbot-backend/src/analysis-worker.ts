@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { DEFAULT_TEXT_MODEL } from './text-model.js';
+import { textModel } from './text-model.js';
 import { GoogleGenAI } from '@google/genai';
 import { sql } from 'drizzle-orm';
 import { db } from './db/index.js';
@@ -12,7 +12,7 @@ const intervalMs = Number(process.env.ANALYSIS_WORKER_INTERVAL_MS || 30000);
 const batchSize = Number(process.env.ANALYSIS_WORKER_BATCH_SIZE || 2);
 const minDurationSeconds = Number(process.env.ANALYSIS_MIN_DURATION_SECONDS || 5);
 const minCallId = Number(process.env.ANALYSIS_MIN_CALL_ID || 0);
-const modelName = process.env.ANALYSIS_MODEL || DEFAULT_TEXT_MODEL;
+const modelName = textModel(process.env.ANALYSIS_MODEL);
 const maxTranscriptChars = Number(process.env.ANALYSIS_MAX_TRANSCRIPT_CHARS || 12000);
 const shortMemoryDays = Number(process.env.ANALYSIS_SHORT_MEMORY_DAYS || 14);
 const similarCallsLimit = Number(process.env.ANALYSIS_SIMILAR_CALLS_LIMIT || 5);

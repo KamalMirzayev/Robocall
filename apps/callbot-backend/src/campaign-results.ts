@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { DEFAULT_TEXT_MODEL } from './text-model.js';
+import { textModel } from './text-model.js';
 import { GoogleGenAI } from '@google/genai';
 import { db } from './db/index.js';
 import { recordAiTokenUsage } from './ai-usage.js';
@@ -390,7 +390,7 @@ export async function ensureCampaignResultFromTranscript(params: {
   const key = String(process.env.GEMINI_API_KEY || '').trim();
   if (key) {
     try {
-      const model = process.env.POST_CALL_SUMMARY_MODEL || DEFAULT_TEXT_MODEL;
+      const model = textModel(process.env.POST_CALL_SUMMARY_MODEL);
       const ai = new GoogleGenAI({ apiKey: key });
       const when = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Baku', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(params.startedAt);
       const prompt = `Bu, telefon zənginin transkriptidir (A: bot, C: müştəri). Zəng vaxtı (Bakı): ${when}.

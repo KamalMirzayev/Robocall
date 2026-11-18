@@ -1,5 +1,5 @@
 import { hasWorkerToken } from '../net-guard.js';
-import { DEFAULT_TEXT_MODEL } from '../text-model.js';
+import { textModel } from '../text-model.js';
 import { randomUUID } from 'node:crypto';
 import { scheduleArzoomAnalyticsPush } from '../arzoom-analytics.js';
 import { applyCallbackSchedule } from '../arzoom-sync.js';
@@ -465,7 +465,7 @@ telephonyRouter.post('/classify-audio', async (req, res) => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
     const response = await ai.models.generateContent({
-      model: process.env.EARLY_MEDIA_CLASSIFICATION_MODEL || DEFAULT_TEXT_MODEL,
+      model: textModel(process.env.EARLY_MEDIA_CLASSIFICATION_MODEL),
       contents: [{
         role: 'user',
         parts: [

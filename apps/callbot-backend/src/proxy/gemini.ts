@@ -866,7 +866,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         // Pin the thinking level explicitly (env-configurable) rather than
         // relying on the model's default, since this is a preview model
         // and defaults can change between versions.
-        ...(liveModel.startsWith('gemini-3') ? { thinkingConfig: { thinkingLevel: geminiThinkingLevel } } : {}),
+        // Only the 3.1 flash live model takes a thinking level; gemini-3.8-live refuses the session with it (1007).
+        ...(liveModel.includes('flash-live') ? { thinkingConfig: { thinkingLevel: geminiThinkingLevel } } : {}),
         systemInstruction: await buildSystemInstruction(customer, agent, callMemoryContext, baseTemplateId, dynamicContext,
           isExcel ? { segment: excelCtx?.segment ?? null, canTransfer: (excelCtx?.transferExtensions.length ?? 0) > 0, params: excelCtx?.params ?? null } : null),
         // Optional hint for the written transcript (short Azerbaijani words came out as Portuguese).

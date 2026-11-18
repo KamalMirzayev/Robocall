@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { DEFAULT_TEXT_MODEL } from './text-model.js';
+import { textModel } from './text-model.js';
 import { scheduleArzoomAnalyticsPush } from './arzoom-analytics.js';
 import { GoogleGenAI } from '@google/genai';
 import { db } from './db/index.js';
@@ -793,7 +793,7 @@ export async function ensureArzoomFeedbackFromTranscript(params: {
   const key = String(process.env.GEMINI_API_KEY || '').trim();
   if (key) {
     try {
-      const model = process.env.POST_CALL_SUMMARY_MODEL || DEFAULT_TEXT_MODEL;
+      const model = textModel(process.env.POST_CALL_SUMMARY_MODEL);
       const ai = new GoogleGenAI({ apiKey: key });
       const prompt = `Bu, kredit müraciəti ilə bağlı telefon zənginin transkriptidir (A: bot, C: müştəri).
 Müştərinin son fikrini müəyyən et və YALNIZ JSON qaytar: {"outcome": "...", "reason": "...", "do_not_call": false, "callback_at": null}
