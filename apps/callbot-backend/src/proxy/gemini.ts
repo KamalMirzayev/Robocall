@@ -1,4 +1,5 @@
 import { WebSocket } from 'ws';
+import { PhoneAudio } from './phone-audio.js';
 import { reportGeminiError } from '../gemini-credit.js';
 import { EndSensitivity, GoogleGenAI, Modality, StartSensitivity, ThinkingLevel, Type, type LiveServerMessage } from '@google/genai';
 import { eq, sql } from 'drizzle-orm';
@@ -332,6 +333,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   let suppressMonitorAgentUntil = 0;
   const transcriptLines: string[] = [];
   let currentAgentTurn = '';
+  const phoneAudio = new PhoneAudio();
   let endCallRequested = false;
   let endCallTimer: NodeJS.Timeout | null = null;
   let endCallReason = 'ai_requested';
@@ -723,17 +725,26 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               })();
             }
           }
-          const part = message.serverContent?.modelTurn?.parts?.[0];
-          if (part?.inlineData?.data && (transferState === 'dialing' || transferState === 'connected')) {
+          // Every audio part of the turn is played (a message can carry more than one).
+          for (const part of message.serverContent?.modelTurn?.parts ?? []) {
+            const data = part?.inlineData?.data;
+            if (!data) continue;
             // Bot is muted while the customer is on hold or talking to the rep.
-          } else if (part?.inlineData?.data) {
-            send({ type: 'audio', data: part.inlineData.data });
-            if (!telephonyJobId && shouldForwardAgentToMonitor()) {
-              broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'agent', rate: 24000, data: part.inlineData.data });
-              recording?.add('agent', 24000, part.inlineData.data);
+            if (transferState === 'dialing' || transferState === 'connected') continue;
+            if (telephonyJobId) {
+              // Phone line: filtered for 8 kHz so it does not crackle (see phone-audio.ts).
+              const phone = phoneAudio.process(data);
+              if (phone) send({ type: 'audio', data: phone });
+            } else {
+              send({ type: 'audio', data });
+              if (shouldForwardAgentToMonitor()) {
+                broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'agent', rate: 24000, data });
+                recording?.add('agent', 24000, data);
+              }
             }
           }
           if (message.serverContent?.interrupted) {
+            phoneAudio.reset();
             send({ type: 'interrupted' });
           }
           const outputText = (message.serverContent as any)?.outputTranscription?.text;
