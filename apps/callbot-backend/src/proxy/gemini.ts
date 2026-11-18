@@ -43,6 +43,10 @@ const finalSilenceSpeechFrames = Number(process.env.FINAL_SILENCE_SPEECH_FRAMES 
 const geminiVadSilenceDurationMs = Number(process.env.GEMINI_VAD_SILENCE_DURATION_MS || 700);
 // Audio kept from before speech was detected, so the first syllable is not lost.
 const geminiVadPrefixPaddingMs = Number(process.env.GEMINI_VAD_PREFIX_PADDING_MS || 200);
+// LOW: a customer's "alo" or line noise over the greeting no longer cuts the bot off (it then
+// restarted the greeting: 39 of 220 calls on 18.11); real speech still interrupts it.
+const geminiVadStartSensitivity = String(process.env.GEMINI_VAD_START_SENSITIVITY || 'low').toLowerCase() === 'high'
+  ? StartSensitivity.START_SENSITIVITY_HIGH : StartSensitivity.START_SENSITIVITY_LOW;
 // LOW: a short pause inside a sentence does not count as the end of the customer's turn.
 const geminiVadEndSensitivity = String(process.env.GEMINI_VAD_END_SENSITIVITY || 'low').toLowerCase() === 'high'
   ? EndSensitivity.END_SENSITIVITY_HIGH : EndSensitivity.END_SENSITIVITY_LOW;
@@ -211,6 +215,7 @@ DİNLƏMƏ QAYDALARI:
 - Müştəri danışarkən heç vaxt danışma, onun cümləsini bitirməsini gözlə.
 - Müştəri sözünü kəssə, əvvəlki cümləni əvvəldən təkrarlama. Onun dediyinə cavab ver, lazım olsa yarımçıq fikri bir qısa cümlə ilə tamamla.
 - Eyni cümləni və ya təklifi iki dəfə eyni sözlərlə demə.
+- Salamlaşmanı ("Alo, salam…") zəngdə yalnız bir dəfə de. Müştəri onun üstündən "alo", "bəli" desə, salamlaşmanı təkrarlama: qısa "Bəli, eşidirəm" de və növbəti cümləyə keç.
 - Müştəri sual veribsə, əvvəl onun sualına cavab ver, sonra ssenari ilə davam et.`;
 
 async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null, excel: { segment: string | null; canTransfer: boolean; params?: Record<string, unknown> | null } | null = null): Promise<string> {
@@ -240,11 +245,13 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
     : baseInstruction;
 
   // Replace agent-level variables
+  // Every occurrence, and the tone text first, so placeholders inside it are filled too
+  // ("{COMPANY_NAME}" was read out loud on a call).
   let instruction = withContext
-    .replace('{AGENT_NAME}', agent.name)
-    .replace('{COMPANY_NAME}', agent.companyName ?? 'şirkətin')
-    .replace('{TONE_INSTRUCTION}', toneInstruction)
-    .replace('{WHATSAPP_PHONE}', agent.phoneWhatsapp ?? 'təyin edilməyib');
+    .split('{TONE_INSTRUCTION}').join(toneInstruction)
+    .split('{AGENT_NAME}').join(agent.name)
+    .split('{COMPANY_NAME}').join(agent.companyName ?? 'şirkətin')
+    .split('{WHATSAPP_PHONE}').join(agent.phoneWhatsapp ?? 'təyin edilməyib');
   
   // Replace customer-level variables (template-based)
   // Map template variable keys to customer data
@@ -522,7 +529,20 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   const callMemoryContext = await buildCallMemoryContextBounded(customer, agent);
   if (isExcel) excelCtx = await excelCallContext(jobId, customer.id).catch(() => ({ segment: null, transferExtensions: [], params: null }));
 
+  // The telephony side only passes audio while the customer seems to speak, so the model got
+  // speech in bursts with no silence between them and could not tell when a phrase ended.
+  // Gaps are filled with silence, so the model hears a continuous line.
+  let lastCustomerAudioAt = Date.now();
+  const SILENCE_100MS = Buffer.alloc(3200).toString('base64'); // 16 kHz PCM16, 100 ms
+  const silenceFiller = setInterval(() => {
+    if (sessionClosed || !session || transferState !== 'idle') return;
+    if (Date.now() - lastCustomerAudioAt < 150) return;
+    try { session.sendRealtimeInput({ audio: { data: SILENCE_100MS, mimeType: 'audio/pcm;rate=16000' } }); } catch { /* closed */ }
+  }, 100);
+  clientWs.once('close', () => clearInterval(silenceFiller));
+
   const forwardCustomerAudio = (data: string) => {
+    lastCustomerAudioAt = Date.now();
     if (transferState === 'dialing' || transferState === 'briefing' || transferState === 'connected') {
       // Hold music and the rep conversation: keep recording, keep the bot out of it.
       broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'customer', rate: 16000, data });
@@ -844,7 +864,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         outputAudioTranscription: {},
         realtimeInputConfig: {
           automaticActivityDetection: {
-            startOfSpeechSensitivity: StartSensitivity.START_SENSITIVITY_HIGH,
+            startOfSpeechSensitivity: geminiVadStartSensitivity,
             endOfSpeechSensitivity: geminiVadEndSensitivity,
             prefixPaddingMs: Math.max(40, Math.min(geminiVadPrefixPaddingMs, 300)),
             silenceDurationMs: Math.max(150, Math.min(geminiVadSilenceDurationMs, 1500)),
