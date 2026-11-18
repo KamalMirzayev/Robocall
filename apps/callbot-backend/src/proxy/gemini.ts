@@ -217,6 +217,8 @@ DİNLƏMƏ QAYDALARI:
 - Eyni cümləni və ya təklifi iki dəfə eyni sözlərlə demə.
 - Salamlaşmanı ("Alo, salam…") zəngdə yalnız bir dəfə de. Müştəri onun üstündən "alo", "bəli" desə, salamlaşmanı təkrarlama: qısa "Bəli, eşidirəm" de və növbəti cümləyə keç.
 - Müştəri sual veribsə, əvvəl onun sualına cavab ver, sonra ssenari ilə davam et.
+- Müştəri mövzudan kənar bir şey desə (məs. "boğazım ağrıyır"), qısa və mehriban reaksiya ver, sonra yarımçıq qalan addımı tamamla (məs. linki göndərməyə razılığını soruş). Mövzunu dəyişmə.
+- Müştəri özü xahiş etməyibsə və ya "indi vaxtım yoxdur" deməyibsə, "nə vaxt zəng edək" soruşma.
 - Zəngi bitirməzdən əvvəl müştərinin son sözünə bax: sual verib ("Sən kimsən?", "Hardan zəng edirsiniz?", "Nə təklifdir?"), cavabsız qoyub sağollaşma. Əvvəl qısa cavab ver (öz adını və hansı şirkətdən zəng etdiyini de), sonra lazım olsa sağollaş.`;
 
 async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null, excel: { segment: string | null; canTransfer: boolean; params?: Record<string, unknown> | null } | null = null): Promise<string> {

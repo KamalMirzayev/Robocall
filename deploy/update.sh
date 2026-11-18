@@ -91,6 +91,8 @@ setenv "$API_ENV" GEMINI_VAD_END_SENSITIVITY low || true
 setenv "$TEL_ENV" CALLBOT_INBOUND_SPEECH_RMS 450 && TEL_CHANGED=1
 setenv "$TEL_ENV" CALLBOT_INBOUND_SPEECH_RELEASE_MS 1200 && TEL_CHANGED=1
 setenv "$TEL_ENV" CALLBOT_INBOUND_SPEECH_MIN_FRAMES 4 && TEL_CHANGED=1
+# A short "salam"/"alo" over the bot (about 0.3-0.4 s) no longer cuts it off; a real sentence (0.5 s+) still does.
+setenv "$TEL_ENV" CALLBOT_BARGE_IN_MIN_FRAMES 25 && TEL_CHANGED=1
 chown callbot:callbot "$API_ENV" "$TEL_ENV"
 
 echo "==> Restart"
