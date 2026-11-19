@@ -470,7 +470,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     if (transferState !== 'pending') return;
     // Never move the customer to hold while they are still speaking (it cut them off mid-sentence).
     if (!transferWaitStartedAt) transferWaitStartedAt = Date.now();
-    if (Date.now() - lastCustomerSpeechAt < 1200 && Date.now() - transferWaitStartedAt < 6000) {
+    if (Date.now() - lastCustomerSpeechAt < 1000 && Date.now() - transferWaitStartedAt < 3000) {
       if (transferStartTimer) clearTimeout(transferStartTimer);
       transferStartTimer = setTimeout(() => void beginTransfer(), 300);
       return;
@@ -647,7 +647,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
 
   const forwardCustomerAudio = (data: string) => {
     lastCustomerAudioAt = Date.now();
-    if (pcm16RmsFromBase64(data) >= finalSilenceSpeechRms) lastCustomerSpeechAt = Date.now();
+    // While the bot's own voice plays, its echo comes back on the line: that is not the customer.
+    if (Date.now() > playoutEndsAt + 300 && pcm16RmsFromBase64(data) >= finalSilenceSpeechRms) lastCustomerSpeechAt = Date.now();
     if (transferState === 'awaiting_rep') {
       // The bot's line is in the queue now: what it hears is the queue or the rep, never the customer.
       if (!sessionClosed && session) {
