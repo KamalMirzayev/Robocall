@@ -733,6 +733,14 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           for (const functionCall of functionCalls) {
             const functionName = functionCall.name;
             if (!functionName) continue;
+            // During a hand-off the bot only talks to the queue or the rep: no tool may end or change the call.
+            if (transferState === 'dialing' || transferState === 'awaiting_rep' || transferState === 'briefing' || transferState === 'connected') {
+              console.warn(`Ignored tool ${functionName} during transfer (${transferState}) for job ${telephonyJobId ?? 'none'}`);
+              try {
+                session?.sendToolResponse({ functionResponses: [{ id: functionCall.id, name: functionName, response: { output: { accepted: false, reason: 'transfer in progress' } } }] });
+              } catch {}
+              continue;
+            }
 
             if (functionName === 'end_call') {
               requestEndCall(String(functionCall.args?.reason || 'ai_requested'));
@@ -879,7 +887,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               send({ type: 'transcription', role: 'model', text: currentAgentTurn });
             }
           }
-          if (message.serverContent?.turnComplete && transferState === 'briefing' && currentAgentTurn.trim()) {
+          // Join only after the briefing's closing sentence ("...birləşdirirəm"): an earlier, unrelated
+          // turn could finish first and joined the customer mid-briefing.
+          if (message.serverContent?.turnComplete && transferState === 'briefing' && /birləşdir|birlesdir|qoşuram|qosuram/i.test(currentAgentTurn)) {
             if (briefingTimer) clearTimeout(briefingTimer);
             // Let the last words play out, then the bot leaves the call. Anything still queued is
             // dropped before the customer joins, so the customer never hears the briefing.
