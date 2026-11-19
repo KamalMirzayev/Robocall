@@ -618,7 +618,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   const testPhones = String(process.env.GEMINI_LIVE_TEST_PHONES || '').split(/[,\s]+/).map((p) => p.replace(/\D/g, '')).filter((p) => p.length >= 7);
   const phoneDigits = String(customer.phone || '').replace(/\D/g, '');
   const isTestPhone = !!process.env.GEMINI_LIVE_TEST_MODEL && testPhones.some((p) => phoneDigits.endsWith(p));
-  const liveModel = (isTestPhone ? process.env.GEMINI_LIVE_TEST_MODEL : process.env.GEMINI_LIVE_MODEL) || 'gemini-3.1-flash-live-preview';
+  const liveModel = (isTestPhone ? process.env.GEMINI_LIVE_TEST_MODEL : process.env.GEMINI_LIVE_MODEL) || 'gemini-3.8-live';
   if (isTestPhone) console.log(`Live test model ${liveModel} for job ${telephonyJobId ?? 'none'}`);
 
   try {
