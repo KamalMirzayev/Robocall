@@ -416,6 +416,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
 
   const shouldForwardAgentToMonitor = () => Date.now() >= suppressMonitorAgentUntil;
 
+  // After the bot's goodbye the line goes quiet; the model then sometimes said things like
+  // "no speech" in English. Nothing it says after the goodbye is played, unless the customer talks again.
+  let afterGoodbye = false;
   const clearFinalSilenceEndTimer = () => {
     if (finalSilenceEndTimer) {
       clearTimeout(finalSilenceEndTimer);
@@ -636,7 +639,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   let lastCustomerSpeechAt = 0;
   const SILENCE_100MS = Buffer.alloc(3200).toString('base64'); // 16 kHz PCM16, 100 ms
   const silenceFiller = setInterval(() => {
-    if (sessionClosed || !session || transferState !== 'idle') return;
+    if (sessionClosed || !session || transferState !== 'idle' || afterGoodbye) return;
     if (Date.now() - lastCustomerAudioAt < 150) return;
     try { session.sendRealtimeInput({ audio: { data: SILENCE_100MS, mimeType: 'audio/pcm;rate=16000' } }); } catch { /* closed */ }
   }, 100);
@@ -912,7 +915,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             lastModelAudioAt = Date.now();
             // Bot is muted while the customer is on hold or talking to the rep.
             // In the queue the bot is muted until a live rep has greeted (it answered queue music before).
-            if (transferState === 'dialing' || transferState === 'connected' || transferState === 'awaiting_rep') continue;
+            if (transferState === 'dialing' || transferState === 'connected' || transferState === 'awaiting_rep' || afterGoodbye) continue;
             if (telephonyJobId) {
               // Phone line: filtered for 8 kHz so it does not crackle (see phone-audio.ts).
               const phone = phoneAudio.process(data);
@@ -975,8 +978,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           if (message.serverContent?.turnComplete && currentAgentTurn) {
             const completedAgentTurn = currentAgentTurn.trim();
             transcriptLines.push(`A: ${completedAgentTurn}`);
-            if (endCallRequested) scheduleEndCallAfterTurn();
-            else if (transferState !== 'briefing' && transferState !== 'connected' && isFinalGoodbye(completedAgentTurn)) scheduleFinalSilenceEnd();
+            if (endCallRequested) { afterGoodbye = true; scheduleEndCallAfterTurn(); }
+            else if (transferState !== 'briefing' && transferState !== 'connected' && isFinalGoodbye(completedAgentTurn)) { afterGoodbye = true; scheduleFinalSilenceEnd(); }
             currentAgentTurn = '';
           } else if (message.serverContent?.turnComplete && endCallRequested) {
             scheduleEndCallAfterTurn();
@@ -988,6 +991,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             if (REP_GREETING.test(repHeard)) startQueueBriefing();
           } else if (inputText) {
             clearFinalSilenceEndTimer();
+            // The customer spoke again after the goodbye: the bot may answer.
+            if (!endCallRequested && inputText.trim().length > 1) afterGoodbye = false;
             send({ type: 'transcription', role: 'user', text: inputText });
             transcriptLines.push(`C: ${inputText}`);
           }
