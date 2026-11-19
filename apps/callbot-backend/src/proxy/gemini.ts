@@ -812,7 +812,14 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               if (ok) {
                 transferState = 'pending';
                 // Start once the hold sentence has been spoken (turnComplete); fallback after 4s.
-                transferStartTimer = setTimeout(() => void beginTransfer(), 4000);
+                // The hold sentence is often spoken before the tool call, so no turnComplete follows:
+                // start as soon as whatever is queued has played (it waited a fixed 4 s, heard as a gap).
+                const startWhenQuiet = () => {
+                  const left = msUntilPlayedOut();
+                  if (left > 0) { transferStartTimer = setTimeout(startWhenQuiet, left + 300); return; }
+                  void beginTransfer();
+                };
+                transferStartTimer = setTimeout(startWhenQuiet, 1200);
               }
               try {
                 session?.sendToolResponse({
