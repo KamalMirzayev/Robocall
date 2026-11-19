@@ -362,6 +362,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   let suppressMonitorAgentUntil = 0;
   const transcriptLines: string[] = [];
   let currentAgentTurn = '';
+  // When the bot's queued speech will have finished playing on the line (audio arrives faster than real time).
+  let playoutEndsAt = 0;
+  const msUntilPlayedOut = () => Math.max(0, playoutEndsAt - Date.now());
   const phoneAudio = new PhoneAudio();
   let endCallRequested = false;
   let endCallTimer: NodeJS.Timeout | null = null;
@@ -477,6 +480,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             if (briefingTimer) clearTimeout(briefingTimer);
             briefingTimer = null;
             transferState = 'connected';
+            send({ type: 'interrupted' });
+            playoutEndsAt = 0;
             void transferHandle?.joinCustomer();
             if (!sessionClosed && session) {
               try {
@@ -796,7 +801,11 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             if (telephonyJobId) {
               // Phone line: filtered for 8 kHz so it does not crackle (see phone-audio.ts).
               const phone = phoneAudio.process(data);
-              if (phone) send({ type: 'audio', data: phone });
+              if (phone) {
+                send({ type: 'audio', data: phone });
+                // 24 kHz PCM16 = 48 bytes per ms.
+                playoutEndsAt = Math.max(playoutEndsAt, Date.now()) + Buffer.byteLength(phone, 'base64') / 48;
+              }
             } else {
               send({ type: 'audio', data });
               if (shouldForwardAgentToMonitor()) {
@@ -807,6 +816,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           }
           if (message.serverContent?.interrupted) {
             phoneAudio.reset();
+            playoutEndsAt = 0;
             send({ type: 'interrupted' });
           }
           const outputText = (message.serverContent as any)?.outputTranscription?.text;
@@ -824,22 +834,25 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           }
           if (message.serverContent?.turnComplete && transferState === 'briefing' && currentAgentTurn.trim()) {
             if (briefingTimer) clearTimeout(briefingTimer);
-            // Let the last words play out, then the bot leaves the call.
+            // Let the last words play out, then the bot leaves the call. Anything still queued is
+            // dropped before the customer joins, so the customer never hears the briefing.
             briefingTimer = setTimeout(() => {
               briefingTimer = null;
               transferState = 'connected';
+              send({ type: 'interrupted' });
+              playoutEndsAt = 0;
               void transferHandle?.joinCustomer();
               if (!sessionClosed && session) {
                 try {
                   session.close();
                 } catch {}
               }
-            }, 1500);
+            }, msUntilPlayedOut() + 600);
           }
           if (message.serverContent?.turnComplete && transferState === 'pending') {
             if (transferStartTimer) clearTimeout(transferStartTimer);
-            // Let the queued hold sentence finish playing before the hold music starts.
-            transferStartTimer = setTimeout(() => void beginTransfer(), 1500);
+            // Let the queued hold sentence finish playing before the hold music starts (it was cut off).
+            transferStartTimer = setTimeout(() => void beginTransfer(), msUntilPlayedOut() + 500);
           }
           if (message.serverContent?.turnComplete && currentAgentTurn) {
             const completedAgentTurn = currentAgentTurn.trim();
