@@ -345,7 +345,7 @@ export async function startSalesTransfer(
             await ari(`/bridges/${encodeURIComponent(bridgeId)}/removeChannel?channel=${encodeURIComponent(mediaChannel)}`, 'POST');
             await ari(`/bridges/${encodeURIComponent(pb.id)}/addChannel?channel=${encodeURIComponent(mediaChannel)}`, 'POST');
             await ari(`/bridges/${encodeURIComponent(pb.id)}/addChannel?channel=${encodeURIComponent(rep.id)}`, 'POST');
-            joinTimer = setTimeout(() => void handle.joinCustomer(), 20000);
+            joinTimer = setTimeout(() => void handle.joinCustomer(), 30000);
           }
         } catch (err) {
           console.warn('[sales-transfer] private briefing failed, joining directly', (err as Error).message);

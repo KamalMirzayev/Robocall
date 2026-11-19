@@ -486,6 +486,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           };
           if (sessionClosed || !session) return leave();
           transferState = 'briefing';
+          const customerLabel = [customer.name, customer.surname].map((x) => String(x || '').trim()).filter((x) => x && x !== '-').join(' ');
           const campaignText = isExcel
             ? excelCtx?.segment === 'trade_in'
               ? `${String(excelCtx?.params?.model || 'Corolla')} trade-in kampaniyası`
@@ -493,10 +494,10 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             : 'ARZOOM kredit müraciəti';
           try {
             session.sendClientContent({
-              turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu. Müştəri hələ səni və nümayəndəni EŞİTMİR (gözləmə musiqisindədir), indi yalnız nümayəndə ilə danışırsan. Nümayəndəyə 2-3 qısa cümlə ilə de: "Salam, bu ArzoomCall-dır. ${campaignText} üzrə müştəri xəttdədir", sonra müştərinin nə istədiyini və maşını, şərtlər haqqında dediklərini qısa xülasə et. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`,
+              turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu. Müştəri hələ səni və nümayəndəni EŞİTMİR (gözləmə musiqisindədir), indi yalnız nümayəndə ilə danışırsan. Nümayəndəyə 3-4 qısa cümlə ilə məlumat ver: "Salam, bu ArzoomCall-dır. ${campaignText} üzrə müştəri xəttdədir."${customerLabel ? ` Müştərinin adı: ${customerLabel}.` : ''} Sonra danışıqda öyrəndiklərini qısa de: müştəri nəyə razılaşdı və nə istəyir, maşını (model, il, yürüş, vəziyyət) haqqında nə dedi, kredit və ya qiymət barədə nə soruşdu, hansı sualı cavabsız qaldı. Bilmədiyini uydurma. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`,
               turnComplete: true,
             });
-            briefingTimer = setTimeout(leave, 15000);
+            briefingTimer = setTimeout(leave, 25000);
           } catch {
             leave();
           }
