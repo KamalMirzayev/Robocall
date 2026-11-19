@@ -455,13 +455,14 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
 
 
   let transferWaitStartedAt = 0;
+  let transferRequestedAt = 0;
   let queueRedials = 0;
   const maxQueueRedials = Math.max(0, Math.min(Number(process.env.SALES_QUEUE_REDIALS || 3), 10));
   const beginTransfer = async () => {
     if (transferState !== 'pending') return;
     // Never move the customer to hold while they are still speaking (it cut them off mid-sentence).
     if (!transferWaitStartedAt) transferWaitStartedAt = Date.now();
-    if (Date.now() - lastCustomerAudioAt < 1500 && Date.now() - transferWaitStartedAt < 10000) {
+    if (Date.now() - lastCustomerSpeechAt < 1200 && Date.now() - transferWaitStartedAt < 6000) {
       if (transferStartTimer) clearTimeout(transferStartTimer);
       transferStartTimer = setTimeout(() => void beginTransfer(), 300);
       return;
@@ -471,7 +472,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     transferStartTimer = null;
     transferState = 'dialing';
     clearFinalSilenceEndTimer();
-    console.log(`Sales transfer started for telephony job ${telephonyJobId ?? 'none'} brand=${brand ?? '-'}`);
+    console.log(`Sales transfer started for telephony job ${telephonyJobId ?? 'none'} brand=${brand ?? '-'} (${transferRequestedAt ? Date.now() - transferRequestedAt : '?'} ms after the request)`);
     transferHandle = await startSalesTransfer(
       {
         telephonyJobId, customerId: customer.id, brand, callerId: customer.phone || null,
@@ -623,6 +624,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   // speech in bursts with no silence between them and could not tell when a phrase ended.
   // Gaps are filled with silence, so the model hears a continuous line.
   let lastCustomerAudioAt = Date.now();
+  // Real speech only (line noise also reaches us), used to avoid cutting the customer off.
+  let lastCustomerSpeechAt = 0;
   const SILENCE_100MS = Buffer.alloc(3200).toString('base64'); // 16 kHz PCM16, 100 ms
   const silenceFiller = setInterval(() => {
     if (sessionClosed || !session || transferState !== 'idle') return;
@@ -633,6 +636,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
 
   const forwardCustomerAudio = (data: string) => {
     lastCustomerAudioAt = Date.now();
+    if (pcm16RmsFromBase64(data) >= finalSilenceSpeechRms) lastCustomerSpeechAt = Date.now();
     if (transferState === 'awaiting_rep') {
       // The bot's line is in the queue now: what it hears is the queue or the rep, never the customer.
       if (!sessionClosed && session) {
@@ -810,6 +814,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
                 });
               }
               if (ok) {
+                transferRequestedAt = Date.now();
                 transferState = 'pending';
                 // Start once the hold sentence has been spoken (turnComplete); fallback after 4s.
                 // The hold sentence is often spoken before the tool call, so no turnComplete follows:

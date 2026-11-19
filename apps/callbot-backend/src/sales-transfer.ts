@@ -260,6 +260,7 @@ export async function startSalesTransfer(
     },
   };
 
+  const startedAt = Date.now();
   void (async () => {
     try {
       const exts = params.extensions?.length ? params.extensions : salesExtensionsFor(params.brand);
@@ -281,6 +282,7 @@ export async function startSalesTransfer(
       const order = (await orderByLoad(exts)).slice(0, maxAttempts);
       if (!order.length) throw new Error('all sales reps are busy');
       await ari(`/bridges/${encodeURIComponent(bridgeId)}/moh`, 'POST').catch(() => {});
+      console.log(`[sales-transfer] job ${params.telephonyJobId} hold music on after ${Date.now() - startedAt} ms`);
 
       for (const ext of order) {
         if (cancelled) return;
