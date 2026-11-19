@@ -517,13 +517,12 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           // No private line to the rep: the customer would hear the briefing, so the bot leaves silently.
           if (!briefed) console.warn(`Sales transfer job ${telephonyJobId ?? 'none'}: no private briefing, bot leaves without briefing`);
           if (sessionClosed || !session || !briefed) return leave();
-          const customerLabel = [customer.name, customer.surname].map((x) => String(x || '').trim()).filter((x) => x && x !== '-').join(' ');
           const campaignText = isExcel
             ? excelCtx?.segment === 'trade_in'
               ? `${String(excelCtx?.params?.model || 'Corolla')} trade-in kampaniyası`
               : excelCtx?.segment === 'credit_offer' ? 'kredit (churn) kampaniyası' : 'servis kampaniyası'
             : 'ARZOOM kredit müraciəti';
-          briefingText = `Nümayəndəyə 3-4 qısa cümlə ilə məlumat ver. Dərhal bununla başla: "Salam, müştəri xəttdədir, ${campaignText}."${customerLabel ? ` Müştərinin adı: ${customerLabel}.` : ''} Sonra danışıqda öyrəndiklərini qısa de: müştəri nəyə razılaşdı və nə istəyir, maşını (model, il, yürüş, vəziyyət) haqqında nə dedi, kredit və ya qiymət barədə nə soruşdu, hansı sualı cavabsız qaldı. Bilmədiyini uydurma. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`;
+          briefingText = `Nümayəndəyə cəmi 3 qısa cümlə de, artıq heç nə əlavə etmə. 1) Dərhal: "Salam, müştəri xəttdədir, ${campaignText}." 2) Bir cümlə ilə müştərinin istəyi: maşını barterlə (köhnəsini verib yenisini almaq) və ya kreditlə almaq istəyir, danışıqda müştəri hansını dedisə onu de, məsələn: "Müştəri köhnə maşınını verib yenisini barterlə almaq istəyir" və ya "Müştəri yeni maşını kreditlə almaq istəyir". Müştəri ikisindən heç birini aydın deməyibsə: "Müştəri barter və ya kredit şərtləri ilə maraqlanır." 3) "İndi sizi müştəri ilə birləşdirirəm." Sonra sus. Bilmədiyini uydurma, heç bir alət çağırma.`;
           // A single number is a queue: it answers at once with music, the rep comes later.
           const queue = transferExtensions().length === 1;
           try {
