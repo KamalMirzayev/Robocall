@@ -623,8 +623,12 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   // Optional test voice for the same numbers, e.g. a female voice with a female name.
   const testVoice = isTestPhone || (process.env.GEMINI_LIVE_TEST_VOICE && testPhones.some((p) => phoneDigits.endsWith(p)))
     ? String(process.env.GEMINI_LIVE_TEST_VOICE || '').trim() : '';
-  const testAgentName = testVoice ? String(process.env.GEMINI_LIVE_TEST_AGENT_NAME || '').trim() : '';
-  const voiceName = testVoice || (agent.gender === 'male' ? 'Charon' : 'Zephyr');
+  // Voice and spoken name for every call (GEMINI_LIVE_VOICE, GEMINI_LIVE_AGENT_NAME); the test values above win on test numbers.
+  const prodVoice = String(process.env.GEMINI_LIVE_VOICE || '').trim();
+  const testAgentName = testVoice
+    ? String(process.env.GEMINI_LIVE_TEST_AGENT_NAME || '').trim()
+    : (prodVoice ? String(process.env.GEMINI_LIVE_AGENT_NAME || '').trim() : '');
+  const voiceName = testVoice || prodVoice || (agent.gender === 'male' ? 'Charon' : 'Zephyr');
   if (isTestPhone || testVoice) console.log(`Live test model ${liveModel}, voice ${voiceName} for job ${telephonyJobId ?? 'none'}`);
 
   try {
