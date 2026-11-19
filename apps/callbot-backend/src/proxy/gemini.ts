@@ -314,11 +314,11 @@ function buildInitialGreetingPrompt(customer: Customer, segment: string | null =
     .trim();
   // Churn campaign: the company greeting comes first (see CHURN SSENARİSİ in the customer data).
   if (segment === 'credit_offer') {
-    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, sizi Group Motors şirkətindən salamlayıram. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə, sonra CHURN SSENARİSİ ilə davam et.`;
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, sizi Group Motors şirkətindən salamlayıram. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə. Müştəri açıq razılıq verməyincə ("bəli", "var", "buyurun", "danışa bilərəm") təklifin detallarını DANIŞMA. Müştəri razılıq əvəzinə sual versə (məs. "Kimsiniz?", "Kim danışır?"), yalnız o suala qısa cavab ver və yenidən soruş: "Danışmağa vaxtınız var?" Razılıq verəndən sonra CHURN SSENARİSİ ilə davam et.`;
   }
   if (segment === 'trade_in') {
     const { company, model } = tradeInTerms(params);
-    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, ${company} narahat edirik. ${model} ilə bağlı sizə əla təklifimiz var: köhnə ${model}-nızı gətirin, onu yeni ${model} ilə əvəz edək. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə, sonra TRADE-IN SSENARİSİ ilə davam et.`;
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, ${company} narahat edirik. ${model} ilə bağlı sizə əla təklifimiz var: köhnə ${model}-nızı gətirin, onu yeni ${model} ilə əvəz edək. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə. Müştəri açıq razılıq verməyincə ("bəli", "var", "buyurun", "danışa bilərəm") təklifin detallarını DANIŞMA. Müştəri razılıq əvəzinə sual versə (məs. "Kimsiniz?", "Kim danışır?"), yalnız o suala qısa cavab ver və yenidən soruş: "Danışmağa vaxtınız var?" Razılıq verəndən sonra TRADE-IN SSENARİSİ ilə davam et.`;
   }
   // ARZOOM applications carry no name: greet without one and ask for the application owner.
   if (!fullName || fullName === '-') {
@@ -452,8 +452,17 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   };
 
 
+  let transferWaitStartedAt = 0;
   const beginTransfer = async () => {
     if (transferState !== 'pending') return;
+    // Never move the customer to hold while they are still speaking (it cut them off mid-sentence).
+    if (!transferWaitStartedAt) transferWaitStartedAt = Date.now();
+    if (Date.now() - lastCustomerAudioAt < 1500 && Date.now() - transferWaitStartedAt < 10000) {
+      if (transferStartTimer) clearTimeout(transferStartTimer);
+      transferStartTimer = setTimeout(() => void beginTransfer(), 300);
+      return;
+    }
+    transferWaitStartedAt = 0;
     if (transferStartTimer) clearTimeout(transferStartTimer);
     transferStartTimer = null;
     transferState = 'dialing';
