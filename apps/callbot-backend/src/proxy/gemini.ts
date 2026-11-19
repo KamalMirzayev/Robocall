@@ -378,7 +378,10 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   const pendingAudio: string[] = [];
   // Sales transfer: 'pending' waits for the hold sentence to finish, 'dialing' plays hold music
   // while reps ring, 'connected' means the rep is in the call and the bot is out.
-  let transferState: 'idle' | 'pending' | 'dialing' | 'briefing' | 'connected' = 'idle';
+  // 'awaiting_rep': a queue (e.g. 6434) took the call at once; the bot listens silently until a live rep speaks.
+  let transferState: 'idle' | 'pending' | 'dialing' | 'awaiting_rep' | 'briefing' | 'connected' = 'idle';
+  const queueWaitMs = Math.max(20, Math.min(Number(process.env.SALES_QUEUE_WAIT_SECONDS || 150), 600)) * 1000;
+  let briefingText = '';
   let briefingTimer: ReturnType<typeof setTimeout> | null = null;
   let transferHandle: TransferHandle | null = null;
   let transferStartTimer: NodeJS.Timeout | null = null;
@@ -493,19 +496,31 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           // No private line to the rep: the customer would hear the briefing, so the bot leaves silently.
           if (!briefed) console.warn(`Sales transfer job ${telephonyJobId ?? 'none'}: no private briefing, bot leaves without briefing`);
           if (sessionClosed || !session || !briefed) return leave();
-          transferState = 'briefing';
           const customerLabel = [customer.name, customer.surname].map((x) => String(x || '').trim()).filter((x) => x && x !== '-').join(' ');
           const campaignText = isExcel
             ? excelCtx?.segment === 'trade_in'
               ? `${String(excelCtx?.params?.model || 'Corolla')} trade-in kampaniyası`
               : excelCtx?.segment === 'credit_offer' ? 'kredit (churn) kampaniyası' : 'servis kampaniyası'
             : 'ARZOOM kredit müraciəti';
+          briefingText = `Nümayəndəyə 3-4 qısa cümlə ilə məlumat ver: "Salam, ${campaignText} üzrə müştəri xəttdədir."${customerLabel ? ` Müştərinin adı: ${customerLabel}.` : ''} Sonra danışıqda öyrəndiklərini qısa de: müştəri nəyə razılaşdı və nə istəyir, maşını (model, il, yürüş, vəziyyət) haqqında nə dedi, kredit və ya qiymət barədə nə soruşdu, hansı sualı cavabsız qaldı. Bilmədiyini uydurma. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`;
+          // A single number is a queue: it answers at once with music, the rep comes later.
+          const queue = transferExtensions().length === 1;
           try {
-            session.sendClientContent({
-              turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu. Müştəri hələ səni və nümayəndəni EŞİTMİR (gözləmə musiqisindədir), indi yalnız nümayəndə ilə danışırsan. Nümayəndəyə 3-4 qısa cümlə ilə məlumat ver: "Salam, ${campaignText} üzrə müştəri xəttdədir."${customerLabel ? ` Müştərinin adı: ${customerLabel}.` : ''} Sonra danışıqda öyrəndiklərini qısa de: müştəri nəyə razılaşdı və nə istəyir, maşını (model, il, yürüş, vəziyyət) haqqında nə dedi, kredit və ya qiymət barədə nə soruşdu, hansı sualı cavabsız qaldı. Bilmədiyini uydurma. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`,
-              turnComplete: true,
-            });
-            briefingTimer = setTimeout(leave, 25000);
+            if (queue) {
+              transferState = 'awaiting_rep';
+              session.sendClientContent({
+                turns: `[Sistem] Zəng satış növbəsinə qoşuldu. Müştəri səni EŞİTMİR (gözləmə musiqisindədir). İndi növbədə gözləyirsən: musiqi, avtomatik elanlar və ya səssizlik eşidəcəksən. Onlara HEÇ NƏ demə, tam sus. Yalnız canlı insan (satış nümayəndəsi) danışanda, məsələn "Alo", "Bəli", "Eşidirəm", "Toyota, buyurun" deyəndə, ona cavab ver. ${briefingText}`,
+                turnComplete: true,
+              });
+              briefingTimer = setTimeout(leave, queueWaitMs);
+            } else {
+              transferState = 'briefing';
+              session.sendClientContent({
+                turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu. Müştəri hələ səni və nümayəndəni EŞİTMİR (gözləmə musiqisindədir), indi yalnız nümayəndə ilə danışırsan. ${briefingText}`,
+                turnComplete: true,
+              });
+              briefingTimer = setTimeout(leave, 25000);
+            }
           } catch {
             leave();
           }
@@ -556,6 +571,13 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
 
   const forwardCustomerAudio = (data: string) => {
     lastCustomerAudioAt = Date.now();
+    if (transferState === 'awaiting_rep') {
+      // The bot's line is in the queue now: what it hears is the queue or the rep, never the customer.
+      if (!sessionClosed && session) {
+        try { session.sendRealtimeInput({ audio: { data, mimeType: 'audio/pcm;rate=16000' } }); } catch {}
+      }
+      return;
+    }
     if (transferState === 'dialing' || transferState === 'briefing' || transferState === 'connected') {
       // Hold music and the rep conversation: keep recording, keep the bot out of it.
       broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'customer', rate: 16000, data });
@@ -793,6 +815,18 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               })();
             }
           }
+          // The bot starts talking in the queue: a live rep answered, this is the briefing.
+          if (transferState === 'awaiting_rep' && (message.serverContent?.modelTurn?.parts ?? []).some((p) => p?.inlineData?.data)) {
+            transferState = 'briefing';
+            if (briefingTimer) clearTimeout(briefingTimer);
+            briefingTimer = setTimeout(() => {
+              briefingTimer = null;
+              transferState = 'connected';
+              void transferHandle?.joinCustomer();
+              if (!sessionClosed && session) { try { session.close(); } catch {} }
+            }, 30000);
+            console.log(`Sales transfer job ${telephonyJobId ?? 'none'}: rep answered in the queue, briefing`);
+          }
           // Every audio part of the turn is played (a message can carry more than one).
           for (const part of message.serverContent?.modelTurn?.parts ?? []) {
             const data = part?.inlineData?.data;
@@ -876,7 +910,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           reportGeminiError((event as any)?.reason);
           sessionClosed = true;
           // During a transfer the call continues without the bot.
-          if (transferState === 'dialing' || transferState === 'briefing' || transferState === 'connected' || transferState === 'pending') return;
+          if (transferState === 'dialing' || transferState === 'awaiting_rep' || transferState === 'briefing' || transferState === 'connected' || transferState === 'pending') return;
           if (clientWs.readyState === WebSocket.OPEN) clientWs.close();
         },
         onerror: (err) => {

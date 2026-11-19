@@ -355,7 +355,8 @@ export async function startSalesTransfer(
           // Check: the customer's bridge must no longer carry the bot's voice.
           const after = await ari<{ channels: string[] }>(`/bridges/${encodeURIComponent(bridgeId)}`);
           if ((after.channels || []).includes(mediaChannel)) throw new Error('bot media still in the customer bridge');
-          joinTimer = setTimeout(() => void handle.joinCustomer(), 30000);
+          // Safety net only; the bot joins earlier. A queue can keep the bot waiting for a rep.
+          joinTimer = setTimeout(() => void handle.joinCustomer(), (Math.max(20, Math.min(Number(process.env.SALES_QUEUE_WAIT_SECONDS || 150), 600)) + 45) * 1000);
         } catch (err) {
           console.warn('[sales-transfer] private briefing failed, joining directly', (err as Error).message);
           if (privateBridgeId) {
