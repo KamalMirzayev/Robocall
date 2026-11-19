@@ -214,7 +214,8 @@ DİNLƏMƏ QAYDALARI:
 - Müştərinin cavabını aydın başa düşmədinsə, razılıq kimi qəbul etmə. Nəzakətlə bir dəfə qısa soruş: "Bağışlayın, xətt bir az zəifdir, təkrar edə bilərsiniz?"
 - Müştəri danışarkən heç vaxt danışma, onun cümləsini bitirməsini gözlə.
 - Müştəri sözünü kəssə, əvvəlki cümləni əvvəldən təkrarlama. Onun dediyinə cavab ver, lazım olsa yarımçıq fikri bir qısa cümlə ilə tamamla.
-- Eyni cümləni və ya təklifi iki dəfə eyni sözlərlə demə.
+- Eyni cümləni və ya təklifi iki dəfə eyni sözlərlə demə. Müştəri eyni sualı yenidən verirsə, deməli əvvəlki cavab ona aydın olmayıb: başqa, daha konkret sözlərlə cavab ver.
+- Canlı danışıq Azərbaycan dilində danış, tərcümə dili kimi yox: qısa cümlələr (bir cavabda 1-2 cümlə), sadə sözlər, rəsmi kitab dili işlətmə.
 - Salamlaşmanı ("Alo, salam…") zəngdə yalnız bir dəfə de. Müştəri onun üstündən "alo", "bəli" desə, salamlaşmanı təkrarlama: qısa "Bəli, eşidirəm" de və növbəti cümləyə keç.
 - Müştəri sual veribsə, əvvəl onun sualına cavab ver, sonra ssenari ilə davam et.
 - Müştəri mövzudan kənar bir şey desə (məs. "boğazım ağrıyır"), qısa və mehriban reaksiya ver, sonra yarımçıq qalan addımı tamamla (məs. linki göndərməyə razılığını soruş). Mövzunu dəyişmə.
@@ -875,7 +876,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         ...(liveModel.includes('flash-live') ? { thinkingConfig: { thinkingLevel: geminiThinkingLevel } } : {}),
         systemInstruction: await buildSystemInstruction(customer, agent, callMemoryContext, baseTemplateId, dynamicContext,
           isExcel ? { segment: excelCtx?.segment ?? null, canTransfer: (excelCtx?.transferExtensions.length ?? 0) > 0, params: excelCtx?.params ?? null } : null)
-          + (testAgentName ? `\n\nSƏNİN ADIN: ${testAgentName} (qadın). Özünü təqdim edəndə və ya adını soruşanda yalnız bu adı de, başqa ad çəkmə.` : ''),
+          + (testAgentName ? `\n\nSƏNİN ADIN: ${testAgentName} (qadın). Özünü təqdim edəndə və ya adını soruşanda yalnız bu adı de, başqa ad çəkmə. Təbii de: "Mənim adım ${testAgentName}", "Mən ${testAgentName}" kimi yarımçıq demə.` : ''),
         // Optional hint for the written transcript (short Azerbaijani words came out as Portuguese).
         // Off by default until confirmed on a test call: an unknown setup field would fail every call.
         inputAudioTranscription: process.env.GEMINI_TRANSCRIPTION_LANGUAGE_HINT === 'on' ? { languageCodes: ['az-AZ', 'ru-RU'] } : {},
