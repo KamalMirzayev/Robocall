@@ -220,6 +220,7 @@ DİNLƏMƏ QAYDALARI:
 - Müştəri sual veribsə, əvvəl onun sualına cavab ver, sonra ssenari ilə davam et.
 - Müştəri mövzudan kənar bir şey desə (məs. "boğazım ağrıyır"), qısa və mehriban reaksiya ver, sonra yarımçıq qalan addımı tamamla (məs. linki göndərməyə razılığını soruş). Mövzunu dəyişmə.
 - Müştəri özü xahiş etməyibsə və ya "indi vaxtım yoxdur" deməyibsə, "nə vaxt zəng edək" soruşma.
+- Heç vaxt texniki söz səsləndirmə: alət adları (transfer_to_sales, record_campaign_result, end_call), "alət", "funksiya", "sistem", "[Sistem]", "outcome", "status", mötərizədəki qeydlər, ingiliscə terminlər. Alət çağıranda müştəriyə yalnız adi insan cümləsi de, məsələn: "Bir neçə saniyə xətdə qalın, sizi satış nümayəndəmizə qoşuram."
 - Zəngi bitirməzdən əvvəl müştərinin son sözünə bax: sual verib ("Sən kimsən?", "Hardan zəng edirsiniz?", "Nə təklifdir?"), cavabsız qoyub sağollaşma. Əvvəl qısa cavab ver (öz adını və hansı şirkətdən zəng etdiyini de), sonra lazım olsa sağollaş.`;
 
 async function buildSystemInstruction(customer: Customer, agent: Agent, callMemoryContext = '', baseTemplateId: string | null = null, dynamicContext: string | null = null, excel: { segment: string | null; canTransfer: boolean; params?: Record<string, unknown> | null } | null = null): Promise<string> {
@@ -501,7 +502,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             : 'ARZOOM kredit müraciəti';
           try {
             session.sendClientContent({
-              turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu. Müştəri hələ səni və nümayəndəni EŞİTMİR (gözləmə musiqisindədir), indi yalnız nümayəndə ilə danışırsan. Nümayəndəyə 3-4 qısa cümlə ilə məlumat ver: "Salam, bu ArzoomCall-dır. ${campaignText} üzrə müştəri xəttdədir."${customerLabel ? ` Müştərinin adı: ${customerLabel}.` : ''} Sonra danışıqda öyrəndiklərini qısa de: müştəri nəyə razılaşdı və nə istəyir, maşını (model, il, yürüş, vəziyyət) haqqında nə dedi, kredit və ya qiymət barədə nə soruşdu, hansı sualı cavabsız qaldı. Bilmədiyini uydurma. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`,
+              turns: `[Sistem] Satış nümayəndəsi indi xəttə qoşuldu. Müştəri hələ səni və nümayəndəni EŞİTMİR (gözləmə musiqisindədir), indi yalnız nümayəndə ilə danışırsan. Nümayəndəyə 3-4 qısa cümlə ilə məlumat ver: "Salam, ${campaignText} üzrə müştəri xəttdədir."${customerLabel ? ` Müştərinin adı: ${customerLabel}.` : ''} Sonra danışıqda öyrəndiklərini qısa de: müştəri nəyə razılaşdı və nə istəyir, maşını (model, il, yürüş, vəziyyət) haqqında nə dedi, kredit və ya qiymət barədə nə soruşdu, hansı sualı cavabsız qaldı. Bilmədiyini uydurma. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`,
               turnComplete: true,
             });
             briefingTimer = setTimeout(leave, 25000);
