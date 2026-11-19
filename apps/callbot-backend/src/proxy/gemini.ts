@@ -454,7 +454,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         extensions: isExcel ? transferExtensions() : pinnedReps,
       },
       {
-        onConnected: (ext) => {
+        onConnected: (ext, briefed) => {
           transferState = 'connected';
           transferConnectedAt = new Date();
           transcriptLines.push(`[${isExcel && excelCtx?.segment !== 'trade_in' ? 'Servis nümayəndəsinə' : 'Satış təmsilçisinə'} qoşuldu: ${ext}]`);
@@ -484,7 +484,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               } catch {}
             }
           };
-          if (sessionClosed || !session) return leave();
+          // No private line to the rep: the customer would hear the briefing, so the bot leaves silently.
+          if (!briefed) console.warn(`Sales transfer job ${telephonyJobId ?? 'none'}: no private briefing, bot leaves without briefing`);
+          if (sessionClosed || !session || !briefed) return leave();
           transferState = 'briefing';
           const customerLabel = [customer.name, customer.surname].map((x) => String(x || '').trim()).filter((x) => x && x !== '-').join(' ');
           const campaignText = isExcel
