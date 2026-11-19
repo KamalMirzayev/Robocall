@@ -209,6 +209,8 @@ const transferFunctionDeclaration = {
 // and the bot repeated whole sentences after being cut off.
 const LISTENING_INSTRUCTION = `
 
+DİL: Yalnız Azərbaycan dilində (Bakı danışığı) danış. Türkiyə türkcəsi sözləri və şəkilçiləri QADAĞANDIR: "evet" yox "bəli", "tamam" yox "oldu/yaxşı", "şimdi" yox "indi", "nasıl" yox "necə", "araç/araba" yox "maşın", "bilgi" yox "məlumat", "lütfen" yox "zəhmət olmasa", "teşekkür ederim" yox "təşəkkür edirəm", "efendim" yox "buyurun", "görüşme" yox "görüş", "yardımcı olmak" yox "kömək etmək", "-iyor" yox "-ır/-ir" ("geliyor" yox "gəlir"), "fiyat" yox "qiymət", "kredi" yox "kredit", "hemen" yox "dərhal", "değil" yox "deyil", "var mı" yox "varmı/var?".
+
 DİNLƏMƏ QAYDALARI:
 - Müştəri Azərbaycan dilində danışır (bəzən rus dilində). Telefon xətti zəifdir: eşitdiyin başqa dilə (portuqal, ispan və s.) oxşayırsa, bu, Azərbaycan dilində qısa bir sözdür ("alo", "bəli", "hə", "buyurun", "yox").
 - Müştərinin cavabını aydın başa düşmədinsə, razılıq kimi qəbul etmə. Nəzakətlə bir dəfə qısa soruş: "Bağışlayın, xətt bir az zəifdir, təkrar edə bilərsiniz?"
