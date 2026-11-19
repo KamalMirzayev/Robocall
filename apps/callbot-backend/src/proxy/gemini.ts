@@ -987,6 +987,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         responseModalities: [Modality.AUDIO],
         speechConfig: {
           voiceConfig: { prebuiltVoiceConfig: { voiceName } },
+          // Pins the spoken language (e.g. az-AZ) so the voice does not drift into a Turkish accent.
+          // Off unless set: a model that refuses it would close the session.
+          ...(process.env.GEMINI_SPEECH_LANGUAGE ? { languageCode: String(process.env.GEMINI_SPEECH_LANGUAGE).trim() } : {}),
         },
         // Pin the thinking level explicitly (env-configurable) rather than
         // relying on the model's default, since this is a preview model
