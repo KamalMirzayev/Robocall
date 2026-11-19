@@ -743,7 +743,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             const functionName = functionCall.name;
             if (!functionName) continue;
             // During a hand-off the bot only talks to the queue or the rep: no tool may end or change the call.
-            if (transferState === 'dialing' || transferState === 'awaiting_rep' || transferState === 'briefing' || transferState === 'connected') {
+            if (transferState === 'pending' || transferState === 'dialing' || transferState === 'awaiting_rep' || transferState === 'briefing' || transferState === 'connected') {
               console.warn(`Ignored tool ${functionName} during transfer (${transferState}) for job ${telephonyJobId ?? 'none'}`);
               try {
                 session?.sendToolResponse({ functionResponses: [{ id: functionCall.id, name: functionName, response: { output: { accepted: false, reason: 'transfer in progress' } } }] });
