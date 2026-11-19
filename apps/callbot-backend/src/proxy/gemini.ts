@@ -209,6 +209,8 @@ const transferFunctionDeclaration = {
 // and the bot repeated whole sentences after being cut off.
 const LISTENING_INSTRUCTION = `
 
+TƏLƏFFÜZ: Bakılı azərbaycanlı kimi, doğma Azərbaycan aksenti ilə danış, türk (Türkiyə) aksenti ilə YOX. "ə" səsini açıq və aydın de ("əla", "mərkəz", "təklif" — "ela", "merkez", "teklif" yox). "q" səsini Azərbaycan dilindəki kimi qalın de ("qiymət", "qoşuram" — "kiymet", "koşuram" yox). "x" səsini aydın de ("xahiş", "xəttə"). Türk intonasiyasını və melodiyasını işlətmə, sakit, düz Bakı danışığı ilə danış.
+
 DİL: Yalnız Azərbaycan dilində (Bakı danışığı) danış. Türkiyə türkcəsi sözləri və şəkilçiləri QADAĞANDIR: "evet" yox "bəli", "tamam" yox "oldu/yaxşı", "şimdi" yox "indi", "nasıl" yox "necə", "araç/araba" yox "maşın", "bilgi" yox "məlumat", "lütfen" yox "zəhmət olmasa", "teşekkür ederim" yox "təşəkkür edirəm", "efendim" yox "buyurun", "görüşme" yox "görüş", "yardımcı olmak" yox "kömək etmək", "-iyor" yox "-ır/-ir" ("geliyor" yox "gəlir"), "fiyat" yox "qiymət", "kredi" yox "kredit", "hemen" yox "dərhal", "değil" yox "deyil", "var mı" yox "varmı/var?".
 
 DİNLƏMƏ QAYDALARI:
