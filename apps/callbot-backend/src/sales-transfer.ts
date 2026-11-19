@@ -208,6 +208,8 @@ export async function startSalesTransfer(
     if (joinTimer) clearTimeout(joinTimer);
     joinTimer = null;
     if (privateBridgeId) {
+      // The rep left before the customer was put through: the bot is back with the customer, no music.
+      await stopMoh();
       const pb = privateBridgeId;
       privateBridgeId = null;
       // Put the bot's media back so the call bridge is whole again before it ends.

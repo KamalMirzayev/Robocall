@@ -453,6 +453,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
 
 
   let transferWaitStartedAt = 0;
+  let queueRedials = 0;
+  const maxQueueRedials = Math.max(0, Math.min(Number(process.env.SALES_QUEUE_REDIALS || 3), 10));
   const beginTransfer = async () => {
     if (transferState !== 'pending') return;
     // Never move the customer to hold while they are still speaking (it cut them off mid-sentence).
@@ -577,6 +579,32 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           }
         },
         onRepHangup: () => {
+          // The queue (e.g. 6434) dropped the call before the customer was put through (no agent
+          // picked up in time): dial it again instead of ending the customer's call.
+          if (transferState === 'awaiting_rep' || transferState === 'briefing') {
+            if (briefingTimer) clearTimeout(briefingTimer);
+            briefingTimer = null;
+            transferHandle = null;
+            if (queueRedials < maxQueueRedials && !sessionClosed && session) {
+              queueRedials += 1;
+              console.log(`Sales queue dropped before the customer joined, redial ${queueRedials}/${maxQueueRedials} for job ${telephonyJobId ?? 'none'}`);
+              transferState = 'pending';
+              transferWaitStartedAt = Date.now() - 10000; // the customer is on hold: start at once
+              void beginTransfer();
+              return;
+            }
+            console.warn(`Sales queue dropped ${queueRedials + 1} times, giving up for job ${telephonyJobId ?? 'none'}`);
+            transferState = 'idle';
+            transcriptLines.push('[Satış təmsilçisinə qoşmaq alınmadı]');
+            if (sessionClosed || !session) { rawSend({ type: 'end_call', reason: 'transfer_failed' }); return; }
+            try {
+              session.sendClientContent({
+                turns: '[Sistem] Nümayəndələr hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, nümayəndənin ona tezliklə geri zəng edəcəyini de, record_campaign_result alətini outcome=wants_rep_contact ilə çağır, sonra qısa sağollaş və end_call çağır.',
+                turnComplete: true,
+              });
+            } catch { rawSend({ type: 'end_call', reason: 'transfer_failed' }); }
+            return;
+          }
           console.log(`Sales rep hung up, ending telephony job ${telephonyJobId ?? 'none'}`);
           rawSend({ type: 'end_call', reason: 'sales_rep_hangup' });
         },
