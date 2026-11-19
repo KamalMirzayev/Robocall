@@ -387,6 +387,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   const queueWaitMs = Math.max(20, Math.min(Number(process.env.SALES_QUEUE_WAIT_SECONDS || 150), 600)) * 1000;
   let briefingText = '';
   let repHeard = '';
+  let lastModelAudioAt = 0;
   let startQueueBriefing: () => void = () => {};
   // A live rep picking up in the queue: "Alo", "Salam", "Buyurun", "Bəli", "Eşidirəm", "Toyota ..., Tərlan, buyurun".
   const REP_GREETING = /(al+o|salam|buyur|bəli|beli|eşidirəm|esidirem|eşidir|слушаю|алло|ало|здравствуйте|да,)/i;
@@ -522,23 +523,27 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               ? `${String(excelCtx?.params?.model || 'Corolla')} trade-in kampaniyası`
               : excelCtx?.segment === 'credit_offer' ? 'kredit (churn) kampaniyası' : 'servis kampaniyası'
             : 'ARZOOM kredit müraciəti';
-          briefingText = `Nümayəndəyə 3-4 qısa cümlə ilə məlumat ver: "Salam, ${campaignText} üzrə müştəri xəttdədir."${customerLabel ? ` Müştərinin adı: ${customerLabel}.` : ''} Sonra danışıqda öyrəndiklərini qısa de: müştəri nəyə razılaşdı və nə istəyir, maşını (model, il, yürüş, vəziyyət) haqqında nə dedi, kredit və ya qiymət barədə nə soruşdu, hansı sualı cavabsız qaldı. Bilmədiyini uydurma. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`;
+          briefingText = `Nümayəndəyə 3-4 qısa cümlə ilə məlumat ver. Dərhal bununla başla: "Salam, müştəri xəttdədir, ${campaignText}."${customerLabel ? ` Müştərinin adı: ${customerLabel}.` : ''} Sonra danışıqda öyrəndiklərini qısa de: müştəri nəyə razılaşdı və nə istəyir, maşını (model, il, yürüş, vəziyyət) haqqında nə dedi, kredit və ya qiymət barədə nə soruşdu, hansı sualı cavabsız qaldı. Bilmədiyini uydurma. Sonda "İndi sizi müştəri ilə birləşdirirəm" de və sus. Heç bir alət çağırma.`;
           // A single number is a queue: it answers at once with music, the rep comes later.
           const queue = transferExtensions().length === 1;
           try {
             if (queue) {
               transferState = 'awaiting_rep';
               session.sendClientContent({
-                turns: '[Sistem] Zəng satış növbəsinə qoşuldu. Müştəri səni EŞİTMİR (gözləmə musiqisindədir). Növbədə musiqi, avtomatik elanlar və ya səssizlik eşidəcəksən. HEÇ NƏ demə, tam sus. Nümayəndə xəttə çıxanda sənə ayrıca xəbər veriləcək.',
+                turns: `[Sistem] Zəng satış növbəsinə qoşuldu. Müştəri səni EŞİTMİR (gözləmə musiqisindədir). Növbədə musiqi və avtomatik elanlar eşidəcəksən: onlara heç nə demə. Canlı nümayəndə "Alo", "Salam", "Buyurun" deyən kimi DƏRHAL, gecikmədən danış. ${briefingText}`,
                 turnComplete: true,
               });
               repHeard = '';
               startQueueBriefing = () => {
                 if (transferState !== 'awaiting_rep' || sessionClosed || !session) return;
                 transferState = 'briefing';
-                currentAgentTurn = '';
                 if (briefingTimer) clearTimeout(briefingTimer);
-                console.log(`Sales transfer job ${telephonyJobId ?? 'none'}: rep answered in the queue, briefing`);
+                // The bot was told to start on the greeting and is usually already answering (muted
+                // until now): let that play instead of asking again, which cost seconds.
+                const alreadyTalking = Date.now() - lastModelAudioAt < 700;
+                console.log(`Sales transfer job ${telephonyJobId ?? 'none'}: rep answered in the queue, briefing${alreadyTalking ? ' (already talking)' : ''}`);
+                if (alreadyTalking) { briefingTimer = setTimeout(leave, 30000); return; }
+                currentAgentTurn = '';
                 try {
                   session.sendClientContent({
                     turns: `[Sistem] Satış nümayəndəsi indi xəttə çıxdı və salam verdi. Müştəri hələ səni EŞİTMİR. İndi yalnız nümayəndə ilə danışırsan. ${briefingText}`,
@@ -901,6 +906,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           for (const part of message.serverContent?.modelTurn?.parts ?? []) {
             const data = part?.inlineData?.data;
             if (!data) continue;
+            lastModelAudioAt = Date.now();
             // Bot is muted while the customer is on hold or talking to the rep.
             // In the queue the bot is muted until a live rep has greeted (it answered queue music before).
             if (transferState === 'dialing' || transferState === 'connected' || transferState === 'awaiting_rep') continue;
