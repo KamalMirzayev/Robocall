@@ -619,7 +619,12 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   const phoneDigits = String(customer.phone || '').replace(/\D/g, '');
   const isTestPhone = !!process.env.GEMINI_LIVE_TEST_MODEL && testPhones.some((p) => phoneDigits.endsWith(p));
   const liveModel = (isTestPhone ? process.env.GEMINI_LIVE_TEST_MODEL : process.env.GEMINI_LIVE_MODEL) || 'gemini-3.8-live';
-  if (isTestPhone) console.log(`Live test model ${liveModel} for job ${telephonyJobId ?? 'none'}`);
+  // Optional test voice for the same numbers, e.g. a female voice with a female name.
+  const testVoice = isTestPhone || (process.env.GEMINI_LIVE_TEST_VOICE && testPhones.some((p) => phoneDigits.endsWith(p)))
+    ? String(process.env.GEMINI_LIVE_TEST_VOICE || '').trim() : '';
+  const testAgentName = testVoice ? String(process.env.GEMINI_LIVE_TEST_AGENT_NAME || '').trim() : '';
+  const voiceName = testVoice || (agent.gender === 'male' ? 'Charon' : 'Zephyr');
+  if (isTestPhone || testVoice) console.log(`Live test model ${liveModel}, voice ${voiceName} for job ${telephonyJobId ?? 'none'}`);
 
   try {
     session = await ai.live.connect({
@@ -861,7 +866,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
       config: {
         responseModalities: [Modality.AUDIO],
         speechConfig: {
-          voiceConfig: { prebuiltVoiceConfig: { voiceName: agent.gender === 'male' ? 'Charon' : 'Zephyr' } },
+          voiceConfig: { prebuiltVoiceConfig: { voiceName } },
         },
         // Pin the thinking level explicitly (env-configurable) rather than
         // relying on the model's default, since this is a preview model
@@ -869,7 +874,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
         // Only the 3.1 flash live model takes a thinking level; gemini-3.8-live refuses the session with it (1007).
         ...(liveModel.includes('flash-live') ? { thinkingConfig: { thinkingLevel: geminiThinkingLevel } } : {}),
         systemInstruction: await buildSystemInstruction(customer, agent, callMemoryContext, baseTemplateId, dynamicContext,
-          isExcel ? { segment: excelCtx?.segment ?? null, canTransfer: (excelCtx?.transferExtensions.length ?? 0) > 0, params: excelCtx?.params ?? null } : null),
+          isExcel ? { segment: excelCtx?.segment ?? null, canTransfer: (excelCtx?.transferExtensions.length ?? 0) > 0, params: excelCtx?.params ?? null } : null)
+          + (testAgentName ? `\n\nSƏNİN ADIN: ${testAgentName} (qadın). Özünü təqdim edəndə və ya adını soruşanda yalnız bu adı de, başqa ad çəkmə.` : ''),
         // Optional hint for the written transcript (short Azerbaijani words came out as Portuguese).
         // Off by default until confirmed on a test call: an unknown setup field would fail every call.
         inputAudioTranscription: process.env.GEMINI_TRANSCRIPTION_LANGUAGE_HINT === 'on' ? { languageCodes: ['az-AZ', 'ru-RU'] } : {},
