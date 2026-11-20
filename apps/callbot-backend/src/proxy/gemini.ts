@@ -174,10 +174,17 @@ function pcm16RmsFromBase64(data: string) {
   return Math.sqrt(sum / samples);
 }
 
-const finalGoodbyePattern = /\b(sağ\s*ol(?:un)?|sag\s*ol(?:un)?|hələlik|helelik|təşəkkür|tesekkur|görüşənədək|gorushenedek)\b/i;
+const finalGoodbyePattern = /(sağ\s*ol(?:un)?|sag\s*ol(?:un)?|hələlik|helelik|təşəkkür|tesekkur|görüşənədək|gorushenedek|xoş\s*gün|xos\s*gun|uğurlar|ugurlar|до свидания|всего доброго|goodbye|have a (?:nice|good) day)/i;
 
 function isFinalGoodbye(text: string) {
-  const normalized = text
+  // Only the turn's last sentence counts: "Çox sağ olun. Sizin Mazda üçün kampaniyamız var..." opens
+  // with thanks but is no goodbye (it ended a call after the customer agreed to talk). A turn that
+  // ends with a question waits for an answer.
+  const trimmed = text.trim();
+  if (/\?\s*$/.test(trimmed)) return false;
+  const sentences = trimmed.split(/(?<=[.!?…])\s+/).filter(Boolean);
+  const last = sentences.length ? sentences[sentences.length - 1] : trimmed;
+  const normalized = last
     .toLowerCase()
     .replace(/[?!]+/g, ' ')
     .replace(/\s+/g, ' ')
