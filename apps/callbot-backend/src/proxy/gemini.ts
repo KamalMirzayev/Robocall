@@ -371,6 +371,10 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   let suppressMonitorAgentUntil = 0;
   const transcriptLines: string[] = [];
   let currentAgentTurn = '';
+  // A turn in a foreign language (Spanish, English...) is muted and replaced by an Azerbaijani one.
+  // Azerbaijani never uses these letters; the words are ones the model said on calls.
+  let foreignTurn = false;
+  const FOREIGN_SPEECH = /[áéíóúñ¿¡ãõâê]|\b(entiendo|comunique|gustaría|representante|vehículo|usted|gracias|señor|claro que|por favor|okay|sorry|of course|i understand|thank you|no speech|silence)\b/i;
   // When the bot's queued speech will have finished playing on the line (audio arrives faster than real time).
   let playoutEndsAt = 0;
   const msUntilPlayedOut = () => Math.max(0, playoutEndsAt - Date.now());
@@ -948,10 +952,11 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             // In the queue the bot is muted until a live rep has greeted (it answered queue music before);
             // its audio is kept in case this turn is the briefing.
             if (transferState === 'awaiting_rep') { queueTurnAudio.push(data); continue; }
-            if (transferState === 'dialing' || transferState === 'connected' || afterGoodbye) continue;
+            if (transferState === 'dialing' || transferState === 'connected' || afterGoodbye || foreignTurn) continue;
             playAgentAudio(data);
           }
           if (message.serverContent?.interrupted) {
+            foreignTurn = false;
             queueTurnAudio = [];
             phoneAudio.reset();
             playoutEndsAt = 0;
@@ -969,6 +974,22 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               currentAgentTurn += text;
               send({ type: 'transcription', role: 'model', text: currentAgentTurn });
             }
+          }
+          // The model sometimes drifts into another language (it answered in Spanish once). Stop that
+          // turn at once, drop what is still queued and have it say the same thing in Azerbaijani.
+          if (!foreignTurn && (transferState === 'idle' || transferState === 'briefing') && FOREIGN_SPEECH.test(currentAgentTurn)) {
+            foreignTurn = true;
+            console.warn(`Job ${telephonyJobId ?? 'none'}: bot spoke another language, correcting: ${currentAgentTurn.slice(0, 80)}`);
+            phoneAudio.reset();
+            playoutEndsAt = 0;
+            send({ type: 'interrupted' });
+            currentAgentTurn = '';
+            try {
+              session?.sendClientContent({
+                turns: '[Sistem] Sən səhvən başqa dildə danışdın. Müştəri onu başa düşmür. Bunu xatırlatma, üzr istəmə, dil haqqında heç nə demə: eyni fikri DƏRHAL Azərbaycan dilində qısa de və söhbəti Azərbaycan dilində davam et.',
+                turnComplete: true,
+              });
+            } catch {}
           }
           // The bot already started the briefing: it heard a live rep, even if the rep's words have not
           // reached our greeting check (late or unusual transcription). Play it at once instead of waiting.
@@ -998,6 +1019,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             transferStartTimer = setTimeout(() => void beginTransfer(), msUntilPlayedOut() + 500);
           }
           if (message.serverContent?.turnComplete && transferState === 'awaiting_rep') { currentAgentTurn = ''; queueTurnAudio = []; }
+          if (message.serverContent?.turnComplete) foreignTurn = false;
           if (message.serverContent?.turnComplete && currentAgentTurn) {
             const completedAgentTurn = currentAgentTurn.trim();
             transcriptLines.push(`A: ${completedAgentTurn}`);
