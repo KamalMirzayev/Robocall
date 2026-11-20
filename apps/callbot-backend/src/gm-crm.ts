@@ -91,7 +91,11 @@ export class GmCall {
 
   /** Their knowledge base (prices, trims, dealer info). Short timeout: the customer is waiting. */
   async searchKb(query: string, model?: string): Promise<unknown> {
-    const r = await this.trigger('search_knowledge_base', { query, brand: this.brand, model: model || undefined }, 5000);
+    // The customer hears silence while this runs: never wait more than 3 s in total (session included).
+    const r = await Promise.race([
+      this.trigger('search_knowledge_base', { query, brand: this.brand, model: model || undefined }, 3000),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+    ]);
     return r?.result ?? null;
   }
 
