@@ -136,7 +136,8 @@ export async function searchPartnerKb(query: string, opts: { brand?: string; lim
   const brand = String(opts.brand || '').trim().toLowerCase();
   const qs = terms(query);
   const scored = liveChunks()
-    .filter((c) => !brand || String(c.brand || '').toLowerCase() === brand || String(c.brand || '').toLowerCase() === 'common')
+    // Entries without a brand (branches, addresses, opening hours, documents) apply to every brand.
+    .filter((c) => !brand || !String(c.brand || '').trim() || ['common', 'all', 'arzoom', brand].includes(String(c.brand || '').toLowerCase()))
     .map((c) => {
       const head = fold([c.brand, c.model, c.trim, c.title].filter(Boolean).join(' '));
       const body = fold(c.content);
