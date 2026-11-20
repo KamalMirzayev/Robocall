@@ -124,9 +124,9 @@ const fold = (s: string) =>
 // ("mühərrik həcmi 1.8 L"): each group of words means the same thing in a search.
 const SYNONYMS: string[][] = [
   ['motor', 'mator', 'muherrik', 'hecm', 'litr', 'engine', 'двигател', 'объем', 'guc', 'at gucu', 'hp'],
-  ['saat', 'is vaxt', 'qrafik', 'acig', 'acıq', 'working', 'hours', 'is gunu', 'bazar', 'шенбе', 'время работы'],
-  ['unvan', 'yerles', 'adres', 'kuce', 'filial', 'harda', 'hara', 'mərkəz', 'merkez', 'location', 'адрес'],
-  ['qiym', 'price', 'deyer', 'manat', 'azn', 'цен'],
+  ['saat', 'acil', 'isley', 'bagla', 'is vaxt', 'qrafik', 'acig', 'acıq', 'working', 'hours', 'is gunu', 'bazar', 'шенбе', 'время работы'],
+  ['unvan', 'yerles', 'gelim', 'yol', 'adres', 'kuce', 'filial', 'harda', 'hara', 'mərkəz', 'merkez', 'location', 'адрес'],
+  ['qiym', 'price', 'deyer', 'manat', 'azn', 'цен', 'neceye', 'satil', 'pulu'],
   ['komplekt', 'trim', 'versiya', 'paket', 'комплект'],
   ['suret', 'qutu', 'avtomat', 'mexanik', 'transmiss', 'variator', 'cvt'],
   ['yanacaq', 'serf', 'benzin', 'hibrid', 'hybrid', 'расход'],
@@ -139,7 +139,7 @@ function terms(query: string): string[] {
   for (const t of base) if (t.length >= 6) out.add(t.slice(0, Math.max(4, t.length - 3)));
   for (const group of SYNONYMS) {
     const g = group.map(fold);
-    if (base.some((t) => g.some((w) => t.startsWith(w) || (w.length >= 4 && w.startsWith(t))))) g.forEach((w) => out.add(w));
+    if (base.some((t) => g.some((w) => t.startsWith(w) || (t.length >= 5 && w.startsWith(t))))) g.forEach((w) => out.add(w));
   }
   return [...out];
 }
