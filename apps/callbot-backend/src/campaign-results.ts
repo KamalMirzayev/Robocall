@@ -202,6 +202,47 @@ export function tradeInTerms(params: Record<string, unknown> | null | undefined)
   };
 }
 
+// Group Motors Mazda pilot: one free service of seven for owners who have not come for a long time.
+// A service_return campaign with segment_params.program = "mazda_free_service".
+export function isMazdaFreeService(params: Record<string, unknown> | null | undefined): boolean {
+  return String(params?.program ?? '') === 'mazda_free_service';
+}
+
+const AZ_MONTHS = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avqust', 'sentyabr', 'oktyabr', 'noyabr', 'dekabr'];
+/** "31 dekabr 2026": segment_params.deadline, else the end of next month (Baku). */
+export function campaignDeadline(params: Record<string, unknown> | null | undefined): string {
+  const set = String(params?.deadline ?? '').trim();
+  if (set) return set;
+  const [y, m] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Baku', year: 'numeric', month: '2-digit' }).format(new Date()).split('-').map(Number);
+  const nm = m === 12 ? 1 : m + 1;
+  const ny = m === 12 ? y + 1 : y;
+  const last = new Date(Date.UTC(ny, nm, 0)).getUTCDate();
+  return `${last} ${AZ_MONTHS[nm - 1]} ${ny}`;
+}
+
+function mazdaFreeServiceLines(params: Record<string, unknown> | null | undefined, canTransfer: boolean): string {
+  const deadline = campaignDeadline(params);
+  const company = String(params?.company ?? '').trim() || 'Groupmotors Mazda servis mərkəzi';
+  const transfer = canTransfer
+    ? `"Əlbəttə, sizi servis koordinatorumuzla əlaqələndirirəm. Bir neçə saniyə xətdə qalın." de və dərhal transfer_to_sales alətini çağır, sonra heç nə demə. Alət uğursuz olsa (koordinator məşğuldur): "Hazırda servis koordinatorumuz digər müştəriyə xidmət göstərir. İstəsəniz, sizinlə münasib vaxtda əlaqə saxlanılması üçün müraciətinizi qeyd edim?" Razı olsa, hansı vaxt uyğun olduğunu soruş və record_campaign_result alətini outcome=wants_rep_contact ilə çağır (reason-a seçdiyi xidməti və uyğun vaxtı yaz).`
+    : `"Servis koordinatorumuz sizinlə tezliklə əlaqə saxlayacaq və gəlişiniz üçün uyğun vaxtı təyin edəcək." de, hansı vaxt zəng etməyin uyğun olduğunu soruş və record_campaign_result alətini outcome=wants_rep_contact ilə çağır (reason-a seçdiyi xidməti və uyğun vaxtı yaz).`;
+  return [
+    `- MAZDA SERVİS SSENARİSİ (agent təlimatından və trade-in/satış qaydalarından üstündür, yalnız bu ssenari ilə danış).`,
+    `  ROL: sən ${company}nin virtual müştəri əlaqələri köməkçisisən, təcrübəli, nəzakətli servis koordinatoru kimi danışırsan. Özünü insan əməkdaş kimi təqdim etmə. "Robotsunuz?", "süni intellektsiniz?" soruşsalar, dürüst de: "Mən Groupmotors Mazda servis mərkəzinin virtual köməkçisiyəm. Sizə xüsusi servis kampaniyamız haqqında məlumat vermək üçün zəng etmişəm."`,
+    `  QADAĞAN: müştərinin uzun müddət servisə gəlmədiyini, passiv müştəri olduğunu, bu səbəbdən seçildiyini, əvvəlki servis tarixçəsini HEÇ VAXT demə və müzakirə etmə. Maşında problem olduğunu, nasazlıq ola biləcəyini demə. Endirim, pulsuz təmir, əlavə pulsuz xidmət vəd etmə. Servisə gəliş vaxtını özün təyin etmə və "vaxtınız təyin olundu" demə: vaxtı yalnız servis koordinatoru təyin edir. Kampaniyanın bitmə tarixini dəyişmə, əlavə vaxt vəd etmə.`,
+    `  TƏKLİF: Mazda avtomobili üçün xüsusi servis kampaniyası. Müştəri bu yeddi xidmətdən YALNIZ BİRİNİ tamamilə ödənişsiz seçə bilər: 1) mühərrikxananın xüsusi avadanlıqla su ilə təmizlənməsi, 2) kondisioner sisteminin ozonla təmizlənməsi, 3) təkərlərin bucaq tənzimlənməsi (razval), 4) təkərlərin balanslaşdırılması, 5) faraların tənzimlənməsi, 6) elektron diaqnostika, 7) ümumi texniki baxış. Bütün xidmətlərin birlikdə pulsuz olduğu təəssüratını YARATMA. Kampaniya ${deadline} tarixinədək qüvvədədir.`,
+    `  1) Salamlaşmada yalnız özünü təqdim edib danışmağa münasib olub-olmadığını soruşdun. Açıq razılıq ("bəli", "buyurun") olmadan təklifi danışma.`,
+    `  2) Razılıqdan sonra qısa de: "Çox sağ olun. Sizin Mazda avtomobiliniz üçün xüsusi servis kampaniyamız var. Kampaniya çərçivəsində bir neçə xidmətdən birini tamamilə ödənişsiz seçə bilərsiniz." Uzun izah vermə, dayan və dinlə.`,
+    `  3) Müştəri "nədir?", "hansı xidmətlər?" soruşsa: "Mühərrikxananın təmizlənməsi, kondisionerin ozonla təmizlənməsi, razval, balans, faraların tənzimlənməsi, elektron diaqnostika və ya ümumi texniki baxış xidmətlərindən birini tamamilə ödənişsiz seçə bilərsiniz. Yalnız birini seçmək imkanınız var, servis koordinatorumuz seçimdə kömək edə bilər."`,
+    `  4) Sonra soruş: "Bu kampaniyadan yararlanmaq sizin üçün maraqlı olardı?" Müştəri bir xidmət adını çəksə, onu yadda saxla. Xidmətin nə olduğunu soruşsa, sadə izah et (texniki detalları uydurma, lazım olsa search_knowledge_base istifadə et).`,
+    `  5) KOORDİNATORA QOŞ (bu kampaniyada əsas məqsəd budur, satış qaydasındakı "yalnız sonda təklif et" qaydası burada keçərli deyil): müştəri maraqlıdırsa, servisə gəlmək və ya vaxt təyin etmək istəyirsə, əlavə/ətraflı məlumat istəyirsə, canlı əməkdaş istəyirsə və ya sualına əminliklə cavab verə bilmirsənsə: ${transfer}`,
+    `  ETİRAZLAR: "Niyə pulsuzdur?" — "Bu, Groupmotors Mazda tərəfindən müştərilərimiz üçün təşkil olunmuş xüsusi servis kampaniyasıdır, qeyd etdiyim xidmətlərdən birini ödənişsiz əldə edə bilərsiniz." "Niyə mənə zəng edirsiniz?" — "Mazda avtomobiliniz üçün nəzərdə tutulmuş xüsusi servis kampaniyası haqqında məlumat vermək istəyirik, siz də bu kampaniyadan yararlana bilərsiniz." "Hamısını pulsuz ala bilərəm?" — "Xeyr, sadalanan xidmətlərdən yalnız birini seçə bilərsiniz, seçdiyiniz xidmət tamamilə ödənişsiz olacaq." "Əlavə ödəniş çıxacaq?" — "Seçdiyiniz kampaniya xidməti tamamilə ödənişsizdir. Əlavə xidmət və ya təmirə ehtiyac yaranarsa, sizə əvvəlcədən deyiləcək və yalnız razılığınızla edilir." "Başqa servisə gedirəm" — "Başa düşürəm. Bununla belə, Mazda servis mərkəzimizdə bu kampaniyadan yararlana bilərsiniz. İstəsəniz, sizi koordinatorumuzla əlaqələndirim?" "Düşünərəm" — "Əlbəttə, qərar sizindir. Kampaniya ${deadline} tarixinədək qüvvədədir. İstəsəniz, ətraflı məlumat üçün sizi koordinatorumuzla əlaqələndirə bilərəm."`,
+    `  İMTİNA: "xidmət lazım deyil", "maraqlı deyil" desə, İSRAR ETMƏ, mübahisə etmə: "Əlbəttə, sizi başa düşürəm. Sadəcə bu imkandan xəbərdar olmağınızı istədik. Təklif ${deadline} tarixinədək qüvvədədir. Vaxt ayırdığınız üçün təşəkkür edirik, xoş gün!" outcome=not_interested. Maşını satıbsa: "Anladım, məlumat verdiyiniz üçün təşəkkür edirəm. Narahat etdiyimiz üçün üzr istəyirik. Xoş gün!" outcome=sold_car. Başqa servisdə xidmət alırsa və maraqlanmırsa: outcome=serviced_elsewhere. Səhv nömrədirsə: outcome=wrong_person.`,
+    `  SONLUQ: koordinatora qoşulmayan maraqlı müştəriyə: "Diqqətiniz üçün təşəkkür edirik. Sizi Mazda servis mərkəzimizdə görməkdən məmnun olarıq. Xoş günlər!"`,
+    `  DİL: müştəri rus dilində danışırsa rus dilində, ingilis dilində danışırsa ingilis dilində davam et; dilini dəyişsə, sən də dəyiş. Azərbaycan dilində danışırsa, yalnız Azərbaycan dilində danış. Dil haqqında sual vermə. Uzun monoloq etmə, eyni məlumatı təkrarlama, təzyiq göstərmə.`,
+  ].join('\n');
+}
+
 export function excelCustomerLines(data: unknown, segment: string | null, opts: { canTransfer?: boolean; params?: Record<string, unknown> | null } = {}): string[] {
   if (!data || typeof data !== 'object') return [];
   const d = data as Record<string, unknown>;
@@ -219,10 +260,10 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
     ? sc.model
     : [sc.brand, sc.model && !sc.brand.toLowerCase().includes(sc.model.toLowerCase()) ? sc.model : ''].filter(Boolean).join(' ');
   if (car) lines.push(segment === 'credit_offer' ? `- Əvvəl kredit üçün müraciət etdiyi avtomobil (marka və model): ${car}` : segment === 'trade_in' ? `- Müştərinin hazırkı avtomobili: ${car}` : `- Avtomobil: ${car}`);
-  if (s(d.last_service_date)) lines.push(`- Son dəfə servisə gəlib: ${s(d.last_service_date)}`);
-  if (s(d.last_talk)) lines.push(`- Əvvəlki danışıq (müştəri ilə son əlaqənin qeydi): ${s(d.last_talk).slice(0, 800)}`);
+  if (s(d.last_service_date) && !isMazdaFreeService(opts.params)) lines.push(`- Son dəfə servisə gəlib: ${s(d.last_service_date)}`);
+  if (s(d.last_talk) && !isMazdaFreeService(opts.params)) lines.push(`- Əvvəlki danışıq (müştəri ilə son əlaqənin qeydi): ${s(d.last_talk).slice(0, 800)}`);
   const extra = d.extra && typeof d.extra === 'object' ? (d.extra as Record<string, unknown>) : {};
-  for (const [k, v] of Object.entries(extra).slice(0, 10)) {
+  for (const [k, v] of isMazdaFreeService(opts.params) ? [] : Object.entries(extra).slice(0, 10)) {
     if (s(v)) lines.push(`- ${k}: ${s(v).slice(0, 300)}`);
   }
   const outcomes = RESULT_OUTCOMES[segment ?? ''] ?? {};
@@ -231,7 +272,9 @@ export function excelCustomerLines(data: unknown, segment: string | null, opts: 
   }
   lines.push(`- SONRA ZƏNG: İndiki vaxt (Bakı): ${bakuIsoNow()}. Müştəri indi danışa bilmədiyini və ya sonra zəng edilməsini istəsə: "Sizə hansı gün, saat neçədə zəng edək?" deyə soruş, yalnız gün desə saatı da soruş. Sonra record_campaign_result alətini outcome=callback və callback_at="YYYY-MM-DD HH:MM" (Bakı vaxtı) ilə çağır, vaxtı müştəriyə təkrarla və sağollaş. Heç bir vaxt demək istəmirsə callback_at="unknown" ver.`);
   lines.push('- Müştəri ona bir daha zəng edilməməsini istəsə: üzr istə, "sizə bir daha zəng edilməyəcək" de, record_campaign_result alətini outcome=not_interested, do_not_call=true ilə çağır və sağollaş.');
-  if (segment === 'service_return') {
+  if (segment === 'service_return' && isMazdaFreeService(opts.params)) {
+    lines.push(mazdaFreeServiceLines(opts.params, !!opts.canTransfer));
+  } else if (segment === 'service_return') {
     lines.push(opts.canTransfer
       ? '- SERVİS NÜMAYƏNDƏSİ: Müştəri təklifə razıdırsa və servisə gəlmək üçün nümayəndə ilə danışmaq istəsə: "Zəhmət olmasa bir neçə saniyə xətdə qalın, sizi servis nümayəndəsinə qoşuram" de və dərhal transfer_to_sales alətini çağır, bundan sonra heç nə demə. Alət uğursuz olsa, nümayəndənin ona tezliklə geri zəng edəcəyini de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır.'
       : '- SERVİS NÜMAYƏNDƏSİ: Müştəri servisə gəlmək üçün nümayəndə ilə əlaqə istəsə, servis nümayəndəsinin ona tezliklə zəng edəcəyini de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır; reason-a müştərinin uyğun vaxtını yaz.');

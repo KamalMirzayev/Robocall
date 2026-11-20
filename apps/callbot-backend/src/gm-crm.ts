@@ -101,6 +101,13 @@ export class GmCall {
     await this.trigger('handoff_to_consultant', { request_type: requestType, summary: summary.slice(0, 1000), client_phone: digits(this.phone), model: model || undefined, client_name: this.info.name || undefined });
   }
 
+  /** A service matter (repair, maintenance, the free-service campaign): their service pipeline. */
+  async escalateService(summary: string) {
+    if (this.handedOver) return;
+    this.handedOver = true;
+    await this.trigger('escalate_to_operator', { reason: 'service', summary: summary.slice(0, 1000), client_phone: digits(this.phone), client_name: this.info.name || undefined });
+  }
+
   async markLost(reason: 'finance' | 'car_not_available' | 'competitor' | 'postponed' | 'just_looking' | 'spam' | 'no_contact', clientWords: string) {
     if (this.lost || this.handedOver) return;
     this.lost = true;

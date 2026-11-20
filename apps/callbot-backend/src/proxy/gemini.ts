@@ -18,7 +18,7 @@ import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, load
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
 import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
-import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, recordCampaignResult, tradeInTerms } from '../campaign-results.js';
+import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, isMazdaFreeService, recordCampaignResult, tradeInTerms } from '../campaign-results.js';
 import { startGmCall, type GmCall } from '../gm-crm.js';
 import { pinnedExtensions, recordTransferIssue, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
@@ -313,7 +313,10 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
   if (excel) parts.push(...excelCustomerLines((customer as { importData?: unknown }).importData, excel.segment, { canTransfer: excel.canTransfer, params: excel.params }));
   const legacyGuide = customer.sourceSystem === 'arzoom' || customer.sourceSystem === EXCEL_SOURCE ? '' : buildSummaryCategoryGuide();
   
-  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${LISTENING_INSTRUCTION}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${legacyGuide}`;
+  const languageException = excel?.segment === 'service_return' && isMazdaFreeService(excel.params)
+    ? '\n\nDİL İSTİSNASI (bu kampaniya üçün yuxarıdakı DİL qaydasından üstündür): müştəri Azərbaycan dilində danışırsa, yalnız Azərbaycan dilində danış. Müştəri rus dilində danışırsa rus dilində, ingilis dilində danışırsa ingilis dilində cavab ver və həmin dildə davam et; müştəri dilini dəyişsə, sən də dəyiş. İspan və başqa dillərdə heç vaxt danışma.'
+    : '';
+  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${LISTENING_INSTRUCTION}${languageException}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${legacyGuide}`;
 }
 
 function buildInitialGreetingPrompt(customer: Customer, segment: string | null = null, params: Record<string, unknown> | null = null) {
@@ -324,6 +327,9 @@ function buildInitialGreetingPrompt(customer: Customer, segment: string | null =
   // Churn campaign: the company greeting comes first (see CHURN SSENARİSİ in the customer data).
   if (segment === 'credit_offer') {
     return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, sizi Group Motors şirkətindən salamlayıram. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə. Müştəri açıq razılıq verməyincə ("bəli", "var", "buyurun", "danışa bilərəm") təklifin detallarını DANIŞMA. "Alo", "hə?", "eşitmirəm" razılıq DEYİL: müştəri səni eşitməyib, qısa təkrar et: "Bəli, eşidirsiniz? Toyota Abşeron Mərkəzindən narahat edirik, danışmağa vaxtınız var?" Müştəri razılıq əvəzinə sual versə (məs. "Kimsiniz?", "Kim danışır?"), yalnız o suala qısa cavab ver və yenidən soruş: "Danışmağa vaxtınız var?" Razılıq verəndən sonra CHURN SSENARİSİ ilə davam et.`;
+  }
+  if (segment === 'service_return' && isMazdaFreeService(params)) {
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla, təklifi hələ demə: "Salam, hər vaxtınız xeyir. Groupmotors Mazda servis mərkəzindən zəng edirəm. Sizinlə qısa bir məsələ ilə bağlı danışmaq üçün münasibdirmi?" Bundan sonra cavabı gözlə. Müştəri açıq razılıq verməyincə ("bəli", "buyurun", "danışa bilərəm") kampaniyanı DANIŞMA. "Alo", "hə?", "eşitmirəm" razılıq DEYİL: qısa təkrar et. Müştəri rus və ya ingilis dilində cavab versə, həmin dildə davam et. Razılıq verəndən sonra MAZDA SERVİS SSENARİSİ ilə davam et.`;
   }
   if (segment === 'trade_in') {
     const { company, model } = tradeInTerms(params);
@@ -378,6 +384,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   // Azerbaijani never uses these letters; the words are ones the model said on calls.
   let foreignTurn = false;
   const FOREIGN_SPEECH = /[áéíóúñ¿¡ãõâê]|\b(entiendo|comunique|gustaría|representante|vehículo|usted|gracias|señor|claro que|por favor|okay|sorry|of course|i understand|thank you|no speech|silence)\b/i;
+  // Campaigns where the customer may speak English: only Spanish-like speech is foreign there.
+  const FOREIGN_SPEECH_NOT_EN = /[áéíóúñ¿¡ãõâê]|\b(entiendo|comunique|gustaría|representante|vehículo|usted|gracias|señor|claro que|por favor)\b/i;
+  const foreignSpeech = () => (isExcel && excelCtx?.segment === 'service_return' && isMazdaFreeService(excelCtx?.params) ? FOREIGN_SPEECH_NOT_EN : FOREIGN_SPEECH);
   // When the bot's queued speech will have finished playing on the line (audio arrives faster than real time).
   let playoutEndsAt = 0;
   const msUntilPlayedOut = () => Math.max(0, playoutEndsAt - Date.now());
@@ -414,9 +423,10 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     const outcome = String(args.outcome || '');
     const reason = String(args.reason || '');
     const tradeIn = isExcel && excelCtx?.segment === 'trade_in';
+    const service = isExcel && excelCtx?.segment === 'service_return';
     const payment = /send_link|agrees_will/.test(outcome) ? 'credit' : tradeIn ? 'trade_in' : 'unknown';
     await gm.trigger('update_crm', {
-      request_type: 'sales',
+      request_type: service ? 'service' : 'sales',
       payment_method: payment,
       purchase_horizon: /thinking|callback/.test(outcome) ? 'later' : 'unknown',
       notes: `Robocall: ${outcome}${reason ? ` — ${reason}` : ''}`.slice(0, 1000),
@@ -424,7 +434,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     if (outcome === 'wrong_person') gm.outcome = 'wrong_number';
     else if (outcome === 'callback') gm.outcome = 'callback';
     else if (/not_interested|declined|has_car|sold_car|serviced_elsewhere/.test(outcome)) {
-      await gm.markLost(/has_car|serviced_elsewhere/.test(outcome) ? 'competitor' : /wants_lower|docs_cannot/.test(outcome) ? 'finance' : 'just_looking', reason || outcome);
+      await gm.markLost(/has_car|serviced_elsewhere/.test(outcome) ? 'competitor' : outcome === 'sold_car' ? 'car_not_available' : /wants_lower|docs_cannot/.test(outcome) ? 'finance' : 'just_looking', reason || outcome);
+    } else if (outcome === 'wants_rep_contact' && isExcel && excelCtx?.segment === 'service_return') {
+      await gm.escalateService(`Robocall servis kampaniyası: müştəri servis koordinatorunun onunla əlaqə saxlamasını istəyir. ${reason}\n${gmSummary()}`);
     } else if (outcome === 'wants_rep_contact') {
       await gm.handoff(tradeIn ? 'trade_in' : 'purchase', `Robocall zəngi: müştəri satış təmsilçisinin onunla əlaqə saxlamasını istəyir. ${reason}\n${gmSummary()}`);
     }
@@ -549,7 +561,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           transcriptLines.push(`[${isExcel && excelCtx?.segment !== 'trade_in' ? 'Servis nümayəndəsinə' : 'Satış təmsilçisinə'} qoşuldu: ${ext}]`);
           if (gm) {
             gm.outcome = 'transferred';
-            void gm.handoff(isExcel && excelCtx?.segment === 'trade_in' ? 'trade_in' : 'purchase', `Robocall zəngi, müştəri ${ext} daxili nömrəli satış təmsilçisinə canlı qoşuldu.\n${gmSummary()}`);
+            if (isExcel && excelCtx?.segment === 'service_return') void gm.escalateService(`Robocall servis kampaniyası zəngi, müştəri ${ext} daxili nömrəli servis koordinatoruna canlı qoşuldu.\n${gmSummary()}`);
+            else void gm.handoff(isExcel && excelCtx?.segment === 'trade_in' ? 'trade_in' : 'purchase', `Robocall zəngi, müştəri ${ext} daxili nömrəli satış təmsilçisinə canlı qoşuldu.\n${gmSummary()}`);
           }
           if (isExcel) {
             void recordCampaignResult({
@@ -585,9 +598,12 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           const campaignText = isExcel
             ? excelCtx?.segment === 'trade_in'
               ? `${String(excelCtx?.params?.model || 'Corolla')} trade-in kampaniyası`
-              : excelCtx?.segment === 'credit_offer' ? 'kredit (churn) kampaniyası' : 'servis kampaniyası'
+              : excelCtx?.segment === 'credit_offer' ? 'kredit (churn) kampaniyası' : isMazdaFreeService(excelCtx?.params) ? 'Mazda pulsuz servis kampaniyası' : 'servis kampaniyası'
             : 'ARZOOM kredit müraciəti';
-          briefingText = `Nümayəndəyə cəmi 3 qısa cümlə de, artıq heç nə əlavə etmə. 1) Dərhal: "Salam, müştəri xəttdədir, ${campaignText}." 2) Bir cümlə ilə müştərinin istəyi: maşını barterlə (köhnəsini verib yenisini almaq) və ya kreditlə almaq istəyir, danışıqda müştəri hansını dedisə onu de, məsələn: "Müştəri köhnə maşınını verib yenisini barterlə almaq istəyir" və ya "Müştəri yeni maşını kreditlə almaq istəyir". Müştəri ikisindən heç birini aydın deməyibsə: "Müştəri barter və ya kredit şərtləri ilə maraqlanır." 3) "İndi sizi müştəri ilə birləşdirirəm." Sonra sus. Bilmədiyini uydurma, heç bir alət çağırma.`;
+          const serviceBriefing = isExcel && excelCtx?.segment === 'service_return';
+          briefingText = serviceBriefing
+            ? `Koordinatora cəmi 3 qısa cümlə de, artıq heç nə əlavə etmə. 1) Dərhal: "Salam, müştəri xəttdədir, ${campaignText}." 2) Bir cümlə ilə: müştəri hansı ödənişsiz xidməti seçdi (məs. "Müştəri kondisionerin ozonla təmizlənməsini seçib") və ya hələ seçməyib, vaxtla bağlı nə dedisə onu da qısa əlavə et. 3) "İndi sizi müştəri ilə birləşdirirəm." Sonra sus. Bilmədiyini uydurma, heç bir alət çağırma.`
+            : `Nümayəndəyə cəmi 3 qısa cümlə de, artıq heç nə əlavə etmə. 1) Dərhal: "Salam, müştəri xəttdədir, ${campaignText}." 2) Bir cümlə ilə müştərinin istəyi: maşını barterlə (köhnəsini verib yenisini almaq) və ya kreditlə almaq istəyir, danışıqda müştəri hansını dedisə onu de, məsələn: "Müştəri köhnə maşınını verib yenisini barterlə almaq istəyir" və ya "Müştəri yeni maşını kreditlə almaq istəyir". Müştəri ikisindən heç birini aydın deməyibsə: "Müştəri barter və ya kredit şərtləri ilə maraqlanır." 3) "İndi sizi müştəri ilə birləşdirirəm." Sonra sus. Bilmədiyini uydurma, heç bir alət çağırma.`;
           // A single number is a queue: it answers at once with music, the rep comes later.
           const queue = transferExtensions().length === 1;
           try {
@@ -1027,7 +1043,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           }
           // The model sometimes drifts into another language (it answered in Spanish once). Stop that
           // turn at once, drop what is still queued and have it say the same thing in Azerbaijani.
-          if (!foreignTurn && (transferState === 'idle' || transferState === 'briefing') && FOREIGN_SPEECH.test(currentAgentTurn)) {
+          if (!foreignTurn && (transferState === 'idle' || transferState === 'briefing') && foreignSpeech().test(currentAgentTurn)) {
             foreignTurn = true;
             console.warn(`Job ${telephonyJobId ?? 'none'}: bot spoke another language, correcting: ${currentAgentTurn.slice(0, 80)}`);
             phoneAudio.reset();
