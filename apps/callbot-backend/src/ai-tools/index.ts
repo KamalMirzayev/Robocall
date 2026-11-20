@@ -226,7 +226,28 @@ async function searchKnowledgeBaseTool(args: Record<string, unknown>) {
 
   // The partner knowledge base, when configured, is the source for products, prices and terms.
   if (partnerKbConfigured()) {
-    return searchPartnerKb(query, { brand: cleanText(args.brand) || undefined, limit });
+    // Several tries before "nothing found": the brand filter, then without it, then each word
+    // of the question alone (a long question can miss an entry that one word finds).
+    const brand = cleanText(args.brand) || undefined;
+    const first = await searchPartnerKb(query, { brand, limit });
+    if (first.results.length) return first;
+    if (brand) {
+      const anyBrand = await searchPartnerKb(query, { limit });
+      if (anyBrand.results.length) return anyBrand;
+    }
+    const seen = new Set<string>();
+    const merged: typeof first.results = [];
+    for (const word of query.split(/\s+/).filter((w) => w.length >= 3)) {
+      const r = await searchPartnerKb(`${brand ?? ''} ${word}`.trim(), { brand, limit: 2 });
+      for (const x of r.results) {
+        const key = `${x.title}|${x.content.slice(0, 40)}`;
+        if (!seen.has(key)) { seen.add(key); merged.push(x); }
+      }
+      if (merged.length >= limit) break;
+    }
+    return merged.length
+      ? { ...first, results: merged.slice(0, limit), total: merged.length }
+      : { ...first, note: first.note ?? 'Nothing found. Try again with other words (synonyms, the model name only, or without the brand) before telling the customer.' };
   }
 
   const ragSearchUrl = cleanText(process.env.RAG_SEARCH_URL);
