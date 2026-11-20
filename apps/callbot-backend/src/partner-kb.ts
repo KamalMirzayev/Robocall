@@ -111,6 +111,7 @@ export function partnerKbStatus() {
 const fold = (s: string) =>
   s
     .toLowerCase()
+    .replace(/\u0307/g, '') // "İ".toLowerCase() leaves a combining dot
     .replace(/ə/g, 'e')
     .replace(/ı/g, 'i')
     .replace(/[öô]/g, 'o')
@@ -119,8 +120,28 @@ const fold = (s: string) =>
     .replace(/ş/g, 's')
     .replace(/ğ/g, 'g');
 
+// Customers ask in their own words ("neçə motordur?"), the knowledge base uses others
+// ("mühərrik həcmi 1.8 L"): each group of words means the same thing in a search.
+const SYNONYMS: string[][] = [
+  ['motor', 'mator', 'muherrik', 'hecm', 'litr', 'engine', 'двигател', 'объем', 'guc', 'at gucu', 'hp'],
+  ['saat', 'is vaxt', 'qrafik', 'acig', 'acıq', 'working', 'hours', 'is gunu', 'bazar', 'шенбе', 'время работы'],
+  ['unvan', 'yerles', 'adres', 'kuce', 'filial', 'harda', 'hara', 'mərkəz', 'merkez', 'location', 'адрес'],
+  ['qiym', 'price', 'deyer', 'manat', 'azn', 'цен'],
+  ['komplekt', 'trim', 'versiya', 'paket', 'комплект'],
+  ['suret', 'qutu', 'avtomat', 'mexanik', 'transmiss', 'variator', 'cvt'],
+  ['yanacaq', 'serf', 'benzin', 'hibrid', 'hybrid', 'расход'],
+];
+
 function terms(query: string): string[] {
-  return [...new Set(fold(query).split(/[^\p{L}\p{N}-]+/u).filter((t) => t.length >= 2))];
+  const base = fold(query).split(/[^\p{L}\p{N}-]+/u).filter((t) => t.length >= 2);
+  const out = new Set(base);
+  // Azerbaijani endings ("motordur", "saatları", "qiyməti"): also match on the word's start.
+  for (const t of base) if (t.length >= 6) out.add(t.slice(0, Math.max(4, t.length - 3)));
+  for (const group of SYNONYMS) {
+    const g = group.map(fold);
+    if (base.some((t) => g.some((w) => t.startsWith(w) || (w.length >= 4 && w.startsWith(t))))) g.forEach((w) => out.add(w));
+  }
+  return [...out];
 }
 
 function liveChunks(): KbChunk[] {
@@ -147,6 +168,7 @@ export async function searchPartnerKb(query: string, opts: { brand?: string; lim
         if (body.includes(t)) score += 1;
       }
       if (c.category === 'price' && qs.some((t) => /qiym|price|цен|azn|manat/.test(t))) score += 2;
+      if (c.trim && qs.some((t) => /komplekt|trim|versiya/.test(t))) score += 2;
       return { c, score };
     })
     .filter((x) => x.score > 0)
