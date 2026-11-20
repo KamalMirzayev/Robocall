@@ -392,9 +392,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   let briefingText = '';
   let repHeard = '';
   let lastModelAudioAt = 0;
-  let startQueueBriefing: () => void = () => {};
+  let startQueueBriefing: (by: 'greeting' | 'bot') => void = () => {};
   // A live rep picking up in the queue: "Alo", "Salam", "Buyurun", "Bəli", "Eşidirəm", "Toyota ..., Tərlan, buyurun".
-  const REP_GREETING = /(al+o|salam|buyur|bəli|beli|eşidirəm|esidirem|eşidir|слушаю|алло|ало|здравствуйте|да,)/i;
+  const REP_GREETING = /(al+o|hello|salam|buyur|bəli|beli|eşidirəm|esidirem|eşidir|danışır|danisir|xoş|слушаю|алло|ало|здравствуйте|да,)/i;
   let briefingTimer: ReturnType<typeof setTimeout> | null = null;
   let transferHandle: TransferHandle | null = null;
   let transferStartTimer: NodeJS.Timeout | null = null;
@@ -415,6 +415,29 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   };
 
   const shouldForwardAgentToMonitor = () => Date.now() >= suppressMonitorAgentUntil;
+
+  // Plays one chunk of the bot's audio on the line.
+  const playAgentAudio = (data: string) => {
+    if (telephonyJobId) {
+      // Phone line: filtered for 8 kHz so it does not crackle (see phone-audio.ts).
+      const phone = phoneAudio.process(data);
+      if (phone) {
+        send({ type: 'audio', data: phone });
+        // 24 kHz PCM16 = 48 bytes per ms.
+        playoutEndsAt = Math.max(playoutEndsAt, Date.now()) + Buffer.byteLength(phone, 'base64') / 48;
+      }
+    } else {
+      send({ type: 'audio', data });
+      if (shouldForwardAgentToMonitor()) {
+        broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'agent', rate: 24000, data });
+        recording?.add('agent', 24000, data);
+      }
+    }
+  };
+  // In the queue the bot's audio is held back (muted) per turn. When the turn is the briefing
+  // (the bot heard a live rep before our greeting check did), it is played from its start.
+  let queueTurnAudio: string[] = [];
+  const BRIEFING_START = /xətdədir|xəttdədir|xetdedir|xettdedir|müştəri xət|musteri xet/i;
 
   // After the bot's goodbye the line goes quiet; the model then sometimes said things like
   // "no speech" in English. Nothing it says after the goodbye is played, unless the customer talks again.
@@ -540,15 +563,22 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
                 turnComplete: true,
               });
               repHeard = '';
-              startQueueBriefing = () => {
+              startQueueBriefing = (by) => {
                 if (transferState !== 'awaiting_rep' || sessionClosed || !session) return;
                 transferState = 'briefing';
                 if (briefingTimer) clearTimeout(briefingTimer);
-                // The bot was told to start on the greeting and is usually already answering (muted
-                // until now): let that play instead of asking again, which cost seconds.
-                const alreadyTalking = Date.now() - lastModelAudioAt < 700;
-                console.log(`Sales transfer job ${telephonyJobId ?? 'none'}: rep answered in the queue, briefing${alreadyTalking ? ' (already talking)' : ''}`);
-                if (alreadyTalking) { briefingTimer = setTimeout(leave, 30000); return; }
+                // The bot was told to start on the greeting and is often already briefing (muted until
+                // now): play that turn from its start. Before, a muted briefing was lost and the rep
+                // heard nothing for 25-30 s.
+                const briefingHeld = BRIEFING_START.test(currentAgentTurn) && queueTurnAudio.length > 0;
+                console.log(`Sales transfer job ${telephonyJobId ?? 'none'}: rep answered in the queue (${by === 'bot' ? 'bot heard the rep' : 'greeting'}), briefing${briefingHeld ? ' (already talking)' : ''}`);
+                const held = queueTurnAudio;
+                queueTurnAudio = [];
+                if (briefingHeld) {
+                  for (const chunk of held) playAgentAudio(chunk);
+                  briefingTimer = setTimeout(leave, 30000);
+                  return;
+                }
                 currentAgentTurn = '';
                 try {
                   session.sendClientContent({
@@ -915,25 +945,14 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             if (!data) continue;
             lastModelAudioAt = Date.now();
             // Bot is muted while the customer is on hold or talking to the rep.
-            // In the queue the bot is muted until a live rep has greeted (it answered queue music before).
-            if (transferState === 'dialing' || transferState === 'connected' || transferState === 'awaiting_rep' || afterGoodbye) continue;
-            if (telephonyJobId) {
-              // Phone line: filtered for 8 kHz so it does not crackle (see phone-audio.ts).
-              const phone = phoneAudio.process(data);
-              if (phone) {
-                send({ type: 'audio', data: phone });
-                // 24 kHz PCM16 = 48 bytes per ms.
-                playoutEndsAt = Math.max(playoutEndsAt, Date.now()) + Buffer.byteLength(phone, 'base64') / 48;
-              }
-            } else {
-              send({ type: 'audio', data });
-              if (shouldForwardAgentToMonitor()) {
-                broadcastMonitorAudio(telephonyJobId, { type: 'audio', role: 'agent', rate: 24000, data });
-                recording?.add('agent', 24000, data);
-              }
-            }
+            // In the queue the bot is muted until a live rep has greeted (it answered queue music before);
+            // its audio is kept in case this turn is the briefing.
+            if (transferState === 'awaiting_rep') { queueTurnAudio.push(data); continue; }
+            if (transferState === 'dialing' || transferState === 'connected' || afterGoodbye) continue;
+            playAgentAudio(data);
           }
           if (message.serverContent?.interrupted) {
+            queueTurnAudio = [];
             phoneAudio.reset();
             playoutEndsAt = 0;
             send({ type: 'interrupted' });
@@ -951,6 +970,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               send({ type: 'transcription', role: 'model', text: currentAgentTurn });
             }
           }
+          // The bot already started the briefing: it heard a live rep, even if the rep's words have not
+          // reached our greeting check (late or unusual transcription). Play it at once instead of waiting.
+          if (transferState === 'awaiting_rep' && BRIEFING_START.test(currentAgentTurn)) startQueueBriefing('bot');
           // Join only after the briefing's closing sentence ("...birləşdirirəm"): an earlier, unrelated
           // turn could finish first and joined the customer mid-briefing.
           if (message.serverContent?.turnComplete && transferState === 'briefing' && /birləşdir|birlesdir|qoşuram|qosuram/i.test(currentAgentTurn)) {
@@ -975,7 +997,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             // Let the queued hold sentence finish playing before the hold music starts (it was cut off).
             transferStartTimer = setTimeout(() => void beginTransfer(), msUntilPlayedOut() + 500);
           }
-          if (message.serverContent?.turnComplete && transferState === 'awaiting_rep') currentAgentTurn = '';
+          if (message.serverContent?.turnComplete && transferState === 'awaiting_rep') { currentAgentTurn = ''; queueTurnAudio = []; }
           if (message.serverContent?.turnComplete && currentAgentTurn) {
             const completedAgentTurn = currentAgentTurn.trim();
             transcriptLines.push(`A: ${completedAgentTurn}`);
@@ -989,7 +1011,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           if (inputText && transferState === 'awaiting_rep') {
             // Only a live greeting starts the briefing; queue music and announcements do not.
             repHeard += ` ${inputText}`;
-            if (REP_GREETING.test(repHeard)) startQueueBriefing();
+            if (REP_GREETING.test(repHeard)) startQueueBriefing('greeting');
           } else if (inputText) {
             clearFinalSilenceEndTimer();
             // The customer spoke again after the goodbye: the bot may answer.
