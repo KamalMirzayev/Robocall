@@ -75,7 +75,7 @@ while :; do
 done
 
 # Voice tuning (listening): set in the services' .env files; only lines that differ are rewritten.
-#  API: the bot waits 700 ms of silence before answering (was 250 ms, it cut customers off).
+#  API: the bot waits 500 ms of silence before answering (250 ms cut customers off, 700 ms felt slow).
 #  Telephony: quieter speech reaches the bot and the end of each phrase is not clipped.
 TEL_CHANGED=0
 setenv() { # file key value -> returns 0 if changed
@@ -85,7 +85,7 @@ setenv() { # file key value -> returns 0 if changed
   sed -i "/^$k=/d" "$f"; echo "$k=$v" >> "$f"; return 0
 }
 API_ENV="$APP/apps/callbot-backend/.env"; TEL_ENV="$APP/apps/telephony/.env"
-setenv "$API_ENV" GEMINI_VAD_SILENCE_DURATION_MS 700 || true
+setenv "$API_ENV" GEMINI_VAD_SILENCE_DURATION_MS 500 || true
 setenv "$API_ENV" GEMINI_VAD_PREFIX_PADDING_MS 200 || true
 setenv "$API_ENV" GEMINI_VAD_END_SENSITIVITY low || true
 setenv "$TEL_ENV" CALLBOT_INBOUND_SPEECH_RMS 450 && TEL_CHANGED=1
