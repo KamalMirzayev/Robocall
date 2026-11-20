@@ -4,6 +4,9 @@ import {
   Call,
   Agent,
   Customer,
+  ContactHistory,
+  CallAnalytics,
+  GeminiBalance,
   Recording,
   Campaign,
   CampaignCallsResponse,
@@ -111,6 +114,9 @@ function normalizeCall(item: any): Call {
     customerFin: item.customerFin ?? null,
     customerContractNo: item.customerContractNo ?? null,
     customerMobilePhone: item.customerMobilePhone ?? null,
+    customerPhone: item.customerPhone ?? null,
+    campaignId: item.campaignId ?? null,
+    campaignName: item.campaignName ?? null,
     duration: Number(item.duration ?? item.durationSeconds ?? 0),
     durationSeconds: Number(item.durationSeconds ?? item.duration ?? 0),
     transcript: item.transcript,
@@ -178,7 +184,7 @@ export const callbotApi = {
 
   // Single-page fetch for calls/page.tsx's History tab — the customers-page-style paginated
   // display, as opposed to getCalls() above which deliberately fetches everything.
-  async getCallsPage(params: { page: number; pageSize: number; agent_id?: string; status?: string }): Promise<{ data: Call[]; total: number; page: number; pageSize: number }> {
+  async getCallsPage(params: { page: number; pageSize: number; agent_id?: string; status?: string; q?: string; campaignId?: string; from?: string; to?: string }): Promise<{ data: Call[]; total: number; page: number; pageSize: number }> {
     try {
       const response = await apiClient.get<{ items: any[]; total: number; page: number; pageSize: number }>('/callbot/calls', { params });
       return { data: response.data.items.map(normalizeCall), total: response.data.total, page: response.data.page, pageSize: response.data.pageSize };
@@ -317,7 +323,7 @@ export const callbotApi = {
   // CustomerSearchSelect — the full list is ~33k rows and was rendering unpaginated on every
   // load. getCustomers() above is left as-is (returns everything) for callers that still need
   // the whole list (statistics aggregation, campaigns/page.tsx).
-  async getCustomersPage(params: { page: number; pageSize: number; search?: string }): Promise<{ data: Customer[]; total: number; page: number; pageSize: number }> {
+  async getCustomersPage(params: { page: number; pageSize: number; search?: string; source?: 'arzoom' | 'other' }): Promise<{ data: Customer[]; total: number; page: number; pageSize: number }> {
     try {
       const response = await apiClient.get<{ data: Customer[]; total: number; page: number; pageSize: number }>('/callbot/customers', { params });
       return response.data;
@@ -334,6 +340,38 @@ export const callbotApi = {
     } catch (error) {
       console.error(`Failed to fetch customer ${customerId}:`, error);
       return null;
+    }
+  },
+
+  async getGeminiBalance(): Promise<GeminiBalance | null> {
+    try {
+      const response = await apiClient.get<GeminiBalance>('/callbot/ai-usage/balance');
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch Gemini balance:', error);
+      return null;
+    }
+  },
+
+  async getCallAnalytics(params: { days: number; campaignId?: number | null }): Promise<CallAnalytics | null> {
+    try {
+      const response = await apiClient.get<CallAnalytics>('/callbot/calls/analytics', {
+        params: { days: params.days, ...(params.campaignId ? { campaignId: params.campaignId } : {}) },
+      });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to fetch call analytics:', error);
+      return null;
+    }
+  },
+
+  async getContactHistory(customerId: number): Promise<ContactHistory> {
+    try {
+      const response = await apiClient.get<ContactHistory>(`/callbot/customers/${customerId}/contact-history`);
+      return response.data;
+    } catch (error) {
+      console.error(`Failed to fetch contact history ${customerId}:`, error);
+      return { calls: [], feedback: [] };
     }
   },
 
@@ -578,6 +616,8 @@ export const callbotApi = {
     trunkId?: string;
     trunkIds?: string[];
     baseTemplateId?: string;
+    segment?: string | null;
+    segmentParams?: Record<string, string> | null;
   }) {
     try {
       const response = await apiClient.post('/callbot/campaigns', payload);
@@ -607,6 +647,8 @@ export const callbotApi = {
       trunkId?: string;
       trunkIds?: string[];
       baseTemplateId?: string;
+      segment?: string | null;
+      segmentParams?: Record<string, string> | null;
     }
   ) {
     try {

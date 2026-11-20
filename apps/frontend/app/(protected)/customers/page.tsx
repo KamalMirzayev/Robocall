@@ -1,10 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useCustomersPage } from '@/hooks/useCallbot';
 import AddCustomerForm from '@/components/AddCustomerForm';
+import ContactHistoryDialog from '@/components/ContactHistoryDialog';
 import callbotApi from '@/lib/callbot-api';
 import { useLanguage } from '@/lib/language';
+import type { ArzoomTerms, Customer } from '@/types/callbot';
+
+// Two column sets: ARZOOM leasing applications (default) and the PKS/collections template
+// the team keeps for later credit and debt-collection work.
+type CustomerView = 'arzoom' | 'pks';
+const VIEW_KEY = 'robocall.customers.view';
 
 export default function CustomersPage() {
   const { t } = useLanguage();
@@ -16,7 +23,28 @@ export default function CustomersPage() {
   const [batchCampaignId, setBatchCampaignId] = useState('');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  const { customers, total, page, pageSize, pageCount, setPage, loading, error, refetch } = useCustomersPage(50);
+  const [view, setView] = useState<CustomerView>('arzoom');
+  const [historyFor, setHistoryFor] = useState<{ id: number; title: string } | null>(null);
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem(VIEW_KEY);
+      if (saved === 'arzoom' || saved === 'pks') setView(saved);
+    } catch {
+      // storage unavailable: keep the default view
+    }
+  }, []);
+  const changeView = (next: CustomerView) => {
+    setView(next);
+    try {
+      window.localStorage.setItem(VIEW_KEY, next);
+    } catch {
+      // ignore
+    }
+  };
+  const { customers, total, page, pageSize, pageCount, setPage, loading, error, refetch } = useCustomersPage(
+    50,
+    view === 'arzoom' ? 'arzoom' : 'other'
+  );
 
   const formatValue = (value: unknown): string => {
     if (value == null) return '-';
@@ -29,6 +57,124 @@ export default function CustomersPage() {
     const date = new Date(String(value));
     return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleString();
   };
+
+  // The PKS/collections template: every column of the old customer list, unchanged.
+  const pksColumns: Array<{ key: string; label: string; render: (customer: Customer) => React.ReactNode }> = [
+    { key: 'id', label: t('customers.columns.id'), render: (customer: Customer) => formatValue(customer.id) },
+    { key: 'name', label: t('customers.columns.name'), render: (customer: Customer) => formatValue(customer.name) },
+    { key: 'surname', label: t('customers.columns.surname'), render: (customer: Customer) => formatValue(customer.surname) },
+    { key: 'fatherName', label: t('customers.columns.fatherName'), render: (customer: Customer) => formatValue((customer as any).fatherName ?? (customer as any).father_name) },
+    { key: 'phone', label: t('customers.columns.phone'), render: (customer: Customer) => formatValue(customer.phone) },
+    { key: 'mobilePhone', label: t('customers.columns.mobilePhone'), render: (customer: Customer) => formatValue((customer as any).mobilePhone ?? (customer as any).mobile_phone) },
+    { key: 'debtAmount', label: t('customers.columns.debtAmount'), render: (customer: Customer) => formatValue((customer as any).debtAmount ?? (customer as any).debt_amount) },
+    { key: 'overdueDays', label: t('customers.columns.overdueDays'), render: (customer: Customer) => formatValue((customer as any).overdueDays ?? (customer as any).overdue_days) },
+    { key: 'daysDue', label: t('customers.columns.daysDue'), render: (customer: Customer) => formatValue((customer as any).daysDue ?? (customer as any).days_due) },
+    { key: 'organization', label: t('customers.columns.organization'), render: (customer: Customer) => formatValue((customer as any).organization) },
+    { key: 'contractNo', label: t('customers.columns.contractNo'), render: (customer: Customer) => formatValue((customer as any).contractNo ?? (customer as any).contract_no) },
+    { key: 'sourceFullName', label: t('customers.columns.sourceFullName'), render: (customer: Customer) => formatValue((customer as any).sourceFullName ?? (customer as any).source_full_name) },
+    { key: 'fin', label: t('customers.columns.fin'), render: (customer: Customer) => formatValue((customer as any).fin) },
+    { key: 'monthlyPayment', label: t('customers.columns.monthlyPayment'), render: (customer: Customer) => formatValue((customer as any).monthlyPayment ?? (customer as any).monthly_payment) },
+    { key: 'employeeCode', label: t('customers.columns.employeeCode'), render: (customer: Customer) => formatValue((customer as any).employeeCode ?? (customer as any).employee_code) },
+    { key: 'reference', label: t('customers.columns.reference'), render: (customer: Customer) => formatValue((customer as any).reference) },
+    { key: 'branch', label: t('customers.columns.branch'), render: (customer: Customer) => formatValue((customer as any).branch) },
+    { key: 'category', label: t('customers.columns.category'), render: (customer: Customer) => formatValue((customer as any).category) },
+    { key: 'pksStatus', label: t('customers.columns.pksStatus'), render: (customer: Customer) => formatValue((customer as any).pksStatus ?? (customer as any).pks_status) },
+    { key: 'pksComment', label: t('customers.columns.pksComment'), render: (customer: Customer) => formatValue((customer as any).pksComment ?? (customer as any).pks_comment) },
+    { key: 'commentTemplate', label: t('customers.columns.commentTemplate'), render: (customer: Customer) => formatValue((customer as any).commentTemplateName ?? (customer as any).comment_template_name) },
+    { key: 'statusCategory', label: t('customers.columns.statusCategory'), render: (customer: Customer) => formatValue((customer as any).pksStatusCategory ?? (customer as any).pks_status_category) },
+    { key: 'activeContracts', label: t('customers.columns.activeContracts'), render: (customer: Customer) => formatValue((customer as any).activeContractCount ?? (customer as any).active_contract_count) },
+    { key: 'last3PaymentDates', label: t('customers.columns.last3PaymentDates'), render: (customer: Customer) => formatValue((customer as any).last3PaymentDates ?? (customer as any).last_3_payment_dates) },
+    { key: 'last3PaymentAmounts', label: t('customers.columns.last3PaymentAmounts'), render: (customer: Customer) => formatValue((customer as any).last3PaymentAmounts ?? (customer as any).last_3_payment_amounts) },
+    { key: 'totalPaidLast90Days', label: t('customers.columns.totalPaidLast90Days'), render: (customer: Customer) => formatValue((customer as any).totalPaidLast90Days ?? (customer as any).total_paid_last_90_days) },
+    { key: 'keptPromises90d', label: t('customers.columns.keptPromises90d'), render: (customer: Customer) => formatValue((customer as any).keptPromiseCount90d ?? (customer as any).kept_promise_count_90d) },
+    { key: 'brokenPromises90d', label: t('customers.columns.brokenPromises90d'), render: (customer: Customer) => formatValue((customer as any).brokenPromiseCount90d ?? (customer as any).broken_promise_count_90d) },
+    { key: 'collectorOrganization', label: t('customers.columns.collectorOrganization'), render: (customer: Customer) => formatValue((customer as any).collectorOrganization ?? (customer as any).collector_organization) },
+    { key: 'sourceOrganization', label: t('customers.columns.sourceOrganization'), render: (customer: Customer) => formatValue((customer as any).sourceOrganization ?? (customer as any).source_organization) },
+    { key: 'lastPaymentDate', label: t('customers.columns.lastPaymentDate'), render: (customer: Customer) => formatValue((customer as any).lastPaymentDate ?? (customer as any).last_payment_date) },
+    { key: 'lastPaymentAmount', label: t('customers.columns.lastPaymentAmount'), render: (customer: Customer) => formatValue((customer as any).lastPaymentAmount ?? (customer as any).last_payment_amount) },
+    { key: 'sourceSystem', label: t('customers.columns.sourceSystem'), render: (customer: Customer) => formatValue((customer as any).sourceSystem ?? (customer as any).source_system) },
+    { key: 'importedAt', label: t('customers.columns.importedAt'), render: (customer: Customer) => formatDate((customer as any).importedAt ?? (customer as any).imported_at) },
+    { key: 'lastSyncedAt', label: t('customers.columns.lastSyncedAt'), render: (customer: Customer) => formatDate((customer as any).lastSyncedAt ?? (customer as any).last_synced_at) },
+    { key: 'createdAt', label: t('customers.columns.createdAt'), render: (customer: Customer) => formatDate((customer as any).createdAt ?? (customer as any).created_at) },
+  ];
+
+  const money = (v: unknown) =>
+    v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? '-' : `${Number(v).toLocaleString()} AZN`;
+  const termsText = (terms?: ArzoomTerms | null) => {
+    if (!terms) return '-';
+    const parts = [
+      terms.down_payment != null ? `${t('customers.arzoom.down')} ${money(terms.down_payment)}${terms.down_payment_pct != null ? ` (${terms.down_payment_pct}%)` : ''}` : null,
+      terms.months != null ? `${terms.months} ${t('customers.arzoom.months')}` : null,
+      terms.monthly_payment != null ? `${money(terms.monthly_payment)}/${t('customers.arzoom.perMonth')}` : null,
+    ].filter(Boolean);
+    return parts.length ? parts.join(' · ') : '-';
+  };
+  const statusTone: Record<string, string> = {
+    review: 'bg-slate-600/40 text-gray-300',
+    info: 'bg-amber-500/20 text-amber-300',
+    offer: 'bg-blue-500/20 text-blue-300',
+    reoffer: 'bg-purple-500/20 text-purple-300',
+    accepted: 'bg-green-500/20 text-green-300',
+    rejected: 'bg-red-500/20 text-red-300',
+    declined: 'bg-red-500/20 text-red-300',
+    cancelled: 'bg-slate-600/40 text-gray-400',
+    deleted: 'bg-slate-600/40 text-gray-500',
+  };
+
+  // ARZOOM applications. Reuses the template's Telefon, FIN, İstinad, Mənbə Təşkilatı,
+  // Mənbə Sistemi and date columns; the rest comes from the stored application.
+  const arzoomColumns: Array<{ key: string; label: string; render: (customer: Customer) => React.ReactNode }> = [
+    { key: 'id', label: t('customers.columns.id'), render: (c) => formatValue(c.id) },
+    { key: 'application', label: t('customers.arzoom.application'), render: (c) => formatValue(c.arzoomData?.id ?? c.contractNo) },
+    { key: 'phone', label: t('customers.columns.phone'), render: (c) => formatValue(c.phone) },
+    {
+      key: 'status',
+      label: t('customers.arzoom.status'),
+      render: (c) => {
+        const code = c.applicationStatus || c.arzoomData?.status || '';
+        const label = code === 'deleted' ? t('customers.arzoom.deleted') : c.arzoomData?.status_label || code;
+        return label ? (
+          <span className={`inline-flex px-2 py-0.5 rounded text-[11px] whitespace-nowrap ${statusTone[code] || 'bg-slate-600/40 text-gray-300'}`}>{label}</span>
+        ) : '-';
+      },
+    },
+    { key: 'car', label: t('customers.arzoom.car'), render: (c) => formatValue([c.arzoomData?.brand, c.arzoomData?.model].filter(Boolean).join(' ')) },
+    { key: 'carPrice', label: t('customers.arzoom.carPrice'), render: (c) => money(c.arzoomData?.car_price) },
+    { key: 'terms', label: t('customers.arzoom.terms'), render: (c) => <span className="whitespace-nowrap">{termsText(c.arzoomData?.final_terms || c.arzoomData?.offer)}</span> },
+    {
+      key: 'note',
+      label: t('customers.arzoom.note'),
+      render: (c) => <span className="block max-w-xs truncate" title={c.commentTemplateName || ''}>{formatValue(c.commentTemplateName)}</span>,
+    },
+    { key: 'guarantor', label: t('customers.arzoom.guarantor'), render: (c) => (c.arzoomData?.guarantor == null ? '-' : c.arzoomData.guarantor ? t('customers.arzoom.yes') : t('customers.arzoom.no')) },
+    { key: 'fin', label: t('customers.columns.fin'), render: (c) => formatValue(c.fin) },
+    { key: 'reference', label: t('customers.columns.reference'), render: (c) => formatValue(c.reference) },
+    { key: 'sourceOrganization', label: t('customers.columns.sourceOrganization'), render: (c) => formatValue(c.sourceOrganization) },
+    {
+      key: 'lastCall',
+      label: t('customers.arzoom.lastCall'),
+      render: (c) => (
+        <div className="min-w-[14rem] max-w-sm space-y-1">
+          {c.pksStatus ? (
+            <span className="inline-flex px-2 py-0.5 rounded text-[11px] bg-blue-500/20 text-blue-300">{c.pksStatus}</span>
+          ) : (
+            <span>-</span>
+          )}
+          {c.pksComment && <p className="text-xs text-gray-300 whitespace-pre-wrap line-clamp-3" title={c.pksComment}>{c.pksComment}</p>}
+          <button
+            className="block text-xs text-blue-400 hover:underline"
+            onClick={() => setHistoryFor({ id: Number(c.id), title: `${c.arzoomData?.id ?? c.contractNo ?? c.id} · ${c.phone || ''}` })}
+          >
+            {t('customers.arzoom.history.details')}
+          </button>
+        </div>
+      ),
+    },
+    { key: 'sourceSystem', label: t('customers.columns.sourceSystem'), render: () => 'ARZOOM' },
+    { key: 'importedAt', label: t('customers.columns.importedAt'), render: (c) => formatDate(c.importedAt) },
+    { key: 'lastSyncedAt', label: t('customers.columns.lastSyncedAt'), render: (c) => formatDate(c.lastSyncedAt) },
+    { key: 'createdAt', label: t('customers.columns.createdAt'), render: (c) => formatDate(c.createdAt) },
+  ];
 
   const deleteSingleCustomer = async (id: number, label: string) => {
     const confirmed = window.confirm(
@@ -138,15 +284,35 @@ export default function CustomersPage() {
         <h1 className="text-3xl font-bold text-white">{t('customers.heading')}</h1>
         <button
           onClick={() => setShowForm(true)}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition font-medium"
+          className="px-4 py-2 bg-blue-600 text-[#fff] rounded hover:bg-blue-700 transition font-medium"
         >
           + {t('customers.addCustomer')}
         </button>
       </div>
 
-      <div className="mb-4 rounded-lg border border-red-800/60 bg-red-950/20 p-4">
-        <h2 className="text-sm font-semibold text-red-300 mb-3">{t('customers.batchDeleteHeading')}</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        {(['arzoom', 'pks'] as CustomerView[]).map((v) => (
+          <button
+            key={v}
+            type="button"
+            onClick={() => changeView(v)}
+            className={`px-3 py-1.5 rounded-full border text-xs font-medium transition ${
+              view === v ? 'border-blue-500 bg-blue-50 text-blue-300' : 'border-slate-600 text-gray-300 hover:bg-slate-700'
+            }`}
+          >
+            {t(`customers.views.${v}`)}
+          </button>
+        ))}
+        <span className="text-xs text-gray-500">{t(`customers.views.${view}Hint`)}</span>
+      </div>
+
+      {/* Destructive bulk tool: folded away by default so it doesn't lead the page. */}
+      <details className="mb-4 rounded-lg border border-red-800/60 bg-red-950/20 p-4 group">
+        <summary className="cursor-pointer list-none flex items-center justify-between text-sm font-semibold text-red-300">
+          {t('customers.batchDeleteHeading')}
+          <span className="text-xs text-gray-500 transition group-open:rotate-180">▾</span>
+        </summary>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mt-3">
           <div>
             <label className="block text-xs text-gray-400 mb-1">{t('customers.importedDaysLabel')}</label>
             <input
@@ -180,7 +346,7 @@ export default function CustomersPage() {
           <button
             onClick={deleteCustomersByFilters}
             disabled={batchDeleting}
-            className="px-4 py-2 rounded bg-red-700 hover:bg-red-800 text-white disabled:opacity-60"
+            className="px-4 py-2 rounded bg-red-700 hover:bg-red-800 text-[#fff] disabled:opacity-60"
           >
             {batchDeleting ? t('customers.deleting') : t('customers.deleteByFiltersButton')}
           </button>
@@ -197,7 +363,7 @@ export default function CustomersPage() {
             {t('customers.clearFiltersButton')}
           </button>
         </div>
-      </div>
+      </details>
 
       {actionError && (
         <div className="mb-4 rounded border border-red-700 bg-red-950/40 px-3 py-2 text-red-300 text-sm">
@@ -220,87 +386,21 @@ export default function CustomersPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-700 border-b border-slate-600">
                 <tr>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.id')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.name')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.surname')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.fatherName')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.phone')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.mobilePhone')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.debtAmount')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.overdueDays')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.daysDue')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.organization')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.contractNo')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.sourceFullName')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.fin')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.monthlyPayment')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.employeeCode')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.reference')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.branch')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.category')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.pksStatus')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.pksComment')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.commentTemplate')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.statusCategory')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.activeContracts')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.last3PaymentDates')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.last3PaymentAmounts')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.totalPaidLast90Days')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.keptPromises90d')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.brokenPromises90d')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.collectorOrganization')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.sourceOrganization')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.lastPaymentDate')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.lastPaymentAmount')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.sourceSystem')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.importedAt')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.lastSyncedAt')}</th>
-                  <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.createdAt')}</th>
+                  {(view === 'arzoom' ? arzoomColumns : pksColumns).map((col) => (
+                    <th key={col.key} className="px-4 py-3 text-left font-semibold text-gray-300 whitespace-nowrap">{col.label}</th>
+                  ))}
                   <th className="px-4 py-3 text-left font-semibold text-gray-300">{t('customers.columns.actions')}</th>
                 </tr>
               </thead>
               <tbody>
                 {customers.map((customer) => (
                   <tr key={customer.id} className="border-b border-slate-700 hover:bg-slate-700/50 transition">
-                    <td className="px-4 py-3 text-gray-400">{formatValue(customer.id)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue(customer.name)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue(customer.surname)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).fatherName ?? (customer as any).father_name)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue(customer.phone)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).mobilePhone ?? (customer as any).mobile_phone)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).debtAmount ?? (customer as any).debt_amount)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).overdueDays ?? (customer as any).overdue_days)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).daysDue ?? (customer as any).days_due)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).organization)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).contractNo ?? (customer as any).contract_no)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).sourceFullName ?? (customer as any).source_full_name)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).fin)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).monthlyPayment ?? (customer as any).monthly_payment)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).employeeCode ?? (customer as any).employee_code)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).reference)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).branch)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).category)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).pksStatus ?? (customer as any).pks_status)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).pksComment ?? (customer as any).pks_comment)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).commentTemplateName ?? (customer as any).comment_template_name)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).pksStatusCategory ?? (customer as any).pks_status_category)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).activeContractCount ?? (customer as any).active_contract_count)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).last3PaymentDates ?? (customer as any).last_3_payment_dates)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).last3PaymentAmounts ?? (customer as any).last_3_payment_amounts)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).totalPaidLast90Days ?? (customer as any).total_paid_last_90_days)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).keptPromiseCount90d ?? (customer as any).kept_promise_count_90d)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).brokenPromiseCount90d ?? (customer as any).broken_promise_count_90d)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).collectorOrganization ?? (customer as any).collector_organization)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).sourceOrganization ?? (customer as any).source_organization)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).lastPaymentDate ?? (customer as any).last_payment_date)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).lastPaymentAmount ?? (customer as any).last_payment_amount)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatValue((customer as any).sourceSystem ?? (customer as any).source_system)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatDate((customer as any).importedAt ?? (customer as any).imported_at)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatDate((customer as any).lastSyncedAt ?? (customer as any).last_synced_at)}</td>
-                    <td className="px-4 py-3 text-gray-400">{formatDate((customer as any).createdAt ?? (customer as any).created_at)}</td>
+                    {(view === 'arzoom' ? arzoomColumns : pksColumns).map((col) => (
+                      <td key={col.key} className="px-4 py-3 text-gray-400">{col.render(customer)}</td>
+                    ))}
                     <td className="px-4 py-3 text-gray-400">
                       <button
-                        onClick={() => deleteSingleCustomer(Number(customer.id), `${customer.name} ${customer.surname ?? ''}`.trim())}
+                        onClick={() => deleteSingleCustomer(Number(customer.id), `${customer.name} ${customer.surname ?? ''}`.trim() || String(customer.contractNo || customer.phone || ''))}
                         disabled={deletingId === Number(customer.id)}
                         className="px-2 py-1 rounded border border-red-700 text-red-300 hover:bg-red-900/40 disabled:opacity-60"
                       >
@@ -336,6 +436,10 @@ export default function CustomersPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {historyFor && (
+        <ContactHistoryDialog customerId={historyFor.id} title={historyFor.title} onClose={() => setHistoryFor(null)} />
       )}
 
       {showForm && (

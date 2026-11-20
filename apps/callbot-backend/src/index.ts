@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { startGeminiCreditWatch } from './gemini-credit.js';
 import express from 'express';
 import cors from 'cors';
 import { WebSocketServer } from 'ws';
@@ -27,6 +28,16 @@ import { dynamicContextCodesRouter } from './routes/dynamic-context-codes.js';
 import { requireApiKey } from './api-auth.js';
 import { baseTemplateExists } from './templates.js';
 import { finalizeFailedJob } from './routes/telephony.js';
+import { partnerKbStatus, startPartnerKbRefresher } from './partner-kb.js';
+import { loadSettings } from './settings.js';
+import { settingsRouter } from './routes/settings.js';
+import { ensureCampaignSegmentSchema, segmentContext } from './campaign-segments.js';
+import { ensureArzoomSchema, startArzoomSync } from './arzoom-sync.js';
+import { ensureSalesTransferSchema, startSalesTransferApp } from './sales-transfer.js';
+import { startArzoomAnalyticsPush } from './arzoom-analytics.js';
+import { ensureCampaignResultsSchema, startApplicationSmsRetry } from './campaign-results.js';
+import { ensureTrunkCapacitySchema } from './trunk-capacity.js';
+import { clientIp, internalOrWorker, isInternalRequest, hasWorkerToken, rateLimit } from './net-guard.js';
 
 // Stopgap: a single socket error (e.g. EPIPE when a client disconnects
 // mid-stream) must not take down the whole API. Log and keep serving.
@@ -38,9 +49,31 @@ process.on('unhandledRejection', (reason) => {
 });
 
 await ensureAuthSchema();
+// Panel-entered keys (Admin -> Integrations) go into process.env before anything reads them.
+await loadSettings();
+await ensureCampaignSegmentSchema();
+await ensureArzoomSchema();
+await ensureSalesTransferSchema();
+await ensureCampaignResultsSchema();
+await ensureTrunkCapacitySchema();
 
 const app = express();
-app.use(cors({ origin: true, credentials: true }));
+app.disable('x-powered-by');
+// The browser talks to this API only through the Next.js proxy (same origin), so no
+// cross-origin access is needed. Extra origins can be allowed with CORS_ORIGINS=a,b.
+const corsOrigins = String(process.env.CORS_ORIGINS || '').split(',').map((o) => o.trim()).filter(Boolean);
+app.use(cors({ origin: corsOrigins.length ? corsOrigins : false, credentials: true }));
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
+// Coarse per-client flood guard; the local telephony worker is exempt.
+const floodGuard = rateLimit(Number(process.env.API_RATE_LIMIT_PER_MIN || 1200), 60_000);
+app.use((req, res, next) => (isInternalRequest(req) ? next() : floodGuard(req, res, next)));
+// Excel customer lists arrive base64-encoded in JSON.
+app.use('/api/campaigns/:id/import/excel', express.json({ limit: '25mb' }));
 app.use(express.json({ limit: '3mb' }));
 
 app.use('/api/auth', authRouter);
@@ -48,6 +81,7 @@ app.use('/api/customers', requireAuth, customersRouter);
 app.use('/api/agents', requireAuth, agentsRouter);
 app.use('/api/calls', requireAuth, callsRouter);
 app.use('/api/campaigns', requireAuth, campaignsRouter);
+app.use('/api/telephony/resolve', internalOrWorker);
 app.use('/api/telephony', telephonyRouter);
 app.use('/api/recordings', requireAuthOrWorker, recordingsRouter);
 app.use('/api/ai-usage', requireAuth, aiUsageRouter);
@@ -56,8 +90,9 @@ app.use('/api/ai-tools', requireAuth, aiToolsRouter);
 app.use('/api/instruction-templates', requireAuth, instructionTemplatesRouter);
 app.use('/api/api-clients', requireAuth, apiClientsRouter);
 app.use('/api/dynamic-context-codes', requireAuth, dynamicContextCodesRouter);
-app.use('/api/external/v1', requireApiKey, externalCallsRouter);
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.use('/api/settings', requireAuth, settingsRouter);
+app.use('/api/external/v1', rateLimit(Number(process.env.EXTERNAL_API_RATE_LIMIT_PER_MIN || 300), 60_000), requireApiKey, externalCallsRouter);
+app.get('/health', (_req, res) => res.json({ ok: true, knowledgeBase: partnerKbStatus() }));
 app.get('/', (_req, res) => res.json({
   name: 'Callbot Backend API',
   version: '1.0.0',
@@ -76,6 +111,9 @@ app.get('/', (_req, res) => res.json({
 }));
 
 const server = createServer(app);
+// Slow-client (slowloris) protection: headers within 20s, the whole request within 60s.
+server.headersTimeout = 20_000;
+server.requestTimeout = 60_000;
 const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
 const monitorWss = new WebSocketServer({ noServer: true, perMessageDeflate: false });
 
@@ -87,6 +125,17 @@ server.on('upgrade', (req, socket, head) => {
     socket.write('HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n');
     socket.destroy();
     return;
+  }
+
+  if (target === wss) {
+    // Live call audio + customer data: only the local telephony worker (or the worker token).
+    const token = new URL(req.url ?? '/', 'http://localhost').searchParams.get('token');
+    if (!isInternalRequest(req) && !hasWorkerToken(token)) {
+      console.warn(`[security] blocked /ws/gemini from ${clientIp(req)}`);
+      socket.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n');
+      socket.destroy();
+      return;
+    }
   }
 
   if (target === monitorWss) {
@@ -166,7 +215,7 @@ wss.on('connection', async (ws, req) => {
     // Look up the campaign linked to this customer+agent to get its base template.
     // campaign_calls records which campaign a customer belongs to; campaigns holds the template ID.
     const campaignRows = await db.execute(sql`
-      SELECT c.base_template_id
+      SELECT c.base_template_id, c.segment, c.segment_params
       FROM campaigns c
       JOIN campaign_calls cc ON cc.campaign_id = c.id
       WHERE cc.customer_id = ${customerId}
@@ -179,6 +228,10 @@ wss.on('connection', async (ws, req) => {
       ? campaignRows[0]
       : (campaignRows as { rows?: Array<{ base_template_id?: string }> }).rows?.[0];
     baseTemplateId = (campaignRow as { base_template_id?: string } | undefined)?.base_template_id ?? null;
+    // The campaign's segment parameters (offer, application result, survey setup) become
+    // the call's {DYNAMIC_CONTEXT}.
+    const row = campaignRow as { segment?: string | null; segment_params?: unknown } | undefined;
+    dynamicContext = segmentContext(row?.segment, row?.segment_params);
   }
 
   handleGeminiProxy(ws, customer, agent, jobId, baseTemplateId, dynamicContext).catch((err) => {
@@ -207,4 +260,10 @@ server.listen(PORT, () => {
   console.log(`Backend on port ${PORT}`);
   startCampaignScheduler();
   startPksImportJobProcessor();
+  startPartnerKbRefresher();
+  startArzoomSync();
+  startSalesTransferApp();
+  startArzoomAnalyticsPush();
+  startGeminiCreditWatch();
+  startApplicationSmsRetry();
 });

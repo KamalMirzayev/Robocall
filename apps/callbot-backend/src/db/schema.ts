@@ -18,6 +18,9 @@ export const campaigns = pgTable('campaigns', {
   agentId: integer('agent_id').references(() => agents.id),
   trunkId: varchar('trunk_id', { length: 64 }),
   trunkIds: varchar('trunk_ids', { length: 500 }),
+  // Segment (sales, application_status, ...) and its parameters; see campaign-segments.ts.
+  segment: varchar('segment', { length: 40 }),
+  segmentParams: jsonb('segment_params'),
   totalCustomers: integer('total_customers').notNull().default(0),
   completedCalls: integer('completed_calls').notNull().default(0),
   successfulCalls: integer('successful_calls').notNull().default(0),
@@ -120,6 +123,12 @@ export const customers = pgTable('customers', {
   importedAt: timestamp('imported_at', { withTimezone: true }),
   lastSyncedAt: timestamp('last_synced_at', { withTimezone: true }),
   sourcePayloadHash: varchar('source_payload_hash', { length: 64 }),
+  // ARZOOM leasing applications (arzoom-sync.ts): the full application and its status.
+  applicationStatus: varchar('application_status', { length: 40 }),
+  arzoomData: jsonb('arzoom_data'),
+  // Customers imported from Excel (excel-import.ts): car, last service visit, last talk.
+  importData: jsonb('import_data'),
+  doNotCall: boolean('do_not_call').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -293,4 +302,13 @@ export const appUserSessions = pgTable('app_user_sessions', {
   tokenHash: varchar('token_hash', { length: 64 }).notNull(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Panel-entered integration keys (see src/settings.ts). Created at startup, declared here
+// so `drizzle-kit push` keeps it.
+export const appSettings = pgTable('app_settings', {
+  key: varchar('key', { length: 100 }).primaryKey(),
+  value: text('value').notNull(),
+  updatedBy: varchar('updated_by', { length: 80 }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
