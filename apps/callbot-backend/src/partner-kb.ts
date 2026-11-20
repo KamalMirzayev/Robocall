@@ -10,6 +10,7 @@ export interface KbChunk {
   model: string | null;
   trim: string | null;
   category: string | null;
+  lang?: string | null;
   title: string | null;
   content: string;
   valid_until: string | null;
@@ -149,6 +150,14 @@ function liveChunks(): KbChunk[] {
   return state.chunks.filter((c) => !isExpired(c, now));
 }
 
+const CATEGORY_HINTS: Array<[string, RegExp]> = [
+  ['dealer_info', /unvan|yerles|adres|filial|harda|saat|is vaxt|qrafik|acil|isley|bagla|kuce|gelim|telefon|nomre/],
+  ['specs', /motor|muherrik|hecm|litr|guc|suret|qutu|yanacaq|serf|hibrid|olcu|baqaj|teker|oturacaq/],
+  ['promo', /kampaniya|endirim|aksiya|hediyye|trade|barter/],
+  ['finance', /kredit|lizinq|ilkin|faiz|ayliq|odenis|bank|muddet/],
+  ['service', /servis|temir|baxis|zemanet|garanti|ehtiyat/],
+];
+
 // Simple keyword ranking: title/model/brand hits weigh more than body hits. Good enough
 // for a few hundred chunks and fast enough to run inside a live call.
 export async function searchPartnerKb(query: string, opts: { brand?: string; limit?: number } = {}) {
@@ -157,8 +166,9 @@ export async function searchPartnerKb(query: string, opts: { brand?: string; lim
   const brand = String(opts.brand || '').trim().toLowerCase();
   const qs = terms(query);
   const scored = liveChunks()
-    // Entries without a brand (branches, addresses, opening hours, documents) apply to every brand.
-    .filter((c) => !brand || !String(c.brand || '').trim() || ['common', 'all', 'arzoom', brand].includes(String(c.brand || '').toLowerCase()))
+    // "gm" entries (and entries without a brand) are Group Motors' general rules: credit, documents,
+    // service, dealers. They apply to every brand.
+    .filter((c) => !brand || !String(c.brand || '').trim() || ['gm', 'common', 'all', 'arzoom', brand].includes(String(c.brand || '').toLowerCase()))
     .map((c) => {
       const head = fold([c.brand, c.model, c.trim, c.title].filter(Boolean).join(' '));
       const body = fold(c.content);
@@ -169,6 +179,9 @@ export async function searchPartnerKb(query: string, opts: { brand?: string; lim
       }
       if (c.category === 'price' && qs.some((t) => /qiym|price|цен|azn|manat/.test(t))) score += 2;
       if (c.trim && qs.some((t) => /komplekt|trim|versiya/.test(t))) score += 2;
+      // Each question type has its category in the partner base (price, specs, promo, finance, faq, service, dealer_info).
+      for (const [cat, re] of CATEGORY_HINTS) if (c.category === cat && qs.some((t) => re.test(t))) score += 2;
+      if (score > 0 && c.lang === 'az') score += 0.5;
       return { c, score };
     })
     .filter((x) => x.score > 0)
