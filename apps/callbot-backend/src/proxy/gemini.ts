@@ -19,6 +19,7 @@ import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
 import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
 import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, recordCampaignResult, tradeInTerms } from '../campaign-results.js';
+import { startGmCall, type GmCall } from '../gm-crm.js';
 import { pinnedExtensions, recordTransferIssue, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
 type Customer = InferSelectModel<typeof customers>;
@@ -405,6 +406,30 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   let transferHandle: TransferHandle | null = null;
   let transferStartTimer: NodeJS.Timeout | null = null;
   let transferConnectedAt: Date | null = null;
+  // Group Motors CRM (Bitrix24) for this call, when configured (gm-crm.ts).
+  let gm: GmCall | null = null;
+  // The call's result in our terms -> the lead in Group Motors' CRM.
+  const gmAfterOutcome = async (args: Record<string, unknown>) => {
+    if (!gm) return;
+    const outcome = String(args.outcome || '');
+    const reason = String(args.reason || '');
+    const tradeIn = isExcel && excelCtx?.segment === 'trade_in';
+    const payment = /send_link|agrees_will/.test(outcome) ? 'credit' : tradeIn ? 'trade_in' : 'unknown';
+    await gm.trigger('update_crm', {
+      request_type: 'sales',
+      payment_method: payment,
+      purchase_horizon: /thinking|callback/.test(outcome) ? 'later' : 'unknown',
+      notes: `Robocall: ${outcome}${reason ? ` — ${reason}` : ''}`.slice(0, 1000),
+    });
+    if (outcome === 'wrong_person') gm.outcome = 'wrong_number';
+    else if (outcome === 'callback') gm.outcome = 'callback';
+    else if (/not_interested|declined|has_car|sold_car|serviced_elsewhere/.test(outcome)) {
+      await gm.markLost(/has_car|serviced_elsewhere/.test(outcome) ? 'competitor' : /wants_lower|docs_cannot/.test(outcome) ? 'finance' : 'just_looking', reason || outcome);
+    } else if (outcome === 'wants_rep_contact') {
+      await gm.handoff(tradeIn ? 'trade_in' : 'purchase', `Robocall zəngi: müştəri satış təmsilçisinin onunla əlaqə saxlamasını istəyir. ${reason}\n${gmSummary()}`);
+    }
+  };
+  const gmSummary = () => transcriptLines.filter((l) => /^(A|C):/.test(l)).slice(-8).join('\n');
   const brand = (customer as { arzoomData?: { brand?: string } | null }).arzoomData?.brand ?? null;
   const pinnedReps = pinnedExtensions((customer as { arzoomData?: unknown }).arzoomData);
   const isExcel = customer.sourceSystem === EXCEL_SOURCE;
@@ -522,6 +547,10 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           transferState = 'connected';
           transferConnectedAt = new Date();
           transcriptLines.push(`[${isExcel && excelCtx?.segment !== 'trade_in' ? 'Servis nümayəndəsinə' : 'Satış təmsilçisinə'} qoşuldu: ${ext}]`);
+          if (gm) {
+            gm.outcome = 'transferred';
+            void gm.handoff(isExcel && excelCtx?.segment === 'trade_in' ? 'trade_in' : 'purchase', `Robocall zəngi, müştəri ${ext} daxili nömrəli satış təmsilçisinə canlı qoşuldu.\n${gmSummary()}`);
+          }
           if (isExcel) {
             void recordCampaignResult({
               customerId: customer.id,
@@ -785,6 +814,17 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           telephonyJobId = await resolveTelephonyJobId(telephonyJobId, customer, agent);
           console.log(`Gemini telephony job ${telephonyJobId ?? 'none'} opened for customer=${customer.id} agent=${agent.id}`);
           await markTelephonyJobAnswered(telephonyJobId);
+          if (!gm && telephonyJobId) {
+            const p = (isExcel ? excelCtx?.params : null) ?? {};
+            const arz = (customer as { arzoomData?: { brand?: string; model?: string } | null }).arzoomData;
+            gm = startGmCall({
+              callId: `robocall-${telephonyJobId}`,
+              phone: customer.phone,
+              brand: isExcel ? (excelCtx?.segment === 'trade_in' ? tradeInTerms(p).brand : p.brand) : arz?.brand,
+              model: String((isExcel ? (excelCtx?.segment === 'trade_in' ? tradeInTerms(p).model : p.model) : arz?.model) ?? '') || undefined,
+              campaign: isExcel ? `robocall-${excelCtx?.segment || 'excel'}` : 'robocall-arzoom-kredit',
+            });
+          }
           recording = telephonyJobId ? new LiveCallRecording(telephonyJobId) : null;
           send({ type: 'connected' });
           if (initialGreetingEnabled) {
@@ -896,7 +936,12 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               const toolName = functionName;
               void (async () => {
                 try {
-                  const output = await executeAiTool(toolName, functionCall.args || {}, {
+                  const toolArgs = (functionCall.args || {}) as Record<string, unknown>;
+                  // Group Motors' own knowledge base is asked alongside ours (theirs knows dealer info).
+                  const gmKb = gm && toolName === 'search_knowledge_base'
+                    ? gm.searchKb(String(toolArgs.query || ''), String(toolArgs.model || '') || undefined).catch(() => null)
+                    : null;
+                  const ownOutput = await executeAiTool(toolName, functionCall.args || {}, {
                     customer: {
                       id: customer.id,
                       name: customer.name,
@@ -911,6 +956,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
                     },
                     telephonyJobId,
                   });
+                  const gmResult = gmKb ? await gmKb : null;
+                  const output = gmResult ? { ...(ownOutput as object), group_motors: gmResult } : ownOutput;
+                  if (gm && (toolName === 'record_campaign_result' || toolName === 'record_application_feedback')) void gmAfterOutcome(toolArgs);
 
                   if (!sessionClosed) {
                     try {
@@ -1120,6 +1168,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
       }
     }
     await markTelephonyJobEnded(telephonyJobId);
+    if (gm) void gm.finish(Math.round((Date.now() - startedAt.getTime()) / 1000), transcriptLines);
     let savedRecordingPath: string | null = null;
     try {
       savedRecordingPath = await recording?.save() || null;
