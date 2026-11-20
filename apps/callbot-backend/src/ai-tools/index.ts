@@ -229,6 +229,15 @@ async function searchKnowledgeBaseTool(args: Record<string, unknown>) {
     // Several tries before "nothing found": the brand filter, then without it, then each word
     // of the question alone (a long question can miss an entry that one word finds).
     const brand = cleanText(args.brand) || undefined;
+    const found = await partnerKbSearchWithRetries(query, brand, limit);
+    console.log(`[KB] "${query.slice(0, 80)}"${brand ? ` brand=${brand}` : ''}: ${found.results.length} found${found.results[0] ? ` (${String(found.results[0].title || '').slice(0, 60)})` : ''}`);
+    return found;
+  }
+
+  return searchRag(query, limit);
+}
+
+async function partnerKbSearchWithRetries(query: string, brand: string | undefined, limit: number) {
     const first = await searchPartnerKb(query, { brand, limit });
     if (first.results.length) return first;
     if (brand) {
@@ -248,8 +257,9 @@ async function searchKnowledgeBaseTool(args: Record<string, unknown>) {
     return merged.length
       ? { ...first, results: merged.slice(0, limit), total: merged.length }
       : { ...first, note: first.note ?? 'Nothing found. Try again with other words (synonyms, the model name only, or without the brand) before telling the customer.' };
-  }
+}
 
+async function searchRag(query: string, limit: number) {
   const ragSearchUrl = cleanText(process.env.RAG_SEARCH_URL);
   if (!ragSearchUrl) {
     return { results: [], message: 'RAG_SEARCH_URL not configured' };
