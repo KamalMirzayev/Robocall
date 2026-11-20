@@ -201,7 +201,7 @@ const endCallFunctionDeclaration = {
 
 const transferFunctionDeclaration = {
   name: 'transfer_to_sales',
-  description: 'Connect the customer to a live sales representative. Call it only after the customer agreed to the offer and you have told them to stay on the line for a few seconds. Say nothing after calling it.',
+  description: 'Connect the customer to a live sales representative. Call it ONLY when the customer asked to be connected or clearly said yes to your question whether to connect them; never because they asked a question (answer questions yourself, with search_knowledge_base). First tell them to stay on the line for a few seconds. Say nothing after calling it.',
   parameters: { type: Type.OBJECT, properties: {} },
 };
 
@@ -216,6 +216,7 @@ TƏLƏFFÜZ: Bakılı azərbaycanlı kimi, doğma Azərbaycan aksenti ilə danı
 DİL: Yalnız Azərbaycan dilində (Bakı danışığı) danış. Zəngi həmişə Azərbaycan dilində başla və Azərbaycan dilində davam et, başqa dilə özbaşına keçmə. Müştəriyə dil haqqında sual HEÇ VAXT vermə ("Azərbaycan dilində danışa bilərik?", "hansı dildə danışaq?" və s. QADAĞANDIR). Xətt zəif olanda və ya müştərinin sözü başqa dilə oxşayanda da Azərbaycan dilində davam et. Yalnız müştəri bir neçə tam cümləni aydın rus dilində deyirsə, rus dilində cavab ver. İspan, ingilis, portuqal və ya hər hansı başqa dildə bir söz belə demə ("Entiendo", "okay" və s.). Türkiyə türkcəsi sözləri və şəkilçiləri QADAĞANDIR: "evet" yox "bəli", "tamam" yox "oldu/yaxşı", "şimdi" yox "indi", "nasıl" yox "necə", "araç/araba" yox "maşın", "bilgi" yox "məlumat", "lütfen" yox "zəhmət olmasa", "teşekkür ederim" yox "təşəkkür edirəm", "efendim" yox "buyurun", "görüşme" yox "görüş", "yardımcı olmak" yox "kömək etmək", "-iyor" yox "-ır/-ir" ("geliyor" yox "gəlir"), "fiyat" yox "qiymət", "kredi" yox "kredit", "hemen" yox "dərhal", "değil" yox "deyil", "var mı" yox "varmı/var?".
 
 DİNLƏMƏ QAYDALARI:
+- Müştərinin bütün suallarına (qiymət, model, komplektasiya, kredit, sənədlər, filial) ÖZÜN cavab ver, lazım olsa search_knowledge_base alətindən istifadə et. Müştərini nümayəndəyə YALNIZ o özü istəyəndə və ya "qoşum?" sualına açıq "bəli" deyəndə qoş. Sualı cavablandırmamaq üçün nümayəndəyə qoşma.
 - Müştəri Azərbaycan dilində danışır (bəzən rus dilində). Telefon xətti zəifdir: eşitdiyin söz başqa dilə oxşayırsa, bu, Azərbaycan dilində qısa bir sözdür ("alo", "bəli", "hə", "buyurun", "yox").
 - Müştərinin cavabını aydın başa düşmədinsə, razılıq kimi qəbul etmə. Nəzakətlə bir dəfə qısa soruş: "Bağışlayın, xətt bir az zəifdir, təkrar edə bilərsiniz?"
 - Müştəri danışarkən heç vaxt danışma, onun cümləsini bitirməsini gözlə.
