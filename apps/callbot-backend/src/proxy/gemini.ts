@@ -987,7 +987,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             currentAgentTurn = '';
             try {
               session?.sendClientContent({
-                turns: '[Sistem] Sən səhvən başqa dildə danışdın. Müştəri onu başa düşmür. Bunu xatırlatma, üzr istəmə, dil haqqında heç nə demə: eyni fikri DƏRHAL Azərbaycan dilində qısa de və söhbəti Azərbaycan dilində davam et.',
+                turns: '[Sistem] Son cavabın müştəriyə çatmadı. Müştərinin son sözünə Azərbaycan dilində yenidən, qısa cavab ver. "Bağışlayın" demə, heç nə izah etmə, dil haqqında heç nə demə, müştərinin hansı dildə danışdığını şərh etmə.',
                 turnComplete: true,
               });
             } catch {}
