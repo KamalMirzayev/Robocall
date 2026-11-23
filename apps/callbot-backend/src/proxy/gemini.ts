@@ -19,7 +19,7 @@ import { loadBaseInstruction, loadBaseInstructionById, loadToneInstruction, load
 import { TEMPLATE_VARIABLES } from '../template-variables.js';
 import { partnerKbInstruction } from '../partner-kb.js';
 import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
-import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, isMazdaFreeService, recordCampaignResult, tradeInTerms } from '../campaign-results.js';
+import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, isMazdaFreeService, linkBrand, recordCampaignResult, tradeInTerms } from '../campaign-results.js';
 import { startGmCall, type GmCall } from '../gm-crm.js';
 import { pinnedExtensions, recordTransferIssue, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
@@ -212,7 +212,9 @@ const endCallFunctionDeclaration = {
 const transferFunctionDeclaration = {
   name: 'transfer_to_sales',
   description: 'Connect the customer to a live sales representative. Call it ONLY when the customer asked to be connected or clearly said yes to your question whether to connect them; never because they asked a question (answer questions yourself, with search_knowledge_base). First tell them to stay on the line for a few seconds. Say nothing after calling it.',
-  parameters: { type: Type.OBJECT, properties: {} },
+  parameters: { type: Type.OBJECT, properties: {
+    brand: { type: Type.STRING, description: 'Car brand the customer is interested in (Toyota, BYD, Mazda or Mitsubishi), when known: picks that brand\'s sales queue.' },
+  } },
 };
 
 // Phone line, Azerbaijani speakers: how to listen. Short or unclear replies were taken as "yes",
@@ -456,7 +458,16 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   const isExcel = customer.sourceSystem === EXCEL_SOURCE;
   // Service campaigns: the campaign's service-rep extensions (empty = no live transfer).
   let excelCtx: { segment: string | null; transferExtensions: string[]; params?: Record<string, unknown> | null } | null = null;
-  const transferExtensions = () => (isExcel ? excelCtx?.transferExtensions ?? [] : pinnedReps.length ? pinnedReps : salesExtensionsFor(brand));
+  // Churn (credit_offer): the sales queue of the brand the customer picked in the call
+  // (transfer_to_sales brand), else the campaign's or the earlier application's brand.
+  let chosenBrand: string | null = null;
+  const churnBrand = () => chosenBrand
+    || linkBrand(excelCtx?.params?.brand)
+    || linkBrand((customer as { importData?: { brand?: unknown } | null }).importData?.brand);
+  const isChurn = () => isExcel && excelCtx?.segment === 'credit_offer';
+  const transferExtensions = () => (isExcel
+    ? (isChurn() ? salesExtensionsFor(churnBrand()) : excelCtx?.transferExtensions ?? [])
+    : pinnedReps.length ? pinnedReps : salesExtensionsFor(brand));
   const rawSend = (msg: ServerMessage) => {
     if (clientWs.readyState === WebSocket.OPEN) clientWs.send(JSON.stringify(msg));
   };
@@ -919,6 +930,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             }
 
             if (functionName === 'transfer_to_sales') {
+              const askedBrand = linkBrand((functionCall.args as { brand?: unknown } | undefined)?.brand);
+              if (askedBrand) chosenBrand = askedBrand;
               const exts = transferExtensions();
               const ok = transferState === 'idle' && !endCallRequested && exts.length > 0 && Boolean(telephonyJobId);
               if (!ok && transferState === 'idle') {
@@ -1176,7 +1189,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           },
         },
         tools: [{ functionDeclarations: [endCallFunctionDeclaration,
-          ...(customer.sourceSystem === 'arzoom' || (isExcel && (excelCtx?.transferExtensions.length ?? 0) > 0) ? [transferFunctionDeclaration] : []),
+          ...(customer.sourceSystem === 'arzoom' || (isExcel && ((excelCtx?.transferExtensions.length ?? 0) > 0 || excelCtx?.segment === 'credit_offer')) ? [transferFunctionDeclaration] : []),
           ...((customer.sourceSystem === 'arzoom'
           // ARZOOM applications: only the application result and the knowledge base. The old
           // debt-collection tools (update_status, request_callback) and WhatsApp are not used.
