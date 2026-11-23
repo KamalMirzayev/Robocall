@@ -418,7 +418,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
   let lastModelAudioAt = 0;
   let startQueueBriefing: (by: 'greeting' | 'bot') => void = () => {};
   // A live rep picking up in the queue: "Alo", "Salam", "Buyurun", "Bəli", "Eşidirəm", "Toyota ..., Tərlan, buyurun".
-  const REP_GREETING = /(al+o|hello|salam|buyur|bəli|beli|eşidirəm|esidirem|eşidir|danışır|danisir|xoş|слушаю|алло|ало|здравствуйте|да,)/i;
+  const REP_GREETING = /(al+o|hello|salam|buyur|bəli|beli|eşidirəm|esidirem|eşidir|danışır|danisir|слушаю|алло|ало|здравствуйте|да,)/i;
   let briefingTimer: ReturnType<typeof setTimeout> | null = null;
   let transferHandle: TransferHandle | null = null;
   let transferStartTimer: NodeJS.Timeout | null = null;
@@ -619,7 +619,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               transferState = 'awaiting_rep';
               session.sendClientContent({
                 turns: `[Sistem] Zəng satış növbəsinə qoşuldu. Müştəri səni EŞİTMİR (gözləmə musiqisindədir). Növbədə musiqi və avtomatik elanlar eşidəcəksən: onlara heç nə demə. Canlı nümayəndə "Alo", "Salam", "Buyurun" deyən kimi DƏRHAL, gecikmədən danış. ${briefingText}`,
-                turnComplete: true,
+                // Not a turn to answer now: with turnComplete the bot briefed the hold music at once
+                // (job 2963), the customer was put into the queue and the real rep heard nothing.
+                turnComplete: false,
               });
               repHeard = '';
               startQueueBriefing = (by) => {
@@ -1067,7 +1069,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           }
           // The bot already started the briefing: it heard a live rep, even if the rep's words have not
           // reached our greeting check (late or unusual transcription). Play it at once instead of waiting.
-          if (transferState === 'awaiting_rep' && BRIEFING_START.test(currentAgentTurn)) startQueueBriefing('bot');
+          if (transferState === 'awaiting_rep' && repHeard.trim().length > 1 && BRIEFING_START.test(currentAgentTurn)) startQueueBriefing('bot');
           // Join only after the briefing's closing sentence ("...birləşdirirəm"): an earlier, unrelated
           // turn could finish first and joined the customer mid-briefing.
           if (message.serverContent?.turnComplete && transferState === 'briefing' && /birləşdir|birlesdir|qoşuram|qosuram/i.test(currentAgentTurn)) {
@@ -1092,7 +1094,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             // Let the queued hold sentence finish playing before the hold music starts (it was cut off).
             transferStartTimer = setTimeout(() => void beginTransfer(), msUntilPlayedOut() + 500);
           }
-          if (message.serverContent?.turnComplete && transferState === 'awaiting_rep') { currentAgentTurn = ''; queueTurnAudio = []; }
+          // Each heard stretch (music, an announcement, the rep) is judged on its own.
+          if (message.serverContent?.turnComplete && transferState === 'awaiting_rep') { currentAgentTurn = ''; queueTurnAudio = []; repHeard = ''; }
           if (message.serverContent?.turnComplete) foreignTurn = false;
           if (message.serverContent?.turnComplete && currentAgentTurn) {
             const completedAgentTurn = currentAgentTurn.trim();
