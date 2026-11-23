@@ -2,6 +2,7 @@ import { WebSocket } from 'ws';
 import { PhoneAudio } from './phone-audio.js';
 import { reportGeminiError } from '../gemini-credit.js';
 import { TURKISH_WORDS } from '../speech-checks.js';
+import { pronunciationHints } from '../call-audit.js';
 import { EndSensitivity, GoogleGenAI, Modality, StartSensitivity, ThinkingLevel, Type, type LiveServerMessage } from '@google/genai';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
@@ -327,7 +328,8 @@ async function buildSystemInstruction(customer: Customer, agent: Agent, callMemo
   const languageException = excel?.segment === 'service_return' && isMazdaFreeService(excel.params)
     ? '\n\nDİL İSTİSNASI (bu kampaniya üçün yuxarıdakı DİL qaydasından üstündür): müştəri Azərbaycan dilində danışırsa, yalnız Azərbaycan dilində danış. Müştəri rus dilində danışırsa rus dilində, ingilis dilində danışırsa ingilis dilində cavab ver və həmin dildə davam et; müştəri dilini dəyişsə, sən də dəyiş. İspan və başqa dillərdə heç vaxt danışma.'
     : '';
-  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${LISTENING_INSTRUCTION}${languageException}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${legacyGuide}`;
+  const hints = await pronunciationHints().catch(() => '');
+  return `${instruction}${FACT_GROUNDING_INSTRUCTION}${LISTENING_INSTRUCTION}${hints ? `\n${hints}\n` : ''}${languageException}${partnerKbInstruction()}${END_CALL_INSTRUCTION}\n\nMüştəri məlumatları:\n${parts.join('\n')}${callMemoryContext}${legacyGuide}`;
 }
 
 function buildInitialGreetingPrompt(customer: Customer, segment: string | null = null, params: Record<string, unknown> | null = null) {

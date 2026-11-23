@@ -3,12 +3,16 @@
 // calls) and the text model writes a report of the problems with examples and fixes.
 //   CLI:  node dist/call-audit-cli.js [YYYY-MM-DD] [--no-ai]
 //   API:  GET /api/call-audits/:day, POST /api/call-audits/:day/run
+//   Audio: up to CALL_AUDIT_AUDIO_CALLS (20) recordings are listened to for Turkish pronunciation
+//          (CALL_AUDIT_AUDIO=off to skip).
 //   Auto: every day at CALL_AUDIT_TIME (Baku, default 18:45), set CALL_AUDIT_AUTO=off to stop.
 import { GoogleGenAI } from '@google/genai';
 import { sql } from 'drizzle-orm';
 import { db } from './db/index.js';
 import { textModel } from './text-model.js';
 import { recordAiTokenUsage } from './ai-usage.js';
+import { readFile } from 'node:fs/promises';
+import { recordingFileInfo } from './recording.js';
 import { FRACTION_AMOUNT, LANGUAGE_QUESTION, OTHER_LANGUAGE, TECHNICAL_WORDS, TURKISH_WORDS, uniqueMatches } from './speech-checks.js';
 
 function rowsFrom(result: unknown): Record<string, unknown>[] {
@@ -34,6 +38,7 @@ export interface AuditStats {
   turkishWords: Record<string, number>;
   transfers: number;
   transferFailed: number;
+  pronunciation?: { said: string; should: string; count: number }[];
 }
 
 const TRANSFER_DONE = /\[Satış təmsilçisinə qoşuldu/;
@@ -175,6 +180,74 @@ ${parts.join('\n\n')}`;
   }
 }
 
+// ---- Pronunciation from the recordings ------------------------------------------------------
+// The transcript cannot show an accent: a sample of the day's recordings goes to the model, which
+// listens to the bot's voice only and lists words said with a Turkey-Turkish pronunciation.
+const AUDIO_PROMPT = `Bu, telefon zənginin səs yazısıdır. Danışanlar: səsli bot (şirkət adından zəng edən, süni intellekt) və müştəri. YALNIZ botun səsinə qulaq as.
+Bot Azərbaycan dilində (Bakı tələffüzü) danışmalıdır. Botun Türkiyə türkcəsi tələffüzü ilə dediyi sözləri tap: məsələn "ə" yerinə "e" ("teklif", "merkez"), qalın "q" yerinə "k" ("kiymet", "koşuram"), türk vurğusu və intonasiyası, türkcə sözlər ("tamam", "şimdi", "evet", "-iyor").
+Yalnız JSON qaytar, başqa heç nə yazma:
+{"turkish_accent_score": 0-10 (0 = tamamilə Azərbaycan tələffüzü, 10 = tam türk tələffüzü), "words": [{"said": "botun dediyi kimi", "should_be": "Azərbaycan dilində düzgün forması", "type": "accent|turkish_word", "time": "mm:ss"}]}`;
+
+interface AudioFinding { jobId: number; score: number | null; words: { said: string; should_be: string; type: string; time?: string }[] }
+
+async function listenToCall(ai: GoogleGenAI, model: string, jobId: number): Promise<AudioFinding | null> {
+  const info = await recordingFileInfo(jobId);
+  if (!info || info.size < 20000 || info.size > 15 * 1024 * 1024) return null;
+  const data = (await readFile(info.filePath)).toString('base64');
+  const request = ai.models.generateContent({
+    model,
+    contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/mpeg', data } }, { text: AUDIO_PROMPT }] }],
+    config: { temperature: 0, responseMimeType: 'application/json' },
+  });
+  const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 120000));
+  const response = await Promise.race([request, timeout]);
+  await recordAiTokenUsage({ model, operation: 'call_audit_audio', usageMetadata: (response as { usageMetadata?: unknown }).usageMetadata as never });
+  const raw = String(response.text || '').replace(/^```(json)?|```$/g, '').trim();
+  const parsed = JSON.parse(raw) as { turkish_accent_score?: number; words?: AudioFinding['words'] };
+  return { jobId, score: Number.isFinite(Number(parsed.turkish_accent_score)) ? Number(parsed.turkish_accent_score) : null, words: Array.isArray(parsed.words) ? parsed.words.slice(0, 30) : [] };
+}
+
+async function pronunciationReport(calls: AuditedCall[], stats: AuditStats): Promise<string | null> {
+  if (!process.env.GEMINI_API_KEY || String(process.env.CALL_AUDIT_AUDIO || 'on').toLowerCase() === 'off') return null;
+  const max = Math.max(1, Math.min(Number(process.env.CALL_AUDIT_AUDIO_CALLS || 20), 100));
+  // Real conversations only, flagged ones first, then the longest.
+  const pool = calls.filter((c) => c.jobId && c.transcript.split('\n').filter((l) => l.startsWith('A:')).length >= 3);
+  pool.sort((a, b) => Number(b.flags.includes('turkish')) - Number(a.flags.includes('turkish')) || (b.duration ?? 0) - (a.duration ?? 0));
+  const picked = pool.slice(0, max);
+  if (!picked.length) return null;
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  const model = textModel(process.env.CALL_AUDIT_AUDIO_MODEL || process.env.CALL_AUDIT_MODEL);
+  const findings: AudioFinding[] = [];
+  for (const c of picked) {
+    try {
+      const f = await listenToCall(ai, model, c.jobId as number);
+      if (f) findings.push(f);
+    } catch (err) {
+      console.warn(`[call-audit] listening to job ${c.jobId} failed: ${(err as Error).message}`);
+    }
+  }
+  if (!findings.length) return '## Tələffüz (səs yazılarından)\n\nSəs yazıları dinlənə bilmədi.';
+  const scored = findings.filter((f) => f.score != null);
+  const avg = scored.length ? (scored.reduce((a, f) => a + (f.score as number), 0) / scored.length).toFixed(1) : '-';
+  const counts = new Map<string, { n: number; should: string; type: string; jobs: Set<number> }>();
+  for (const f of findings) for (const w of f.words) {
+    const k = String(w.said || '').toLowerCase().trim();
+    if (!k) continue;
+    const e = counts.get(k) ?? { n: 0, should: String(w.should_be || ''), type: String(w.type || ''), jobs: new Set<number>() };
+    e.n += 1; e.jobs.add(f.jobId); counts.set(k, e);
+  }
+  const top = [...counts.entries()].sort((a, b) => b[1].n - a[1].n).slice(0, 25);
+  stats.pronunciation = top.filter(([, e]) => e.should).map(([k, e]) => ({ said: k, should: e.should, count: e.n }));
+  const worst = [...scored].sort((a, b) => (b.score as number) - (a.score as number)).slice(0, 5);
+  const out = ['## Tələffüz (səs yazılarından)', '',
+    `Dinlənilən zəng: ${findings.length}. Türk tələffüzü balı (0 yaxşı, 10 pis): orta ${avg}.`,
+    `Bal 4 və yuxarı olan zənglər: ${scored.filter((f) => (f.score as number) >= 4).length}.`];
+  if (worst.length) out.push('', 'Ən çox türk tələffüzü olan zənglər:', ...worst.map((f) => `- job ${f.jobId}: bal ${f.score}`));
+  if (top.length) out.push('', 'Türk kimi səslənən sözlər (necə dedi → necə olmalıdır):', ...top.map(([k, e]) => `- "${k}" → "${e.should}" (${e.type === 'turkish_word' ? 'türkcə söz' : 'tələffüz'}), ${e.n} dəfə, job ${[...e.jobs].slice(0, 5).join(', ')}`));
+  else out.push('', 'Türk tələffüzü ilə deyilmiş söz tapılmadı.');
+  return out.join('\n');
+}
+
 export async function ensureCallAuditSchema(): Promise<void> {
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS call_audits (
@@ -192,6 +265,8 @@ export async function runCallAudit(day: string, opts: { ai?: boolean } = {}): Pr
   const stats = statsOf(day, calls);
   let report = rulesReport(stats, calls);
   if (opts.ai !== false) {
+    const pron = await pronunciationReport(calls, stats).catch((err) => { console.warn(`[call-audit] pronunciation: ${(err as Error).message}`); return null; });
+    if (pron) report += `\n\n${pron}`;
     const ai = await aiReport(stats, calls);
     report += ai ? `\n\n## Süni intellekt təhlili\n\n${ai}` : '\n\n(Süni intellekt təhlili alınmadı)';
   }
@@ -229,4 +304,38 @@ export function startCallAuditScheduler(): void {
     }
   };
   setInterval(() => void tick(), 10 * 60 * 1000).unref();
+}
+
+// The words the last audits heard with a Turkish pronunciation go back into the bot's instruction,
+// so each day's findings correct the next day's calls. Cached: read at most every 10 minutes.
+let hintsCache: { at: number; text: string } = { at: 0, text: '' };
+export async function pronunciationHints(): Promise<string> {
+  if (Date.now() - hintsCache.at < 10 * 60 * 1000) return hintsCache.text;
+  hintsCache = { at: Date.now(), text: hintsCache.text };
+  try {
+    await ensureCallAuditSchema();
+    const rows = rowsFrom(await db.execute(sql`SELECT stats FROM call_audits WHERE day > current_date - 7 ORDER BY day DESC`));
+    const words = new Map<string, { should: string; count: number }>();
+    for (const r of rows) {
+      const st = (typeof r.stats === 'string' ? JSON.parse(r.stats) : r.stats) as AuditStats | null;
+      for (const w of st?.pronunciation ?? []) {
+        const e = words.get(w.said) ?? { should: w.should, count: 0 };
+        e.count += w.count; words.set(w.said, e);
+      }
+    }
+    const top = [...words.entries()].filter(([said, e]) => e.should && e.should.toLowerCase() !== said).sort((a, b) => b[1].count - a[1].count).slice(0, 20);
+    hintsCache.text = top.length
+      ? `TƏLƏFFÜZ DÜZƏLİŞLƏRİ (son zənglərin auditindən: bu sözləri türk kimi deyirsən, yalnız sağdakı Azərbaycan formasında de): ${top.map(([said, e]) => `"${said}" yox "${e.should}"`).join('; ')}.`
+      : '';
+  } catch (err) {
+    console.warn(`[call-audit] pronunciation hints: ${(err as Error).message}`);
+  }
+  return hintsCache.text;
+}
+
+/** One recording, for a quick check from the CLI (--job N). */
+export async function listenToJob(jobId: number): Promise<unknown> {
+  if (!process.env.GEMINI_API_KEY) throw new Error('GEMINI_API_KEY is not set');
+  const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  return (await listenToCall(ai, textModel(process.env.CALL_AUDIT_AUDIO_MODEL || process.env.CALL_AUDIT_MODEL), jobId)) ?? { error: 'recording not found or too short' };
 }
