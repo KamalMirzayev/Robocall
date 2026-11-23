@@ -340,7 +340,7 @@ function buildInitialGreetingPrompt(customer: Customer, segment: string | null =
     return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla: "Alo, salam, hörmətli müştəri, sizi Group Motors şirkətindən salamlayıram. Danışmağa vaxtınız var?" Bundan sonra cavabı gözlə. Müştəri açıq razılıq verməyincə ("bəli", "var", "buyurun", "danışa bilərəm") təklifin detallarını DANIŞMA. "Alo", "hə?", "eşitmirəm" razılıq DEYİL: müştəri səni eşitməyib, qısa təkrar et: "Bəli, eşidirsiniz? Toyota Abşeron Mərkəzindən narahat edirik, danışmağa vaxtınız var?" Müştəri razılıq əvəzinə sual versə (məs. "Kimsiniz?", "Kim danışır?"), yalnız o suala qısa cavab ver və yenidən soruş: "Danışmağa vaxtınız var?" Razılıq verəndən sonra CHURN SSENARİSİ ilə davam et.`;
   }
   if (segment === 'service_return' && isMazdaFreeService(params)) {
-    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla, təklifi hələ demə: "Salam, hər vaxtınız xeyir. Groupmotors Mazda servis mərkəzindən zəng edirəm. Sizinlə qısa bir məsələ ilə bağlı danışmaq üçün münasibdirmi?" Bundan sonra cavabı gözlə. Müştəri açıq razılıq verməyincə ("bəli", "buyurun", "danışa bilərəm") kampaniyanı DANIŞMA. "Alo", "hə?", "eşitmirəm" razılıq DEYİL: qısa təkrar et. Müştəri rus və ya ingilis dilində cavab versə, həmin dildə davam et. Razılıq verəndən sonra MAZDA SERVİS SSENARİSİ ilə davam et.`;
+    return `Telefon zəngi indi cavablandı. Müştərinin bir neçə dəfə "alo" deməsini gözləmə. Dərhal səsli şəkildə bir dəfə qısa başla, təklifi hələ demə: "Salam, hər vaxtınız xeyir. Mən Groupmotors Mazda servis mərkəzindən zəng edirəm. Vaxtınız varsa, qısa məlumat vermək istəyərdim." Bundan sonra cavabı gözlə. Müştəri açıq razılıq verməyincə ("bəli", "buyurun", "danışa bilərəm") kampaniyanı DANIŞMA. "Alo", "hə?", "eşitmirəm" razılıq DEYİL: qısa təkrar et. Müştəri rus və ya ingilis dilində cavab versə, həmin dildə davam et. Razılıq verəndən sonra MAZDA SERVİS SSENARİSİ ilə davam et.`;
   }
   if (segment === 'trade_in') {
     const { company, model } = tradeInTerms(params);
@@ -842,10 +842,15 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     ? String(process.env.GEMINI_LIVE_TEST_VOICE || '').trim() : '';
   // Voice and spoken name for every call (GEMINI_LIVE_VOICE, GEMINI_LIVE_AGENT_NAME); the test values above win on test numbers.
   const prodVoice = String(process.env.GEMINI_LIVE_VOICE || '').trim();
+  // A campaign can have its own voice (segment_params.voice, e.g. a female voice for the Mazda pilot)
+  // and its own spoken name (segment_params.agentName, may be empty): the global male name must not
+  // come with a female voice.
+  const campaignVoice = isExcel ? String(excelCtx?.params?.voice ?? '').trim() : '';
   const testAgentName = testVoice
     ? String(process.env.GEMINI_LIVE_TEST_AGENT_NAME || '').trim()
+    : campaignVoice ? String(excelCtx?.params?.agentName ?? '').trim()
     : (prodVoice ? String(process.env.GEMINI_LIVE_AGENT_NAME || '').trim() : '');
-  const voiceName = testVoice || prodVoice || (agent.gender === 'male' ? 'Charon' : 'Zephyr');
+  const voiceName = testVoice || campaignVoice || prodVoice || (agent.gender === 'male' ? 'Charon' : 'Zephyr');
   if (isTestPhone || testVoice) console.log(`Live test model ${liveModel}, voice ${voiceName} for job ${telephonyJobId ?? 'none'}`);
 
   try {
