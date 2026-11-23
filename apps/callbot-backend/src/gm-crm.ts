@@ -32,7 +32,8 @@ async function request(path: string, body: unknown | null, timeoutMs: number): P
   const sig = crypto.createHmac('sha256', key()).update(raw).digest('hex');
   const res = await fetch(`${baseUrl()}${path}`, {
     method: body == null ? 'GET' : 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Signature': `sha256=${sig}` },
+    // X-Api-Key is the documented auth (VOICE_LEAD_AZ.md); the HMAC signature is kept for older deployments.
+    headers: { 'Content-Type': 'application/json', 'X-Api-Key': key(), 'X-Signature': `sha256=${sig}` },
     body: body == null ? undefined : raw,
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -56,7 +57,7 @@ export class GmCall {
 
   constructor(private readonly callId: string, private readonly phone: string, readonly brand: string, private readonly info: { name?: string; model?: string; campaign?: string; direction?: 'in' | 'out' }) {
     this.ready = request('/voice/session', {
-      call_id: callId, phone: digits(phone), brand,
+      call_id: callId, phone: digits(phone), brand: brand.toLowerCase(),
       name: info.name || undefined, model: info.model || undefined, lang: 'az',
       direction: info.direction || 'out', campaign: info.campaign || undefined,
     }, 10000).then((r) => {
@@ -126,7 +127,10 @@ export class GmCall {
         const m = /^(A|C):\s*(.*)$/s.exec(l);
         return m && m[2].trim() ? { role: m[1] === 'A' ? 'bot' : 'client', text: m[2].trim() } : null;
       })
-      .filter(Boolean);
+      .filter(Boolean) as { role: string; text: string }[];
+    // A real conversation gets its lead even when no result was recorded (the customer hung up
+    // mid-talk); a wrong number or a one-word answer does not.
+    if (!this.leadDone && this.outcome !== 'wrong_number' && lines.filter((l) => l.role === 'client').length >= 2) await this.ensureLead();
     const r = await this.call('/voice/finish', { outcome: this.outcome, duration_seconds: durationSeconds, lines });
     if (r) console.log(`[GM CRM] ${this.callId}: finished (${this.outcome})`);
   }

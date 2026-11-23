@@ -436,7 +436,12 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     const tradeIn = isExcel && excelCtx?.segment === 'trade_in';
     const service = isExcel && excelCtx?.segment === 'service_return';
     const payment = /send_link|agrees_will/.test(outcome) ? 'credit' : tradeIn ? 'trade_in' : 'unknown';
+    // A wrong number is not our customer: no lead, only the call's outcome at finish.
+    if (outcome === 'wrong_person') { gm.outcome = 'wrong_number'; return; }
+    const realName = [customer.name, (customer as { surname?: string | null }).surname].map((x) => String(x ?? '').trim()).filter((x) => x && x !== '-' && !/hörmətli|müştəri/i.test(x)).join(' ');
     await gm.trigger('update_crm', {
+      ...(realName ? { client_name: realName } : {}),
+      client_phone: String(customer.phone || '').replace(/\D/g, ''),
       request_type: service ? 'service' : 'sales',
       payment_method: payment,
       purchase_horizon: /thinking|callback/.test(outcome) ? 'later' : 'unknown',
@@ -858,7 +863,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             gm = startGmCall({
               callId: `robocall-${telephonyJobId}`,
               phone: customer.phone,
-              brand: isExcel ? (excelCtx?.segment === 'trade_in' ? tradeInTerms(p).brand : p.brand) : arz?.brand,
+              // Churn lists keep the brand of the earlier application on the customer row.
+              brand: isExcel ? (excelCtx?.segment === 'trade_in' ? tradeInTerms(p).brand : p.brand || (customer as { importData?: { brand?: unknown } | null }).importData?.brand) : arz?.brand,
+              name: [customer.name, (customer as { surname?: string | null }).surname].map((x) => String(x ?? '').trim()).filter((x) => x && x !== '-' && !/hörmətli|müştəri/i.test(x)).join(' ') || undefined,
               model: String((isExcel ? (excelCtx?.segment === 'trade_in' ? tradeInTerms(p).model : p.model) : arz?.model) ?? '') || undefined,
               campaign: isExcel ? `robocall-${excelCtx?.segment || 'excel'}` : 'robocall-arzoom-kredit',
             });
