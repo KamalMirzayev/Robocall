@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import { PhoneAudio } from './phone-audio.js';
 import { reportGeminiError } from '../gemini-credit.js';
+import { TURKISH_WORDS } from '../speech-checks.js';
 import { EndSensitivity, GoogleGenAI, Modality, StartSensitivity, ThinkingLevel, Type, type LiveServerMessage } from '@google/genai';
 import { eq, sql } from 'drizzle-orm';
 import { db } from '../db/index.js';
@@ -177,7 +178,6 @@ function pcm16RmsFromBase64(data: string) {
 
 const finalGoodbyePattern = /(sağ\s*ol(?:un)?|sag\s*ol(?:un)?|hələlik|helelik|təşəkkür|tesekkur|görüşənədək|gorushenedek|xoş\s*gün|xos\s*gun|uğurlar|ugurlar|до свидания|всего доброго|goodbye|have a (?:nice|good) day)/i;
 
-const TURKISH_WORDS = /(?<![\p{L}])(evet|şimdi|simdi|nasıl|değil|degil|lütfen|lutfen|efendim|ederim|teşekkürler|araç|araba|bilgi|fiyat|kredi|hemen|tamam|ödeme|odeme|görüşme|yardımcı|istiyor\p{L}*|\p{L}+(?:iyor|ıyor|uyor|üyor)\p{L}*|kadar|ne kadar)(?![\p{L}])/giu;
 function isFinalGoodbye(text: string) {
   // Only the turn's last sentence counts: "Çox sağ olun. Sizin Mazda üçün kampaniyamız var..." opens
   // with thanks but is no goodbye (it ended a call after the customer agreed to talk). A turn that

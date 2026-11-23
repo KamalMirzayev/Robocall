@@ -31,6 +31,7 @@ import { finalizeFailedJob } from './routes/telephony.js';
 import { partnerKbStatus, startPartnerKbRefresher } from './partner-kb.js';
 import { loadSettings } from './settings.js';
 import { settingsRouter } from './routes/settings.js';
+import { getCallAudit, runCallAudit, startCallAuditScheduler } from './call-audit.js';
 import { ensureCampaignSegmentSchema, segmentContext } from './campaign-segments.js';
 import { ensureArzoomSchema, startArzoomSync } from './arzoom-sync.js';
 import { ensureSalesTransferSchema, startSalesTransferApp } from './sales-transfer.js';
@@ -91,6 +92,19 @@ app.use('/api/instruction-templates', requireAuth, instructionTemplatesRouter);
 app.use('/api/api-clients', requireAuth, apiClientsRouter);
 app.use('/api/dynamic-context-codes', requireAuth, dynamicContextCodesRouter);
 app.use('/api/settings', requireAuth, settingsRouter);
+// Daily call audit (rules + text-model report), see call-audit.ts.
+app.get('/api/call-audits/:day', requireAuth, async (req, res) => {
+  try {
+    const row = await getCallAudit(String(req.params.day));
+    if (!row) return res.status(404).json({ error: 'no audit for this day' });
+    res.json(row);
+  } catch (err) { res.status(400).json({ error: (err as Error).message }); }
+});
+app.post('/api/call-audits/:day/run', requireAuth, async (req, res) => {
+  try {
+    res.json(await runCallAudit(String(req.params.day), { ai: req.query.ai !== 'off' }));
+  } catch (err) { res.status(400).json({ error: (err as Error).message }); }
+});
 app.use('/api/external/v1', rateLimit(Number(process.env.EXTERNAL_API_RATE_LIMIT_PER_MIN || 300), 60_000), requireApiKey, externalCallsRouter);
 app.get('/health', (_req, res) => res.json({ ok: true, knowledgeBase: partnerKbStatus() }));
 app.get('/', (_req, res) => res.json({
@@ -266,4 +280,5 @@ server.listen(PORT, () => {
   startArzoomAnalyticsPush();
   startGeminiCreditWatch();
   startApplicationSmsRetry();
+  startCallAuditScheduler();
 });
