@@ -369,7 +369,8 @@ export async function arzoomStatus() {
   };
 }
 
-const money = (v: unknown) => (num(v) === null ? null : `${Number(v).toLocaleString('az-AZ')} AZN`);
+// Whole manats only: "7445,1 AZN" was read out as "7 min tam 100 ... qəpik". The bot says "7445 manat".
+const money = (v: unknown) => (num(v) === null ? null : `${Math.round(Number(v))} AZN`);
 
 // Lines for the bot's "customer data" block. No interest or commission is ever included.
 export function arzoomCustomerLines(data: unknown): string[] {
@@ -387,7 +388,7 @@ export function arzoomCustomerLines(data: unknown): string[] {
   const terms = item.final_terms || item.offer;
   if (terms) {
     const t: string[] = [];
-    if (terms.down_payment != null) t.push(`ilkin ödəniş ${money(terms.down_payment)}${terms.down_payment_pct != null ? ` (${terms.down_payment_pct}%)` : ''}`);
+    if (terms.down_payment != null) t.push(`ilkin ödəniş ${money(terms.down_payment)}${terms.down_payment_pct != null ? ` (${Math.round(Number(terms.down_payment_pct))}%)` : ''}`);
     if (terms.amount != null) t.push(`maliyyələşdirmə ${money(terms.amount)}`);
     if (terms.months != null) t.push(`müddət ${terms.months} ay`);
     if (terms.monthly_payment != null) t.push(`aylıq ödəniş ${money(terms.monthly_payment)}`);
@@ -483,7 +484,7 @@ export interface RequestedTerms {
 export function termsText(t: RequestedTerms | null | undefined): string {
   if (!t) return '';
   const parts = [
-    t.down_payment_pct != null ? `ilkin ödəniş ${t.down_payment_pct}%` : null,
+    t.down_payment_pct != null ? `ilkin ödəniş ${Math.round(Number(t.down_payment_pct))}%` : null,
     t.down_payment != null ? `ilkin ödəniş ${money(t.down_payment)}` : null,
     t.monthly_payment != null ? `aylıq ödəniş ${money(t.monthly_payment)}` : null,
     t.months != null ? `müddət ${t.months} ay` : null,
