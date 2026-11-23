@@ -177,6 +177,7 @@ function pcm16RmsFromBase64(data: string) {
 
 const finalGoodbyePattern = /(sağ\s*ol(?:un)?|sag\s*ol(?:un)?|hələlik|helelik|təşəkkür|tesekkur|görüşənədək|gorushenedek|xoş\s*gün|xos\s*gun|uğurlar|ugurlar|до свидания|всего доброго|goodbye|have a (?:nice|good) day)/i;
 
+const TURKISH_WORDS = /(?<![\p{L}])(evet|şimdi|simdi|nasıl|değil|degil|lütfen|lutfen|efendim|ederim|teşekkürler|araç|araba|bilgi|fiyat|kredi|hemen|tamam|ödeme|odeme|görüşme|yardımcı|istiyor\p{L}*|\p{L}+(?:iyor|ıyor|uyor|üyor)\p{L}*|kadar|ne kadar)(?![\p{L}])/giu;
 function isFinalGoodbye(text: string) {
   // Only the turn's last sentence counts: "Çox sağ olun. Sizin Mazda üçün kampaniyamız var..." opens
   // with thanks but is no goodbye (it ended a call after the customer agreed to talk). A turn that
@@ -1100,6 +1101,19 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           if (message.serverContent?.turnComplete && currentAgentTurn) {
             const completedAgentTurn = currentAgentTurn.trim();
             transcriptLines.push(`A: ${completedAgentTurn}`);
+            // Turkey-Turkish words in the bot's own speech: logged to find which ones slip through.
+            const trWords = completedAgentTurn.match(TURKISH_WORDS);
+            if (trWords) {
+              const list = [...new Set(trWords.map((w) => w.toLowerCase()))].join(', ');
+              console.warn(`[TR] job ${telephonyJobId ?? 'none'}: Turkish word(s) in bot speech: ${list}`);
+              // A quiet note for the rest of the call (no answer asked, the customer hears nothing).
+              try {
+                session?.sendClientContent({
+                  turns: `[Sistem] Son cavabında Türkiyə türkcəsi sözü işlətdin: ${list}. Bundan sonra yalnız Azərbaycan sözlərini işlət (bəli, oldu/yaxşı, indi, necə, deyil, zəhmət olmasa, qiymət, ödəniş, nə qədər; "-iyor" yox "-ır/-ir"). Bu qeydə cavab vermə, söhbəti davam et.`,
+                  turnComplete: false,
+                });
+              } catch {}
+            }
             if (endCallRequested) { afterGoodbye = true; scheduleEndCallAfterTurn(); }
             else if (transferState !== 'briefing' && transferState !== 'connected' && isFinalGoodbye(completedAgentTurn)) { afterGoodbye = true; scheduleFinalSilenceEnd(); }
             currentAgentTurn = '';
