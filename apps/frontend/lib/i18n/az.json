@@ -1128,6 +1128,10 @@
       "arzoom": {
         "title": "Arzoom kredit müraciətləri",
         "text": "Arzoom-dakı müraciətlər hər dəqiqə müştəri kimi ArzoomCall-a çəkilir. Tokeni Arzoom panelində (İstifadəçilər → ArzoomCall inteqrasiyası) yaradın və buraya yapışdırın."
+      },
+      "email": {
+        "title": "E-poçt (SMTP)",
+        "text": "Servis koordinatoru xəttə cavab verməyəndə müştəri məlumatı e-poçtla göndərilir. ARZOOM panelindəki SMTP mail qutusunu istifadə edə bilərsiniz (məs. smtp.office365.com, 587). Alıcı ünvanı kampaniya ayarlarında yazılır."
       }
     },
     "keys": {
@@ -1145,12 +1149,19 @@
       "ARZOOM_API_URL": "Arzoom sayt ünvanı",
       "ARZOOM_API_TOKEN": "İnteqrasiya tokeni",
       "SALES_TRANSFER_GROUPS": "Satış təmsilçiləri (marka: daxili nömrələr)",
-      "GEMINI_BALANCE_USD": "Gemini balansı (USD)"
+      "GEMINI_BALANCE_USD": "Gemini balansı (USD)",
+      "SMTP_HOST": "SMTP server",
+      "SMTP_PORT": "SMTP port",
+      "SMTP_USER": "SMTP istifadəçi",
+      "SMTP_PASSWORD": "SMTP parol",
+      "MAIL_FROM": "Göndərən poçt ünvanı"
     },
     "arzoomOff": "Qoşulmayıb",
     "arzoomApplications": "müraciət",
     "arzoomLastSync": "son yeniləmə",
-    "syncNow": "İndi yenilə"
+    "syncNow": "İndi yenilə",
+    "mailTest": "Test məktubu",
+    "mailSent": "Göndərildi"
   },
   "analytics": {
     "title": "Zəng analitikası",

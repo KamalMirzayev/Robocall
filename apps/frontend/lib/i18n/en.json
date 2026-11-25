@@ -1128,6 +1128,10 @@
       "arzoom": {
         "title": "Arzoom leasing applications",
         "text": "Applications in Arzoom are pulled into ArzoomCall as customers every minute. Create the token in the Arzoom panel (Users → ArzoomCall integration) and paste it here."
+      },
+      "email": {
+        "title": "E-mail (SMTP)",
+        "text": "When the service coordinator does not answer, the customer details are e-mailed. You can use the same SMTP mailbox as in the ARZOOM panel (e.g. smtp.office365.com, 587). The recipient is set in the campaign settings."
       }
     },
     "keys": {
@@ -1145,12 +1149,19 @@
       "ARZOOM_API_URL": "Arzoom site address",
       "ARZOOM_API_TOKEN": "Integration token",
       "SALES_TRANSFER_GROUPS": "Sales reps (brand: extensions)",
-      "GEMINI_BALANCE_USD": "Gemini balance (USD)"
+      "GEMINI_BALANCE_USD": "Gemini balance (USD)",
+      "SMTP_HOST": "SMTP server",
+      "SMTP_PORT": "SMTP port",
+      "SMTP_USER": "SMTP user",
+      "SMTP_PASSWORD": "SMTP password",
+      "MAIL_FROM": "Sender address"
     },
     "arzoomOff": "Not connected",
     "arzoomApplications": "applications",
     "arzoomLastSync": "last sync",
-    "syncNow": "Sync now"
+    "syncNow": "Sync now",
+    "mailTest": "Test e-mail",
+    "mailSent": "Sent"
   },
   "analytics": {
     "title": "Call analytics",

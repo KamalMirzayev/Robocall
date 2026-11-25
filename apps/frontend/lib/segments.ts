@@ -391,8 +391,14 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
     { key: 'phone', type: 'text', label: { az: 'Servis əlaqə nömrəsi', en: 'Service phone' } },
     {
       key: 'repExtensions', type: 'text',
-      label: { az: 'Servis nümayəndələrinin daxili nömrələri (canlı qoşma üçün, vergüllə; boş qalsa nümayəndə geri zəng edir)', en: 'Service rep extensions for live transfer (comma separated; empty = rep calls back)' },
-      placeholder: { az: 'Məs. 301, 302', en: 'E.g. 301, 302' },
+      label: { az: 'Servis koordinatorunun nömrəsi: daxili nömrə və ya mobil (canlı qoşma üçün, vergüllə; boş qalsa koordinator geri zəng edir)', en: 'Service coordinator number: extension or mobile (live transfer, comma separated; empty = coordinator calls back)' },
+      placeholder: { az: 'Məs. 301 və ya 0512258758', en: 'E.g. 301 or 0512258758' },
+    },
+    { key: 'coordinatorName', type: 'text', label: { az: 'Koordinatorun adı', en: 'Coordinator name' }, placeholder: { az: 'Məs. Sara xanım', en: 'E.g. Sara' } },
+    {
+      key: 'coordinatorEmail', type: 'text',
+      label: { az: 'Koordinatorun e-poçtu (xətt məşğul olanda və ya cavab verilməyəndə müştəri məlumatı bura göndərilir; SMTP İnteqrasiyalarda)', en: 'Coordinator e-mail (customer details are sent here when the line is busy or unanswered; SMTP in Integrations)' },
+      placeholder: { az: 'Məs. sara@groupmotors.az', en: 'E.g. sara@groupmotors.az' },
     },
     { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
   ],

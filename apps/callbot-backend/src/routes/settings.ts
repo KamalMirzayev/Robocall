@@ -2,6 +2,7 @@ import { Router, type Request } from 'express';
 import { requireRole, type AppUser } from '../auth.js';
 import { describeSettings, isSettingKey, saveSetting, validateSetting } from '../settings.js';
 import { partnerKbStatus, refreshPartnerKb } from '../partner-kb.js';
+import { emailsOf, sendMail, smtpConfigured } from '../mailer.js';
 import { arzoomStatus, resetArzoomCursor, syncArzoom } from '../arzoom-sync.js';
 
 export const settingsRouter = Router();
@@ -52,6 +53,25 @@ settingsRouter.post('/test/gemini', async (_req, res) => {
     res.json(r.ok ? { ok: true } : { ok: false, error: `HTTP ${r.status}` });
   } catch (err) {
     res.json({ ok: false, error: (err as Error)?.message || 'request failed' });
+  }
+});
+
+// Sends a test mail through the SMTP settings to ?to= (or to the SMTP mailbox itself).
+settingsRouter.post('/test/mail', async (req, res) => {
+  if (!smtpConfigured()) {
+    res.json({ ok: false, error: 'not set' });
+    return;
+  }
+  const to = emailsOf(req.query.to || req.body?.to || process.env.MAIL_FROM || process.env.SMTP_USER);
+  if (!to.length) {
+    res.json({ ok: false, error: 'no recipient' });
+    return;
+  }
+  try {
+    await sendMail({ to, subject: 'ArzoomCall: test məktubu', html: '<p>ArzoomCall e-poçt bildirişləri işləyir.</p>' });
+    res.json({ ok: true, to });
+  } catch (err) {
+    res.json({ ok: false, error: (err as Error).message.slice(0, 300) });
   }
 });
 
