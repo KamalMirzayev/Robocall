@@ -559,7 +559,9 @@ export async function excelCallContext(telephonyJobId: number | null, customerId
     const raw = row?.segment_params;
     params = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, unknown> | null;
     if (segment === 'service_return' || segment === 'trade_in') {
-      transferExtensions = String(params?.repExtensions || '').split(/[\s,;]+/).map((x) => x.trim()).filter((x) => /^\d{2,6}$/.test(x)).slice(0, 20);
+      // An internal extension/queue (2-6 digits) or an outside phone number (e.g. the Mazda service
+      // coordinator's mobile 0512258758), which is dialled out through the customer's trunk.
+      transferExtensions = String(params?.repExtensions || '').split(/[\s,;]+/).map((x) => x.trim().replace(/^\+/, '')).filter((x) => /^\d{2,6}$/.test(x) || /^\d{9,15}$/.test(x)).slice(0, 20);
     }
   }
   return { segment, transferExtensions, params };

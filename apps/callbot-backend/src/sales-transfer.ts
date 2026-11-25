@@ -19,6 +19,23 @@ const ariPort = Number(process.env.ASTERISK_ARI_PORT || 8088);
 const ariUser = process.env.ASTERISK_ARI_USER || 'robocallari';
 const ariSecret = process.env.ASTERISK_ARI_SECRET || 'robocallAriSecret2026';
 const ringSeconds = Math.max(8, Math.min(Number(process.env.SALES_TRANSFER_RING_SECONDS || 18), 60));
+const outsideRingSeconds = Math.max(15, Math.min(Number(process.env.SALES_TRANSFER_OUTSIDE_RING_SECONDS || 30), 60));
+
+/** A transfer target that is a phone number (9+ digits), not an internal extension or queue. */
+export function isOutsideNumber(ext: string): boolean {
+  return /^\d{9,15}$/.test(ext);
+}
+
+/** Writes an Azerbaijani number in the same format the trunk dialled the customer in. */
+function formatLike(ext: string, dialed: string): string {
+  const nine = ext.startsWith('994') && ext.length === 12 ? ext.slice(3) : ext.startsWith('0') && ext.length === 10 ? ext.slice(1) : ext.length === 9 ? ext : '';
+  if (!nine) return ext;
+  const d = dialed.replace(/\D/g, '');
+  if (d.startsWith('994')) return `994${nine}`;
+  if (d.startsWith('0')) return `0${nine}`;
+  return `0${nine}`;
+}
+
 const maxAttempts = Math.max(1, Math.min(Number(process.env.SALES_TRANSFER_MAX_ATTEMPTS || 3), 10));
 
 export const DEFAULT_SALES_GROUPS = 'BYD: 6435; Toyota: 6434; Mitsubishi/Mazda: 6436';
@@ -270,7 +287,7 @@ export async function startSalesTransfer(
       const customerChannelId = String(job?.channel_id || '');
       if (!customerChannelId) throw new Error('customer channel unknown');
       customerChannel = customerChannelId;
-      const channel = await ari<{ name: string }>(`/channels/${encodeURIComponent(customerChannelId)}`);
+      const channel = await ari<{ name: string; caller?: { number?: string } }>(`/channels/${encodeURIComponent(customerChannelId)}`);
       // "PJSIP/trunk-<id>-0000001a" -> dial reps through the same trunk the customer is on.
       const endpoint = String(channel.name || '').replace(/^PJSIP\//, '').replace(/-[0-9a-f]{8}$/i, '');
       if (!endpoint) throw new Error('trunk of the customer channel unknown');
@@ -286,12 +303,24 @@ export async function startSalesTransfer(
 
       for (const ext of order) {
         if (cancelled) return;
+        const outside = isOutsideNumber(ext);
+        // An outside number goes out like the customer's own call: same trunk, same number format
+        // (local 0XXXXXXXXX or 994XXXXXXXXX) and our own caller ID, since the provider rejects a
+        // foreign caller ID on outgoing calls. A mobile also needs longer to answer than a desk phone.
+        let target = ext;
+        if (outside) {
+          const dialed = await ari<{ value?: string }>(`/channels/${encodeURIComponent(customerChannelId)}/variable?variable=CALLBOT_CUSTOMER_PHONE`).then((v) => String(v?.value || '')).catch(() => '');
+          target = formatLike(ext, dialed);
+        }
         const qs = new URLSearchParams({
-          endpoint: `PJSIP/${ext}@${endpoint}`,
+          endpoint: `PJSIP/${target}@${endpoint}`,
           app: ARI_APP,
-          timeout: String(ringSeconds),
+          timeout: String(outside ? outsideRingSeconds : ringSeconds),
         });
-        if (params.callerId) {
+        const ownNumber = String(channel.caller?.number || '').replace(/\D/g, '');
+        if (outside) {
+          if (ownNumber) qs.set('callerId', ownNumber);
+        } else if (params.callerId) {
           const name = String(params.callerName || '').replace(/["<>]/g, '').trim();
           qs.set('callerId', name ? `"${name}" <${params.callerId}>` : params.callerId);
         }
@@ -309,7 +338,7 @@ export async function startSalesTransfer(
           const timer = setTimeout(() => {
             waiters.delete(rep.id);
             resolve(false);
-          }, (ringSeconds + 4) * 1000);
+          }, ((outside ? outsideRingSeconds : ringSeconds) + 4) * 1000);
           waiters.set(rep.id, (event) => {
             if (event.type === 'StasisStart') {
               clearTimeout(timer);

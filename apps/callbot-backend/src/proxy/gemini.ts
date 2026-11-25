@@ -22,7 +22,7 @@ import { partnerKbInstruction } from '../partner-kb.js';
 import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
 import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, isMazdaFreeService, linkBrand, recordCampaignResult, tradeInTerms } from '../campaign-results.js';
 import { startGmCall, type GmCall } from '../gm-crm.js';
-import { pinnedExtensions, recordTransferIssue, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
+import { isOutsideNumber, pinnedExtensions, recordTransferIssue, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
 type Customer = InferSelectModel<typeof customers>;
 type Agent = InferSelectModel<typeof agents>;
@@ -583,26 +583,31 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
       },
       {
         onConnected: (ext, briefed) => {
+          // "6434 daxili nömrəli" for a desk phone/queue; an outside number (the Mazda coordinator's
+          // mobile) is named by the coordinator, without printing the number in the CRM notes.
+          const repLabel = (e: string) => (isOutsideNumber(e)
+            ? `${String(excelCtx?.params?.coordinatorName || '').trim() ? `${String(excelCtx?.params?.coordinatorName).trim()} adlı` : 'mobil nömrəli'}`
+            : `${e} daxili nömrəli`);
           transferState = 'connected';
           transferConnectedAt = new Date();
           transcriptLines.push(`[${isExcel && excelCtx?.segment !== 'trade_in' ? 'Servis nümayəndəsinə' : 'Satış təmsilçisinə'} qoşuldu: ${ext}]`);
           if (gm) {
             gm.outcome = 'transferred';
-            if (isExcel && excelCtx?.segment === 'service_return') void gm.escalateService(`Robocall servis kampaniyası zəngi, müştəri ${ext} daxili nömrəli servis koordinatoruna canlı qoşuldu.\n${gmSummary()}`);
-            else void gm.handoff(isExcel && excelCtx?.segment === 'trade_in' ? 'trade_in' : 'purchase', `Robocall zəngi, müştəri ${ext} daxili nömrəli satış təmsilçisinə canlı qoşuldu.\n${gmSummary()}`);
+            if (isExcel && excelCtx?.segment === 'service_return') void gm.escalateService(`Robocall servis kampaniyası zəngi, müştəri ${repLabel(ext)} servis koordinatoruna canlı qoşuldu.\n${gmSummary()}`);
+            else void gm.handoff(isExcel && excelCtx?.segment === 'trade_in' ? 'trade_in' : 'purchase', `Robocall zəngi, müştəri ${repLabel(ext)} satış təmsilçisinə canlı qoşuldu.\n${gmSummary()}`);
           }
           if (isExcel) {
             void recordCampaignResult({
               customerId: customer.id,
               telephonyJobId,
               outcome: 'transferred_to_rep',
-              reason: `Müştəri təklifə razılaşdı və ${ext} daxili nömrəli ${excelCtx?.segment === 'trade_in' ? 'satış' : 'servis'} nümayəndəsinə qoşuldu.`,
+              reason: `Müştəri təklifə razılaşdı və ${repLabel(ext)} ${excelCtx?.segment === 'trade_in' ? 'satış' : 'servis'} nümayəndəsinə qoşuldu.`,
             }).catch(() => {});
           } else void recordArzoomFeedback({
             customerId: customer.id,
             telephonyJobId,
             outcome: 'transferred_to_sales',
-            reason: `Müştəri şərtlərlə razılaşdı və ${ext} daxili nömrəli satış təmsilçisinə qoşuldu.`,
+            reason: `Müştəri şərtlərlə razılaşdı və ${repLabel(ext)} satış təmsilçisinə qoşuldu.`,
           }).catch(() => {});
           // Warm hand-off: the bot tells the rep in one or two sentences who is on the line and
           // what they want, then leaves; the call stays up until the customer or the rep hangs up.
@@ -628,8 +633,13 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               : excelCtx?.segment === 'credit_offer' ? 'kredit (churn) kampaniyası' : isMazdaFreeService(excelCtx?.params) ? 'Mazda pulsuz servis kampaniyası' : 'servis kampaniyası'
             : 'ARZOOM kredit müraciəti';
           const serviceBriefing = isExcel && excelCtx?.segment === 'service_return';
+          const imp = (customer as { importData?: Record<string, unknown> | null }).importData || {};
+          const who = [
+            [customer.name, (customer as { surname?: string | null }).surname].map((x) => String(x ?? '').trim()).filter((x) => x && x !== '-' && !/hörmətli|müştəri/i.test(x)).join(' '),
+            [imp.brand, imp.model].map((x) => String(x ?? '').trim()).filter(Boolean).join(' ').replace(/^Mazda Mazda/i, 'Mazda'),
+          ].filter(Boolean);
           briefingText = serviceBriefing
-            ? `Koordinatora cəmi 3 qısa cümlə de, artıq heç nə əlavə etmə. 1) Dərhal: "Salam, müştəri xəttdədir, ${campaignText}." 2) Bir cümlə ilə: müştəri hansı ödənişsiz xidməti seçdi (məs. "Müştəri kondisionerin ozonla təmizlənməsini seçib") və ya hələ seçməyib, vaxtla bağlı nə dedisə onu da qısa əlavə et. 3) "İndi sizi müştəri ilə birləşdirirəm." Sonra sus. Bilmədiyini uydurma, heç bir alət çağırma.`
+            ? `Koordinatora cəmi 3 qısa cümlə de, artıq heç nə əlavə etmə. 1) Dərhal: "Salam, ${who[0] ? `${who[0]} xəttdədir` : 'müştəri xəttdədir'}${who[1] ? `, ${who[1]} sahibi` : ''}, ${campaignText} üzrə zəng edirəm." 2) Bir cümlə ilə niyə qoşursan: müştəri hansı ödənişsiz xidməti seçdi (məs. "Müştəri kondisionerin ozonla təmizlənməsini seçib") və ya hələ seçməyib, vaxtla bağlı nə dedisə onu da qısa əlavə et. 3) "İndi sizi müştəri ilə birləşdirirəm." Sonra sus. Bilmədiyini uydurma, heç bir alət çağırma.`
             : `Nümayəndəyə cəmi 3 qısa cümlə de, artıq heç nə əlavə etmə. 1) Dərhal: "Salam, müştəri xəttdədir, ${campaignText}." 2) Bir cümlə ilə müştərinin istəyi: maşını barterlə (köhnəsini verib yenisini almaq) və ya kreditlə almaq istəyir, danışıqda müştəri hansını dedisə onu de, məsələn: "Müştəri köhnə maşınını verib yenisini barterlə almaq istəyir" və ya "Müştəri yeni maşını kreditlə almaq istəyir". Müştəri ikisindən heç birini aydın deməyibsə: "Müştəri barter və ya kredit şərtləri ilə maraqlanır." 3) "İndi sizi müştəri ilə birləşdirirəm." Sonra sus. Bilmədiyini uydurma, heç bir alət çağırma.`;
           // A single number is a queue: it answers at once with music, the rep comes later.
           const queue = transferExtensions().length === 1;
