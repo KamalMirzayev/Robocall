@@ -61,6 +61,12 @@ const SEGMENT_FIELDS: Record<string, FieldDef[]> = {
     { key: 'note', label: 'Əlavə qeyd' },
     // Live transfer to service reps (campaign-results.ts reads it), not shown to the bot.
     { key: 'repExtensions', label: '', hidden: true },
+    // Mazda free-service pilot (campaign-results.ts) and its coordinator (sales-transfer, mailer).
+    { key: 'program', label: '', hidden: true },
+    { key: 'company', label: '', hidden: true },
+    { key: 'deadline', label: '', hidden: true },
+    { key: 'coordinatorName', label: '', hidden: true },
+    { key: 'coordinatorEmail', label: '', hidden: true },
   ],
   // Credit customers without a result: a car-on-credit offer, the ARZOOM application link by SMS.
   credit_offer: [
@@ -99,6 +105,15 @@ const SEGMENT_FIELDS: Record<string, FieldDef[]> = {
 };
 
 const MAX_VALUE_LENGTH = 1000;
+
+// Kept on every campaign, never shown to the bot: its own voice and spoken name (gemini.ts) and
+// who gets the e-mail when no rep answers a transfer (mailer.ts). Without them here a save in
+// the panel dropped values set before (e.g. the Mazda pilot's voice).
+for (const fields of Object.values(SEGMENT_FIELDS)) {
+  for (const key of ['voice', 'agentName', 'transferFailEmails']) {
+    if (!fields.some((f) => f.key === key)) fields.push({ key, label: '', hidden: true });
+  }
+}
 
 export function isCampaignSegment(segment: unknown): segment is string {
   return typeof segment === 'string' && /^[a-z_]{1,40}$/.test(segment);

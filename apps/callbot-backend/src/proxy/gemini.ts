@@ -22,7 +22,7 @@ import { partnerKbInstruction } from '../partner-kb.js';
 import { arzoomCustomerLines, ensureArzoomFeedbackFromTranscript, recordArzoomFeedback } from '../arzoom-sync.js';
 import { EXCEL_SOURCE, ensureCampaignResultFromTranscript, excelCallContext, excelCustomerLines, isMazdaFreeService, linkBrand, recordCampaignResult, tradeInTerms } from '../campaign-results.js';
 import { startGmCall, type GmCall } from '../gm-crm.js';
-import { notifyCoordinatorByMail } from '../mailer.js';
+import { notifyFailedTransferByMail } from '../mailer.js';
 import { isOutsideNumber, pinnedExtensions, recordTransferIssue, salesExtensionsFor, startSalesTransfer, type TransferHandle } from '../sales-transfer.js';
 
 type Customer = InferSelectModel<typeof customers>;
@@ -1301,7 +1301,6 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
               ) WHERE id = ${callId}
             `).catch((err) => console.error('Failed to set campaign call summary', err));
           }
-          if (excelCtx?.segment === 'service_return') void notifyCoordinatorByMail({ customerId: customer.id, telephonyJobId, transcript: finalTranscript });
         }
         if (isArzoom) {
           await ensureArzoomFeedbackFromTranscript({
@@ -1319,6 +1318,8 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             `).catch((err) => console.error('Failed to set ARZOOM call summary', err));
           }
         }
+        // Customer agreed to a person but nobody picked up: hand the lead over by e-mail.
+        void notifyFailedTransferByMail({ customerId: customer.id, telephonyJobId, transcript: finalTranscript });
       } catch (err) {
         console.error('Failed to update call record', err);
       }

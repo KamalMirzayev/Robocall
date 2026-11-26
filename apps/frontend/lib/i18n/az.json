@@ -1131,7 +1131,7 @@
       },
       "email": {
         "title": "E-poçt (SMTP)",
-        "text": "Servis koordinatoru xəttə cavab verməyəndə müştəri məlumatı e-poçtla göndərilir. ARZOOM panelindəki SMTP mail qutusunu istifadə edə bilərsiniz (məs. smtp.office365.com, 587). Alıcı ünvanı kampaniya ayarlarında yazılır."
+        "text": "Müştəri nümayəndə ilə danışmağa razı olub xəttə qoşulanda, amma heç kim cavab verməyəndə, müştəri məlumatı və danışıq e-poçtla göndərilir. Ümumi alıcılar buradadır, hər kampaniyaya əlavə alıcılar kampaniya ayarlarında yazılır. ARZOOM panelindəki SMTP mail qutusunu istifadə edə bilərsiniz (məs. smtp.office365.com, 587)."
       }
     },
     "keys": {
@@ -1154,7 +1154,8 @@
       "SMTP_PORT": "SMTP port",
       "SMTP_USER": "SMTP istifadəçi",
       "SMTP_PASSWORD": "SMTP parol",
-      "MAIL_FROM": "Göndərən poçt ünvanı"
+      "MAIL_FROM": "Göndərən poçt ünvanı",
+      "TRANSFER_FAIL_EMAILS": "Nümayəndə cavab verməyəndə məktub gedəcək ünvanlar (bütün kampaniyalar, vergüllə)"
     },
     "arzoomOff": "Qoşulmayıb",
     "arzoomApplications": "müraciət",

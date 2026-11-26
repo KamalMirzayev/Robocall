@@ -41,63 +41,83 @@ export function emailsOf(v: unknown): string[] {
 
 const TD = 'border:1px solid #d0d7de;padding:6px 10px;vertical-align:top';
 
+const segmentName: Record<string, string> = {
+  application_status: 'Kredit müraciətinin nəticəsi',
+  credit_offer: 'Kredit təklifi (churn)',
+  trade_in: 'Trade-in',
+  service_return: 'Servis kampaniyası',
+};
+
 /**
- * After a service-campaign call: when the customer wanted the coordinator but was not put
- * through live (transfer failed, or the bot took a "contact me" request), mail the customer's
- * details, the chosen service and the transcript to the campaign's coordinatorEmail.
+ * After any campaign call where the customer agreed to talk to a person and the bot tried to
+ * put them through, but nobody picked up (busy, no answer, the queue dropped, the customer left
+ * while waiting): mail the customer's details, the result and the transcript.
+ * Recipients: the campaign's transferFailEmails (and a service campaign's coordinatorEmail),
+ * plus TRANSFER_FAIL_EMAILS from the Integrations panel for every campaign.
  * Errors are logged, never thrown.
  */
-export async function notifyCoordinatorByMail(p: { customerId: number; telephonyJobId: number | null; transcript: string | null }): Promise<void> {
+export async function notifyFailedTransferByMail(p: { customerId: number; telephonyJobId: number | null; transcript: string | null }): Promise<void> {
   try {
     if (!p.telephonyJobId) return;
     const [row] = rowsFrom(await db.execute(sql`
       SELECT ca.name AS campaign, ca.segment, ca.segment_params AS params,
-             c.name, c.surname, c.phone, c.import_data AS data,
-             (SELECT jsonb_agg(jsonb_build_object('outcome', r.outcome, 'label', r.outcome_label, 'reason', r.reason) ORDER BY r.id)
-                FROM campaign_results r WHERE r.telephony_job_id = ${p.telephonyJobId}) AS results
-      FROM telephony_jobs tj JOIN campaigns ca ON ca.id = tj.campaign_id JOIN customers c ON c.id = ${p.customerId}
+             c.name, c.surname, c.phone, c.import_data AS data, c.source_system, c.source_record_key,
+             (SELECT jsonb_agg(jsonb_build_object('status', t.status, 'brand', t.brand, 'reason', t.reason) ORDER BY t.id)
+                FROM sales_transfers t WHERE t.telephony_job_id = ${p.telephonyJobId}) AS transfers,
+             (SELECT concat_ws(' — ', r.outcome_label, nullif(r.reason, '')) FROM campaign_results r
+                WHERE r.telephony_job_id = ${p.telephonyJobId} ORDER BY r.id DESC LIMIT 1) AS result,
+             (SELECT concat_ws(' — ', f.outcome_label, nullif(f.reason, '')) FROM arzoom_feedback f
+                WHERE f.telephony_job_id = ${p.telephonyJobId} ORDER BY f.id DESC LIMIT 1) AS feedback
+      FROM telephony_jobs tj LEFT JOIN campaigns ca ON ca.id = tj.campaign_id JOIN customers c ON c.id = ${p.customerId}
       WHERE tj.id = ${p.telephonyJobId}
     `));
-    if (!row || row.segment !== 'service_return') return;
-    const params = (typeof row.params === 'string' ? JSON.parse(row.params) : row.params) as Record<string, unknown> | null;
-    const to = emailsOf(params?.coordinatorEmail);
-    if (!to.length) return;
-    const results = (Array.isArray(row.results) ? row.results : []) as Array<{ outcome: string; label: string; reason: string | null }>;
+    if (!row) return;
     const transcript = String(p.transcript || '');
-    if (results.some((r) => r.outcome === 'transferred_to_rep')) return;
-    const transferFailed = transcript.includes('qoşmaq alınmadı');
-    const wantsContact = results.some((r) => r.outcome === 'wants_rep_contact');
-    if (!transferFailed && !wantsContact) return;
+    const transfers = (Array.isArray(row.transfers) ? row.transfers : []) as Array<{ status: string; brand: string | null; reason: string | null }>;
+    if (transfers.some((t) => t.status === 'answered')) return;
+    const failed = transcript.includes('qoşmaq alınmadı') || transfers.some((t) => t.status !== 'not_configured');
+    if (!failed) return;
+    const params = (typeof row.params === 'string' ? JSON.parse(row.params) : row.params) as Record<string, unknown> | null;
+    const to = [...new Set([
+      ...emailsOf(params?.transferFailEmails),
+      ...(row.segment === 'service_return' ? emailsOf(params?.coordinatorEmail) : []),
+      ...emailsOf(process.env.TRANSFER_FAIL_EMAILS),
+    ].map((x) => x.toLowerCase()))];
+    if (!to.length) return;
     if (!smtpConfigured()) {
-      console.warn(`[mail] job ${p.telephonyJobId}: coordinator e-mail not sent, SMTP is not configured`);
+      console.warn(`[mail] job ${p.telephonyJobId}: failed-transfer e-mail not sent, SMTP is not configured`);
       return;
     }
     const data = (typeof row.data === 'string' ? JSON.parse(row.data) : row.data || {}) as Record<string, unknown>;
-    const name = [row.name, row.surname].map((x) => String(x ?? '').trim()).filter((x) => x && x !== '-').join(' ') || 'Müştəri';
-    const car = [data.brand, data.model].map((x) => String(x ?? '').trim()).filter(Boolean).join(' ').replace(/^Mazda Mazda/i, 'Mazda');
-    const last = results[results.length - 1];
+    const name = [row.name, row.surname].map((x) => String(x ?? '').trim()).filter((x) => x && x !== '-' && !/hörmətli|müştəri/i.test(x)).join(' ') || 'Müştəri';
+    const brand = transfers.map((t) => t.brand).find(Boolean) || data.brand;
+    const car = [brand, data.model].map((x) => String(x ?? '').trim()).filter(Boolean).join(' ').replace(/^(\w+) \1/i, '$1');
+    const why = [...new Set(transfers.map((t) => t.reason).filter(Boolean))].join('; ');
     const when = new Intl.DateTimeFormat('az-AZ', { timeZone: 'Asia/Baku', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
+    const campaign = String(row.campaign || segmentName[String(row.segment)] || 'Kampaniya');
     const rows: Array<[string, unknown]> = [
+      ['Kampaniya', campaign],
       ['Müştəri', name],
       ['Telefon', row.phone],
-      ['Avtomobil', car],
+      ['ARZOOM müraciəti', row.source_system === 'arzoom' ? row.source_record_key : ''],
+      ['Marka / avtomobil', car],
       ['Dövlət nömrəsi', data.plate],
       ['VİN', data.vin],
-      ['Nəticə', last ? last.label : 'Koordinatorla danışmaq istədi'],
-      ['Qeyd (xidmət, uyğun vaxt)', last?.reason],
-      ['Canlı qoşma', transferFailed ? 'Alınmadı (xətt məşğul idi və ya cavab verilmədi)' : 'Edilmədi'],
+      ['Nəticə', row.result || row.feedback || 'Nümayəndə ilə danışmağa razı oldu'],
+      ['Niyə qoşulmadı', why || 'Nümayəndə cavab vermədi'],
       ['Zəng vaxtı', when],
     ];
+    const coordinator = row.segment === 'service_return' ? String(params?.coordinatorName || '').trim() : '';
     const html = `<div style="font-family:Segoe UI,Arial,sans-serif;font-size:14px">
-<p>Salam${String(params?.coordinatorName || '').trim() ? `, ${esc(String(params?.coordinatorName).trim())}` : ''}.</p>
-<p><b>${esc(row.campaign)}</b> üzrə müştəri sizinlə danışmaq istədi, amma canlı qoşmaq mümkün olmadı. Zəhmət olmasa, müştəri ilə əlaqə saxlayın.</p>
+<p>Salam${coordinator ? `, ${esc(coordinator)}` : ''}.</p>
+<p><b>${esc(campaign)}</b> üzrə müştəri nümayəndə ilə danışmağa razı oldu, bot onu xəttə qoşdu, amma cavab verilmədi. Zəhmət olmasa, müştəri ilə əlaqə saxlayın.</p>
 <table style="border-collapse:collapse;font-size:13px">${rows.filter(([, v]) => String(v ?? '').trim()).map(([k, v]) => `<tr><td style="${TD};background:#f6f8fa"><b>${esc(k)}</b></td><td style="${TD}">${esc(v)}</td></tr>`).join('')}</table>
 <p style="margin-top:16px"><b>Danışıq</b></p>
 <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;background:#f6f8fa;padding:10px;border-radius:6px">${esc(transcript.slice(0, 8000))}</pre>
 <p style="color:#666;font-size:12px">ArzoomCall avtomatik məktubu.</p></div>`;
-    await sendMail({ to, subject: `${car || 'Servis'}: ${name} koordinatorla əlaqə gözləyir`, html });
-    console.log(`[mail] job ${p.telephonyJobId}: coordinator e-mail sent (${to.length} recipient)`);
+    await sendMail({ to, subject: `${campaign}: ${name} nümayəndə ilə əlaqə gözləyir`, html });
+    console.log(`[mail] job ${p.telephonyJobId}: failed-transfer e-mail sent (${to.length} recipient)`);
   } catch (err) {
-    console.error(`[mail] job ${p.telephonyJobId ?? '-'}: coordinator e-mail failed`, (err as Error).message);
+    console.error(`[mail] job ${p.telephonyJobId ?? '-'}: failed-transfer e-mail failed`, (err as Error).message);
   }
 }

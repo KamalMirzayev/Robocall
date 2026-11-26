@@ -401,6 +401,11 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
       placeholder: { az: 'Məs. sara@groupmotors.az', en: 'E.g. sara@groupmotors.az' },
     },
     { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
+    {
+      key: 'transferFailEmails', type: 'text',
+      label: { az: 'Nümayəndə cavab verməyəndə müştəri məlumatı göndəriləcək e-poçtlar (vergüllə; İnteqrasiyalardakı ümumi ünvanlara əlavə)', en: 'E-mails for customers the rep did not answer (comma separated; in addition to the general ones in Integrations)' },
+      placeholder: { az: 'Məs. satis@acb.az', en: 'E.g. sales@acb.az' },
+    },
   ],
   credit_offer: [
     {
@@ -420,6 +425,11 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
     },
     { key: 'deadline', type: 'date', label: { az: 'Təklifin son tarixi', en: 'Offer ends on' } },
     { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
+    {
+      key: 'transferFailEmails', type: 'text',
+      label: { az: 'Nümayəndə cavab verməyəndə müştəri məlumatı göndəriləcək e-poçtlar (vergüllə; İnteqrasiyalardakı ümumi ünvanlara əlavə)', en: 'E-mails for customers the rep did not answer (comma separated; in addition to the general ones in Integrations)' },
+      placeholder: { az: 'Məs. satis@acb.az', en: 'E.g. sales@acb.az' },
+    },
   ],
   trade_in: [
     {
@@ -454,6 +464,11 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
       placeholder: { az: 'Məs. 301, 302', en: 'E.g. 301, 302' },
     },
     { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
+    {
+      key: 'transferFailEmails', type: 'text',
+      label: { az: 'Nümayəndə cavab verməyəndə müştəri məlumatı göndəriləcək e-poçtlar (vergüllə; İnteqrasiyalardakı ümumi ünvanlara əlavə)', en: 'E-mails for customers the rep did not answer (comma separated; in addition to the general ones in Integrations)' },
+      placeholder: { az: 'Məs. satis@acb.az', en: 'E.g. sales@acb.az' },
+    },
   ],
   sales: [
     {
@@ -505,6 +520,11 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
       key: 'note', type: 'textarea',
       label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' },
       placeholder: { az: 'Məs. bu həftə filialda test-sürüş də mümkündür', en: 'E.g. test drives at the branch this week' },
+    },
+    {
+      key: 'transferFailEmails', type: 'text',
+      label: { az: 'Nümayəndə cavab verməyəndə müştəri məlumatı göndəriləcək e-poçtlar (vergüllə; İnteqrasiyalardakı ümumi ünvanlara əlavə)', en: 'E-mails for customers the rep did not answer (comma separated; in addition to the general ones in Integrations)' },
+      placeholder: { az: 'Məs. satis@acb.az', en: 'E.g. sales@acb.az' },
     },
   ],
   satisfaction: [
