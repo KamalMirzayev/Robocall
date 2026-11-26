@@ -39,6 +39,7 @@ export interface AuditStats {
   transfers: number;
   transferFailed: number;
   pronunciation?: { said: string; should: string; count: number }[];
+  pronunciationError?: string;
 }
 
 const TRANSFER_DONE = /\[Satış təmsilçisinə qoşuldu/;
@@ -224,10 +225,16 @@ async function pronunciationReport(calls: AuditedCall[], stats: AuditStats): Pro
       const f = await listenToCall(ai, model, c.jobId as number);
       if (f) findings.push(f);
     } catch (err) {
-      console.warn(`[call-audit] listening to job ${c.jobId} failed: ${(err as Error).message}`);
+      const msg = (err as Error).message;
+      console.warn(`[call-audit] listening to job ${c.jobId} failed: ${msg.slice(0, 300)}`);
+      // Out of quota or over the spending cap: every other recording would fail the same way.
+      if (/\b429\b|RESOURCE_EXHAUSTED|spending cap/i.test(msg)) {
+        stats.pronunciationError = 'Gemini limiti dolub (429): səs yazıları dinlənmədi';
+        break;
+      }
     }
   }
-  if (!findings.length) return '## Tələffüz (səs yazılarından)\n\nSəs yazıları dinlənə bilmədi.';
+  if (!findings.length) return `## Tələffüz (səs yazılarından)\n\n${stats.pronunciationError || 'Səs yazıları dinlənə bilmədi.'}`;
   const scored = findings.filter((f) => f.score != null);
   const avg = scored.length ? (scored.reduce((a, f) => a + (f.score as number), 0) / scored.length).toFixed(1) : '-';
   const counts = new Map<string, { n: number; should: string; type: string; jobs: Set<number> }>();
