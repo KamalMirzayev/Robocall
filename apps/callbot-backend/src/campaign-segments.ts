@@ -145,4 +145,6 @@ export function segmentContext(segment: string | null | undefined, params: unkno
 export async function ensureCampaignSegmentSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS segment varchar(40)`);
   await db.execute(sql`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS segment_params jsonb`);
+  // Higher dials first: while it has calls due, lower campaigns on the same lines wait.
+  await db.execute(sql`ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS priority integer NOT NULL DEFAULT 0`);
 }

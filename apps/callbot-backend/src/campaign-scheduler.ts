@@ -52,6 +52,7 @@ interface CampaignRow extends DbRow {
   trunkIds: string | null;
   runStartDate: string | Date | null;
   runEndDate: string | Date | null;
+  priority: number;
 }
 
 interface CampaignCallRow extends DbRow {
@@ -256,9 +257,11 @@ export async function campaignSchedulerTick() {
              run_window_start as "runWindowStart", run_window_end as "runWindowEnd",
              run_weekdays as "runWeekdays", skip_next_day_after_success as "skipNextDayAfterSuccess",
              trunk_id as "trunkId", trunk_ids as "trunkIds",
-             run_start_date as "runStartDate", run_end_date as "runEndDate"
+             run_start_date as "runStartDate", run_end_date as "runEndDate",
+             coalesce(priority, 0) as "priority"
       FROM campaigns
       WHERE status = 'active'
+      ORDER BY coalesce(priority, 0) DESC, id
     `)) as CampaignRow[];
     
     console.log(`[Campaign Scheduler] Found ${campaignRows.length} active campaigns`);
@@ -269,6 +272,7 @@ export async function campaignSchedulerTick() {
       ? c.trunkIds.split(',').map((t) => t.trim()).filter(Boolean)
       : c.trunkId ? [c.trunkId] : []);
     const campaignsPerTrunk = new Map<string, number>();
+    const dueCampaigns: Array<{ priority: number; trunks: string[] }> = [];
     for (const c of campaignRows) {
       if (!isWithinRunWindow(c.runWindowStart, c.runWindowEnd) || !isValidRunDay(c.runWeekdays) || !isWithinDateRange(c.runStartDate, c.runEndDate)) continue;
       const [due] = rowsFrom(await db.execute(sql`
@@ -278,7 +282,22 @@ export async function campaignSchedulerTick() {
         LIMIT 1
       `));
       if (!due) continue;
-      for (const t of trunkOf(c)) campaignsPerTrunk.set(t, (campaignsPerTrunk.get(t) ?? 0) + 1);
+      dueCampaigns.push({ priority: Number(c.priority) || 0, trunks: trunkOf(c) });
+    }
+    // Priority: a campaign waits on every line a higher-priority campaign with calls due uses
+    // (all lines when either is on automatic trunk choice), e.g. ARZOOM credit results first.
+    const blockedFor = (c: CampaignRow): { all: boolean; trunks: Set<string> } => {
+      const mine = trunkOf(c);
+      const higher = dueCampaigns.filter((d) => d.priority > (Number(c.priority) || 0));
+      const all = higher.some((d) => !d.trunks.length || !mine.length || mine.every((t) => d.trunks.includes(t)));
+      return { all, trunks: new Set(higher.flatMap((d) => d.trunks)) };
+    };
+    for (const d of dueCampaigns) {
+      for (const t of d.trunks) {
+        // Only the top-priority campaigns on a trunk share its lines.
+        const top = Math.max(...dueCampaigns.filter((x) => x.trunks.includes(t)).map((x) => x.priority));
+        if (d.priority === top) campaignsPerTrunk.set(t, (campaignsPerTrunk.get(t) ?? 0) + 1);
+      }
     }
 
     for (const campaign of campaignRows) {
@@ -307,6 +326,12 @@ export async function campaignSchedulerTick() {
         continue;
       }
 
+      const blocked = blockedFor(campaign);
+      if (blocked.all) {
+        console.log(`[Campaign Scheduler] Campaign ${campaign.id} waits: a higher-priority campaign has calls due`);
+        continue;
+      }
+
       console.log(`[Campaign Scheduler] Processing campaign ${campaign.id}: ${campaign.name}`);
 
       // Resolve trunk IDs: use trunk_ids if set, fall back to single trunk_id,
@@ -316,6 +341,7 @@ export async function campaignSchedulerTick() {
         : campaign.trunkId
           ? [campaign.trunkId]
           : [];
+      const usableTrunks = assignedTrunks.filter((t) => !blocked.trunks.has(t));
 
       // Fetch pending campaign calls that haven't reached max attempts
       const callRows = rowsFrom(await db.execute(sql`
@@ -359,7 +385,7 @@ export async function campaignSchedulerTick() {
         const placedCalls = new Set<number>();
 
         let jobCount = 0;
-        for (const trunkId of assignedTrunks) {
+        for (const trunkId of usableTrunks) {
           let slots = freeSlots.get(trunkId) ?? 0;
           if (slots <= 0) {
             console.log(`[Campaign Scheduler] Trunk ${trunkId} busy, skipping`);
