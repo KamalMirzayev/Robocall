@@ -208,6 +208,7 @@ async function listenToCall(ai: GoogleGenAI, model: string, jobId: number): Prom
 }
 
 async function pronunciationReport(calls: AuditedCall[], stats: AuditStats): Promise<string | null> {
+  if (!process.env.GEMINI_API_KEY) console.warn('[call-audit] GEMINI_API_KEY is not set: no AI report, no recordings check');
   if (!process.env.GEMINI_API_KEY || String(process.env.CALL_AUDIT_AUDIO || 'on').toLowerCase() === 'off') return null;
   const max = Math.max(1, Math.min(Number(process.env.CALL_AUDIT_AUDIO_CALLS || 20), 100));
   // Real conversations only, flagged ones first, then the longest.

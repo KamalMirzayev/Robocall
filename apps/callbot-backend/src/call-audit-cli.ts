@@ -2,6 +2,11 @@
 // node dist/call-audit-cli.js --job 2970               (listen to one recording for Turkish pronunciation)
 import 'dotenv/config';
 import { bakuDay, listenToJob, runCallAudit } from './call-audit.js';
+import { loadSettings } from './settings.js';
+
+// Keys entered in the panel (GEMINI_API_KEY, ...) live in app_settings, not in the .env: load them
+// like the API does, or the AI and the recordings check fail here while they work in the service.
+await loadSettings().catch((err) => console.warn('settings not loaded:', (err as Error).message));
 
 const args = process.argv.slice(2);
 const jobArg = args.indexOf('--job');
