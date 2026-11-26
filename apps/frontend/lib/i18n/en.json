@@ -1131,7 +1131,7 @@
       },
       "email": {
         "title": "E-mail (SMTP)",
-        "text": "When a customer agreed to a rep and was put on the line but nobody answered, the customer details and the conversation are e-mailed. General recipients are here; extra recipients per campaign are in the campaign settings. You can use the ARZOOM SMTP mailbox (e.g. smtp.office365.com, 587)."
+        "text": "When a customer was put through but no rep answered, the details and the conversation are e-mailed to that campaign's owners, set in each campaign's settings. You can use the ARZOOM SMTP mailbox (e.g. smtp.office365.com, 587)."
       }
     },
     "keys": {
@@ -1154,8 +1154,7 @@
       "SMTP_PORT": "SMTP port",
       "SMTP_USER": "SMTP user",
       "SMTP_PASSWORD": "SMTP password",
-      "MAIL_FROM": "Sender address",
-      "TRANSFER_FAIL_EMAILS": "Mail when no rep answers (all campaigns, comma separated)"
+      "MAIL_FROM": "Sender address"
     },
     "arzoomOff": "Not connected",
     "arzoomApplications": "applications",

@@ -52,8 +52,8 @@ const segmentName: Record<string, string> = {
  * After any campaign call where the customer agreed to talk to a person and the bot tried to
  * put them through, but nobody picked up (busy, no answer, the queue dropped, the customer left
  * while waiting): mail the customer's details, the result and the transcript.
- * Recipients: the campaign's transferFailEmails (and a service campaign's coordinatorEmail),
- * plus TRANSFER_FAIL_EMAILS from the Integrations panel for every campaign.
+ * Recipients: that campaign's owners (segment_params.transferFailEmails, set in the campaign
+ * form) and a service campaign's coordinatorEmail.
  * Errors are logged, never thrown.
  */
 export async function notifyFailedTransferByMail(p: { customerId: number; telephonyJobId: number | null; transcript: string | null }): Promise<void> {
@@ -81,7 +81,6 @@ export async function notifyFailedTransferByMail(p: { customerId: number; teleph
     const to = [...new Set([
       ...emailsOf(params?.transferFailEmails),
       ...(row.segment === 'service_return' ? emailsOf(params?.coordinatorEmail) : []),
-      ...emailsOf(process.env.TRANSFER_FAIL_EMAILS),
     ].map((x) => x.toLowerCase()))];
     if (!to.length) return;
     if (!smtpConfigured()) {

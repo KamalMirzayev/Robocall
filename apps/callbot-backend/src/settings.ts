@@ -31,8 +31,6 @@ export const SETTINGS: SettingDef[] = [
   { key: 'SMTP_USER', group: 'email', secret: false, placeholder: 'arzoomcall@acb.az' },
   { key: 'SMTP_PASSWORD', group: 'email', secret: true },
   { key: 'MAIL_FROM', group: 'email', secret: false, placeholder: 'arzoomcall@acb.az' },
-  // Every campaign: a customer who agreed to a rep but nobody picked up is mailed here.
-  { key: 'TRANSFER_FAIL_EMAILS', group: 'email', secret: false, placeholder: 'satis@acb.az, rehber@acb.az' },
   { key: 'EVOLUTION_API_URL', group: 'whatsapp', secret: false, url: true },
   { key: 'EVOLUTION_API_KEY', group: 'whatsapp', secret: true },
   { key: 'EVOLUTION_INSTANCE_NAME', group: 'whatsapp', secret: false },
@@ -81,7 +79,6 @@ export function validateSetting(key: string, value: string): string | null {
   if (value.length > 2000) return 'value is too long';
   if (key === 'GEMINI_BALANCE_USD' && value && !Number.isFinite(Number(value.replace(',', '.')))) return 'enter a number, e.g. 250.00';
   if (key === 'SMTP_PORT' && value && !/^\d{2,5}$/.test(value)) return 'enter a port, e.g. 587';
-  if (key === 'TRANSFER_FAIL_EMAILS' && value && value.split(/[,;\s]+/).filter(Boolean).some((x) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x))) return 'enter e-mail addresses separated by commas';
   if (key === 'MAIL_FROM' && value && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value)) return 'enter an e-mail address';
   if (def.url && value) {
     try {

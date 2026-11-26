@@ -403,7 +403,7 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
     { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
     {
       key: 'transferFailEmails', type: 'text',
-      label: { az: 'Nümayəndə cavab verməyəndə müştəri məlumatı göndəriləcək e-poçtlar (vergüllə; İnteqrasiyalardakı ümumi ünvanlara əlavə)', en: 'E-mails for customers the rep did not answer (comma separated; in addition to the general ones in Integrations)' },
+      label: { az: 'Kampaniya sahiblərinin e-poçtu: nümayəndə cavab verməyəndə müştəri məlumatı bura göndərilir (vergüllə)', en: 'Campaign owners\' e-mail: customers no rep answered are sent here (comma separated)' },
       placeholder: { az: 'Məs. satis@acb.az', en: 'E.g. sales@acb.az' },
     },
   ],
@@ -427,7 +427,7 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
     { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
     {
       key: 'transferFailEmails', type: 'text',
-      label: { az: 'Nümayəndə cavab verməyəndə müştəri məlumatı göndəriləcək e-poçtlar (vergüllə; İnteqrasiyalardakı ümumi ünvanlara əlavə)', en: 'E-mails for customers the rep did not answer (comma separated; in addition to the general ones in Integrations)' },
+      label: { az: 'Kampaniya sahiblərinin e-poçtu: nümayəndə cavab verməyəndə müştəri məlumatı bura göndərilir (vergüllə)', en: 'Campaign owners\' e-mail: customers no rep answered are sent here (comma separated)' },
       placeholder: { az: 'Məs. satis@acb.az', en: 'E.g. sales@acb.az' },
     },
   ],
@@ -466,7 +466,7 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
     { key: 'note', type: 'textarea', label: { az: 'Bot üçün əlavə qeyd', en: 'Extra note for the bot' } },
     {
       key: 'transferFailEmails', type: 'text',
-      label: { az: 'Nümayəndə cavab verməyəndə müştəri məlumatı göndəriləcək e-poçtlar (vergüllə; İnteqrasiyalardakı ümumi ünvanlara əlavə)', en: 'E-mails for customers the rep did not answer (comma separated; in addition to the general ones in Integrations)' },
+      label: { az: 'Kampaniya sahiblərinin e-poçtu: nümayəndə cavab verməyəndə müştəri məlumatı bura göndərilir (vergüllə)', en: 'Campaign owners\' e-mail: customers no rep answered are sent here (comma separated)' },
       placeholder: { az: 'Məs. satis@acb.az', en: 'E.g. sales@acb.az' },
     },
   ],
@@ -498,6 +498,11 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
       ],
     },
     { key: 'location', type: 'text', label: { az: 'Salon / filial ünvanı', en: 'Showroom / branch address' } },
+    {
+      key: 'transferFailEmails', type: 'text',
+      label: { az: 'Kampaniya sahiblərinin e-poçtu: nümayəndə cavab verməyəndə müştəri məlumatı bura göndərilir (vergüllə)', en: 'Campaign owners\' e-mail: customers no rep answered are sent here (comma separated)' },
+      placeholder: { az: 'Məs. satis@acb.az', en: 'E.g. sales@acb.az' },
+    },
   ],
   application_status: [
     {
@@ -523,7 +528,7 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
     },
     {
       key: 'transferFailEmails', type: 'text',
-      label: { az: 'Nümayəndə cavab verməyəndə müştəri məlumatı göndəriləcək e-poçtlar (vergüllə; İnteqrasiyalardakı ümumi ünvanlara əlavə)', en: 'E-mails for customers the rep did not answer (comma separated; in addition to the general ones in Integrations)' },
+      label: { az: 'Kampaniya sahiblərinin e-poçtu: nümayəndə cavab verməyəndə müştəri məlumatı bura göndərilir (vergüllə)', en: 'Campaign owners\' e-mail: customers no rep answered are sent here (comma separated)' },
       placeholder: { az: 'Məs. satis@acb.az', en: 'E.g. sales@acb.az' },
     },
   ],
@@ -556,6 +561,11 @@ export const SEGMENT_FIELDS: Partial<Record<SegmentKey, SegmentField[]>> = {
       key: 'questions', type: 'textarea',
       label: { az: 'Əlavə suallar', en: 'Extra questions' },
       placeholder: { az: 'Hər sətirdə bir sual', en: 'One question per line' },
+    },
+    {
+      key: 'transferFailEmails', type: 'text',
+      label: { az: 'Kampaniya sahiblərinin e-poçtu: nümayəndə cavab verməyəndə müştəri məlumatı bura göndərilir (vergüllə)', en: 'Campaign owners\' e-mail: customers no rep answered are sent here (comma separated)' },
+      placeholder: { az: 'Məs. satis@acb.az', en: 'E.g. sales@acb.az' },
     },
   ],
 };
