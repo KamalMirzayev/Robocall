@@ -1,0 +1,568 @@
+import { sql } from 'drizzle-orm';
+import { textModel } from './text-model.js';
+import { GoogleGenAI } from '@google/genai';
+import { db } from './db/index.js';
+import { recordAiTokenUsage } from './ai-usage.js';
+import { scheduleArzoomAnalyticsPush } from './arzoom-analytics.js';
+
+// Results of calls to customers imported from Excel (service customers, credit offer).
+// ARZOOM applications keep their own arzoom_feedback table; these campaigns write here.
+
+export const EXCEL_SOURCE = 'excel';
+export const EXCEL_SEGMENTS = new Set(['service_return', 'credit_offer', 'trade_in']);
+
+export const RESULT_OUTCOMES: Record<string, Record<string, string>> = {
+  service_return: {
+    will_visit: 'Servisə gələcək',
+    transferred_to_rep: 'Servis nümayəndəsinə qoşuldu',
+    wants_rep_contact: 'Servis nümayəndəsi əlaqə saxlasın',
+    callback: 'Sonra zəng edilməsini istədi',
+    thinking: 'Düşünəcək',
+    serviced_elsewhere: 'Başqa servisə gedir',
+    sold_car: 'Maşını satıb / istifadə etmir',
+    not_interested: 'Maraqlanmır',
+    complaint: 'Narazılığı var',
+    wrong_person: 'Səhv nömrə / başqa şəxs',
+    other: 'Digər',
+  },
+  trade_in: {
+    agrees_send_link: 'Kreditlə almaq istəyir, müraciət linki göndərilsin',
+    wants_rep_contact: 'Maşınını dəyişmək istəyir, əməkdaş əlaqə saxlasın',
+    transferred_to_rep: 'Satış nümayəndəsinə qoşuldu',
+    callback: 'Sonra zəng edilməsini istədi',
+    thinking: 'Düşünəcək',
+    not_interested: 'Maraqlanmır',
+    wrong_person: 'Səhv nömrə / başqa şəxs',
+    other: 'Digər',
+  },
+  credit_offer: {
+    agrees_send_link: 'Razıdır, müraciət linki göndərilsin',
+    thinking: 'Düşünəcək',
+    callback: 'Sonra zəng edilməsini istədi',
+    not_interested: 'Maraqlanmır',
+    has_car: 'Artıq maşını var / alıb',
+    wrong_person: 'Səhv nömrə / başqa şəxs',
+    other: 'Digər',
+  },
+};
+
+// ARZOOM sends the application link for these brands only.
+export const LINK_BRANDS = ['Toyota', 'BYD', 'Mazda', 'Mitsubishi'] as const;
+
+export function linkBrand(raw: unknown): string | null {
+  const t = String(raw ?? '').toLowerCase();
+  if (!t) return null;
+  if (/toyota|tayota|тойота/.test(t)) return 'Toyota';
+  if (/\bbyd\b|^byd/.test(t)) return 'BYD';
+  if (/mazda|мазда/.test(t)) return 'Mazda';
+  if (/mitsub|мицуб/.test(t)) return 'Mitsubishi';
+  return null;
+}
+
+// Brand of a Group Motors model name ("Seal 05" -> BYD, "Corolla" -> Toyota), for sheets
+// that carry only the model.
+const MODEL_BRANDS: Array<[RegExp, string]> = [
+  [/\b(seal|sealion|yuan|song|han|tang|qin|atto|dolphin|shark|destroyer|frigate|leopard)\b/i, 'BYD'],
+  [/\b(corolla|camry|rav\s*-?4|land\s*cruiser|prado|hilux|c-?hr|yaris|highlander|fortuner|bz\s*-?\d+x?|crown|avalon|sequoia|tundra|tacoma|hiace|rush|veloz|raize|innova|sienna|supra|lc\s*\d+)\b/i, 'Toyota'],
+  [/\b(cx\s*-?\d+|mx\s*-?\d+|bt\s*-?50|mazda\s*\d)\b/i, 'Mazda'],
+  [/\b(outlander|pajero|asx|l\s*-?200|eclipse|xpander|attrage|lancer|triton|montero|mirage)\b/i, 'Mitsubishi'],
+];
+
+export function brandOfModel(raw: unknown): string | null {
+  const t = String(raw ?? '');
+  return linkBrand(t) ?? MODEL_BRANDS.find(([re]) => re.test(t))?.[1] ?? null;
+}
+
+// Splits what the sheet gave into brand and model: a lone model gets its brand.
+export function splitCar(brandCell: string, modelCell: string): { brand: string; model: string } {
+  let brand = brandCell.trim();
+  let model = modelCell.trim();
+  if (brand && !linkBrand(brand) && !model) {
+    model = brand;
+    brand = '';
+  }
+  if (!brand) brand = brandOfModel(model) ?? '';
+  return { brand, model };
+}
+
+function rowsFrom(result: unknown): Record<string, unknown>[] {
+  if (Array.isArray(result)) return result as Record<string, unknown>[];
+  const rows = (result as { rows?: Record<string, unknown>[] }).rows;
+  return Array.isArray(rows) ? rows : [];
+}
+
+export async function ensureCampaignResultsSchema(): Promise<void> {
+  await db.execute(sql`ALTER TABLE customers ADD COLUMN IF NOT EXISTS import_data jsonb`);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS campaign_results (
+      id serial PRIMARY KEY,
+      campaign_id integer,
+      customer_id integer NOT NULL,
+      telephony_job_id integer,
+      segment varchar(40) NOT NULL,
+      outcome varchar(40) NOT NULL,
+      outcome_label text NOT NULL,
+      reason text,
+      callback_at timestamptz,
+      sms_status varchar(20),
+      sms_error text,
+      created_at timestamptz NOT NULL DEFAULT now()
+    )
+  `);
+  await db.execute(sql`ALTER TABLE campaign_results ADD COLUMN IF NOT EXISTS brand varchar(20)`);
+  // Sheets imported before brand/model were recognised: pull "Brend"/"Model" out of the extra
+  // columns, and give a lone model its brand.
+  for (const row of rowsFrom(await db.execute(sql`
+    SELECT id, import_data AS d FROM customers
+    WHERE source_system = 'excel' AND import_data IS NOT NULL
+      AND (coalesce(import_data->>'model', '') = '' OR import_data->>'brand' IS NULL OR import_data->>'brand' !~* '(toyota|byd|mazda|mitsub)')
+  `))) {
+    const d = (typeof row.d === 'string' ? JSON.parse(row.d) : row.d) as Record<string, unknown>;
+    const extra = d.extra && typeof d.extra === 'object' ? (d.extra as Record<string, unknown>) : {};
+    const pick = (re: RegExp) => String(Object.entries(extra).find(([k]) => re.test(k))?.[1] ?? '');
+    const { brand, model } = splitCar(String(d.brand ?? '') || pick(/brend|brand|marka/i), String(d.model ?? '') || pick(/model/i));
+    if (brand === String(d.brand ?? '') && model === String(d.model ?? '')) continue;
+    await db.execute(sql`
+      UPDATE customers SET import_data = import_data || ${JSON.stringify({ brand: brand || null, model: model || null })}::jsonb,
+        category = ${[brand, model].filter(Boolean).join(' ') || null}
+      WHERE id = ${Number(row.id)}
+    `);
+  }
+  // Calls closed as "other" only because the customer never spoke (before that was detected):
+  // drop those results and put the customers back in the retry queue.
+  await db.execute(sql`
+    WITH bad AS (
+      DELETE FROM campaign_results
+      WHERE outcome = 'other' AND reason LIKE 'Bot zəng zamanı nəticəni qeyd etməyib%'
+      RETURNING customer_id, campaign_id
+    )
+    UPDATE campaign_calls cc
+    SET status = CASE WHEN cc.attempt_number < c.max_attempts THEN 'retrying' ELSE 'failed' END,
+        call_after = CASE WHEN cc.attempt_number < c.max_attempts THEN now() + interval '2 hours' ELSE cc.call_after END,
+        updated_at = now()
+    FROM campaigns c, bad
+    WHERE c.id = cc.campaign_id AND cc.campaign_id = bad.campaign_id AND cc.customer_id = bad.customer_id AND cc.status = 'completed'
+  `);
+  await db.execute(sql`
+    UPDATE customers SET pks_status = NULL, pks_comment = NULL
+    WHERE source_system = 'excel' AND pks_comment LIKE 'Bot zəng zamanı nəticəni qeyd etməyib%'
+  `);
+  // Customers with a final result that a late hang-up report left in the retry queue.
+  await db.execute(sql`
+    UPDATE campaign_calls cc SET status = 'completed', call_after = NULL, updated_at = now()
+    WHERE cc.status IN ('retrying', 'failed')
+      AND EXISTS (SELECT 1 FROM campaign_results r WHERE r.customer_id = cc.customer_id AND r.campaign_id = cc.campaign_id AND r.outcome <> 'callback')
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS campaign_results_job_idx ON campaign_results (telephony_job_id)`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS campaign_results_customer_idx ON campaign_results (customer_id)`);
+}
+
+// ---------------------------------------------------------------------------------------
+// Time helpers (Baku). The bot passes "YYYY-MM-DD HH:MM" for a callback.
+
+export function bakuIsoNow(): string {
+  const p = Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Baku', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'long',
+  }).formatToParts(new Date()).map((x) => [x.type, x.value]));
+  return `${p.year}-${p.month}-${p.day} ${p.hour === '24' ? '00' : p.hour}:${p.minute} (${p.weekday})`;
+}
+
+export function parseBakuTime(value: unknown): Date | null {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/.exec(text);
+  const at = m && !/(Z|[+-]\d{2}:?\d{2})$/.test(text)
+    ? new Date(`${m[1]}-${m[2]}-${m[3]}T${m[4].padStart(2, '0')}:${m[5]}:00+04:00`)
+    : new Date(text);
+  const t = at.getTime();
+  if (!Number.isFinite(t)) return null;
+  if (t < Date.now() + 5 * 60_000 || t > Date.now() + 60 * 24 * 3600_000) return null;
+  return at;
+}
+
+function bakuText(at: Date): string {
+  return new Intl.DateTimeFormat('az-AZ', { timeZone: 'Asia/Baku', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false }).format(at);
+}
+
+// ---------------------------------------------------------------------------------------
+// What the bot is told about an imported customer.
+
+// Trade-in campaign wording, from the campaign's parameters.
+export function tradeInTerms(params: Record<string, unknown> | null | undefined): { company: string; model: string; brand: string; address: string; hours: string } {
+  const p = params ?? {};
+  const t = (v: unknown, d: string) => String(v ?? '').trim() || d;
+  const model = t(p.model, 'Corolla');
+  // company is said as "<company> narahat edirik", so it carries the "-dən" ending.
+  return {
+    company: t(p.company, 'Toyota Abşeron Mərkəzindən'),
+    model,
+    brand: t(p.brand, brandOfModel(model) ?? 'Toyota'),
+    address: t(p.address, ''),
+    hours: t(p.hours, ''),
+  };
+}
+
+// Group Motors Mazda pilot: one free service of seven for owners who have not come for a long time.
+// A service_return campaign with segment_params.program = "mazda_free_service".
+export function isMazdaFreeService(params: Record<string, unknown> | null | undefined): boolean {
+  return String(params?.program ?? '') === 'mazda_free_service';
+}
+
+const AZ_MONTHS = ['yanvar', 'fevral', 'mart', 'aprel', 'may', 'iyun', 'iyul', 'avqust', 'sentyabr', 'oktyabr', 'noyabr', 'dekabr'];
+/** "31 dekabr 2026": segment_params.deadline, else the end of next month (Baku). */
+export function campaignDeadline(params: Record<string, unknown> | null | undefined): string {
+  const set = String(params?.deadline ?? '').trim();
+  if (set) return set;
+  const [y, m] = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Baku', year: 'numeric', month: '2-digit' }).format(new Date()).split('-').map(Number);
+  const nm = m === 12 ? 1 : m + 1;
+  const ny = m === 12 ? y + 1 : y;
+  const last = new Date(Date.UTC(ny, nm, 0)).getUTCDate();
+  return `${last} ${AZ_MONTHS[nm - 1]} ${ny}`;
+}
+
+function mazdaFreeServiceLines(params: Record<string, unknown> | null | undefined, canTransfer: boolean): string {
+  const deadline = campaignDeadline(params);
+  const company = String(params?.company ?? '').trim() || 'Groupmotors Mazda servis mərkəzi';
+  const transfer = canTransfer
+    ? `"Əlbəttə, sizi servis koordinatorumuzla əlaqələndirirəm. Bir neçə saniyə xətdə qalın." de və dərhal transfer_to_sales alətini çağır, sonra heç nə demə. Alət uğursuz olsa (koordinator məşğuldur): "Hazırda servis koordinatorumuz digər müştəriyə xidmət göstərir. İstəsəniz, sizinlə münasib vaxtda əlaqə saxlanılması üçün müraciətinizi qeyd edim?" Razı olsa, hansı vaxt uyğun olduğunu soruş və record_campaign_result alətini outcome=wants_rep_contact ilə çağır (reason-a seçdiyi xidməti və uyğun vaxtı yaz).`
+    : `"Servis koordinatorumuz sizinlə tezliklə əlaqə saxlayacaq və gəlişiniz üçün uyğun vaxtı təyin edəcək." de, hansı vaxt zəng etməyin uyğun olduğunu soruş və record_campaign_result alətini outcome=wants_rep_contact ilə çağır (reason-a seçdiyi xidməti və uyğun vaxtı yaz).`;
+  return [
+    `- MAZDA SERVİS SSENARİSİ (agent təlimatından və trade-in/satış qaydalarından üstündür, yalnız bu ssenari ilə danış).`,
+    `  ROL: sən ${company}nin virtual müştəri əlaqələri köməkçisisən, təcrübəli, nəzakətli servis koordinatoru kimi danışırsan. Özünü insan əməkdaş kimi təqdim etmə. "Robotsunuz?", "süni intellektsiniz?" soruşsalar, dürüst de: "Mən Groupmotors Mazda servis mərkəzinin virtual köməkçisiyəm. Sizə xüsusi servis kampaniyamız haqqında məlumat vermək üçün zəng etmişəm."`,
+    `  QADAĞAN: müştərinin uzun müddət servisə gəlmədiyini, passiv müştəri olduğunu, bu səbəbdən seçildiyini, əvvəlki servis tarixçəsini HEÇ VAXT demə və müzakirə etmə. Maşında problem olduğunu, nasazlıq ola biləcəyini demə. Endirim, pulsuz təmir, əlavə pulsuz xidmət vəd etmə. Servisə gəliş vaxtını özün təyin etmə və "vaxtınız təyin olundu" demə: vaxtı yalnız servis koordinatoru təyin edir. Kampaniyanın bitmə tarixini dəyişmə, əlavə vaxt vəd etmə.`,
+    `  TƏKLİF: Mazda avtomobili üçün xüsusi servis kampaniyası. Müştəri bu yeddi xidmətdən YALNIZ BİRİNİ tamamilə ödənişsiz seçə bilər: 1) mühərrikxananın xüsusi avadanlıqla su ilə təmizlənməsi, 2) kondisioner sisteminin ozonla təmizlənməsi, 3) təkərlərin bucaq tənzimlənməsi (razval), 4) təkərlərin balanslaşdırılması, 5) faraların tənzimlənməsi, 6) elektron diaqnostika, 7) ümumi texniki baxış. Bütün xidmətlərin birlikdə pulsuz olduğu təəssüratını YARATMA. Kampaniya ${deadline} tarixinədək qüvvədədir.`,
+    `  1) Salamlaşmada yalnız özünü təqdim edib danışmağa münasib olub-olmadığını soruşdun. Açıq razılıq ("bəli", "buyurun") olmadan təklifi danışma.`,
+    `  2) Razılıqdan sonra qısa de: "Çox sağ olun. Sizin Mazda avtomobiliniz üçün xüsusi servis kampaniyamız var. Kampaniya çərçivəsində sizə bir neçə xidmətdən birini tamamilə ödənişsiz təqdim edə bilərik." Uzun izah vermə, dayan və dinlə.`,
+    `  3) Müştəri "nədir?", "hansı xidmətlər?" soruşsa: "Mühərrikxananın təmizlənməsi, kondisionerin ozonla təmizlənməsi, razval, balans, faraların tənzimlənməsi, elektron diaqnostika və ya ümumi texniki baxış xidmətlərindən birini tamamilə ödənişsiz seçə bilərsiniz. Yalnız birini seçmək imkanınız var, servis koordinatorumuz seçimdə kömək edə bilər."`,
+    `  TƏKRAR İSTƏYİ: müştəri "bir də deyin", "təkrar edin", "yadımda qalmadı", "nə dediniz?" desə, son dediyini (məsələn xidmətlərin siyahısını) sakit, aydın, bir-bir yenidən de. Bu, maraq və ya koordinator istəyi DEYİL: koordinatora keçmə, vaxt soruşma.`,
+    `  SƏLİS DANIŞ: canlı insan kimi qısa, təbii cümlələrlə danış. Cavaba "Anladım", "Çox sağ olun", "Başa düşürəm" kimi boş sözlərlə BAŞLAMA, birbaşa sualın cavabını ver. Bəli/xeyr sualına əvvəl "Bəli" və ya "Xeyr" de. Məsələn "Heç pul ödəməyəcəm?" — "Bəli, düzdür, seçdiyiniz xidmət üçün heç nə ödəmirsiniz." Bir cavabda ən çox iki-üç cümlə.`,
+    `  4) Sonra soruş: "Bu kampaniyadan yararlanmaq sizin üçün maraqlı olardı?" Müştəri bir xidmət adını çəksə, onu yadda saxla. Xidmətin nə olduğunu soruşsa, sadə izah et (texniki detalları uydurma, lazım olsa search_knowledge_base istifadə et).`,
+    `  5) KOORDİNATORA YÖNLƏNDİRMƏ: əsas məqsəd maraqlı müştərini canlı servis koordinatoruna yönləndirməkdir, amma əvvəl müştərinin suallarına özün cavab ver (xidmətlər, pulsuz olub-olmaması, şərtlər, müddət, ünvan, iş saatı: lazım olsa search_knowledge_base). Söhbətin ortasında, sual cavablandırılmamış, qoşmağı təklif etmə. Müştəri maraqlıdırsa (kampaniyadan yararlanmaq, servisə gəlmək, vaxt təyin etmək istəyir) və açıq sualı qalmayıbsa, de: "Çox yaxşı! O zaman sizi servis koordinatorumuzla əlaqələndirim. O, sizə ətraflı məlumat verəcək və servisə gəlməyiniz üçün uyğun vaxtı müəyyənləşdirəcək." və: ${transfer} Müştəri özü "canlı əməkdaşla danışmaq istəyirəm", "qoşun" desə və ya sualına əminliklə cavab verə bilmirsənsə, dərhal: ${transfer} "Bir də deyin", "təkrar edin", "aydındır" kimi sözlər qoşma istəyi DEYİL.`,
+    `  ETİRAZLAR: "Niyə pulsuzdur?" — "Bu, Groupmotors Mazda tərəfindən müştərilərimiz üçün təşkil olunmuş xüsusi servis kampaniyasıdır, qeyd etdiyim xidmətlərdən birini ödənişsiz əldə edə bilərsiniz." "Niyə məhz mənə zəng edirsiniz?" — "Sizin avtomobiliniz kampaniyaya düşüb. Sizin də bu kampaniyadan yararlanmaq imkanınız var." "Hamısını pulsuz ala bilərəm?" — "Xeyr, sadalanan xidmətlərdən yalnız birini seçə bilərsiniz, seçdiyiniz xidmət tamamilə ödənişsiz olacaq." "Əlavə ödəniş çıxacaq?" — "Seçdiyiniz kampaniya xidməti tamamilə ödənişsizdir. Əlavə xidmət və ya təmirə ehtiyac yaranarsa, sizə əvvəlcədən deyiləcək və yalnız razılığınızla edilir." "Başqa servisə gedirəm" — "Başa düşürəm. Bununla belə, Mazda servis mərkəzimizdə bu xüsusi kampaniyadan yararlanmaq imkanınız var. İstəsəniz, sizi koordinatorumuzla əlaqələndirə bilərəm." (razı olsa, 5-ci addımdakı kimi qoş) "Düşünərəm" — "Əlbəttə, qərar vermək sizə aiddir. Sadəcə nəzərinizə çatdırım ki, kampaniya ${deadline} tarixinədək qüvvədədir. İstəsəniz, ətraflı məlumat üçün sizi koordinatorumuzla əlaqələndirə bilərəm." (razı olsa, 5-ci addımdakı kimi qoş)`,
+    `  İMTİNA: "xidmət lazım deyil", "maraqlı deyil" desə, İSRAR ETMƏ, mübahisə etmə: "Əlbəttə, xüsusi kampaniya barədə məlumat vermək istədik. Vaxt ayırdığınız üçün təşəkkür edirik. Sizə xoş gün arzulayırıq!" outcome=not_interested. Maşını satıbsa: "Anladım, məlumat verdiyiniz üçün təşəkkür edirəm. Narahat etdiyimiz üçün üzr istəyirik. Sizə xoş gün arzulayıram." outcome=sold_car. Başqa servisdə xidmət alırsa və maraqlanmırsa: outcome=serviced_elsewhere. Səhv nömrədirsə: outcome=wrong_person.`,
+    `  SONLUQ: koordinatora qoşulmayan maraqlı müştəriyə: "Diqqətiniz üçün təşəkkür edirik. Sizi Mazda servis mərkəzimizdə görməkdən məmnun olarıq. Xoş günlər!"`,
+    `  DİL: müştəri rus dilində danışırsa rus dilində, ingilis dilində danışırsa ingilis dilində davam et; dilini dəyişsə, sən də dəyiş. Azərbaycan dilində danışırsa, yalnız Azərbaycan dilində danış. Dil haqqında sual vermə. Uzun monoloq etmə, təzyiq göstərmə, müştərinin sözünü kəsmə. Kitabi və tərcümə kimi səslənən ifadələr işlətmə, gündəlik danışıq dili ilə danış.`,
+  ].join('\n');
+}
+
+export function excelCustomerLines(data: unknown, segment: string | null, opts: { canTransfer?: boolean; params?: Record<string, unknown> | null } = {}): string[] {
+  if (!data || typeof data !== 'object') return [];
+  const d = data as Record<string, unknown>;
+  const lines: string[] = [];
+  const s = (v: unknown) => (v == null ? '' : String(v).trim());
+  const extraModel = d.extra && typeof d.extra === 'object'
+    ? Object.entries(d.extra as Record<string, unknown>).find(([k]) => /model/i.test(k))?.[1]
+    : undefined;
+  const extraBrand = d.extra && typeof d.extra === 'object'
+    ? Object.entries(d.extra as Record<string, unknown>).find(([k]) => /brend|brand|marka/i.test(k))?.[1]
+    : undefined;
+  const sc = splitCar(s(d.brand) || s(extraBrand), s(d.model) || s(extraModel));
+  // "Mazda" + "Mazda 3" reads "Mazda 3", not "Mazda Mazda 3".
+  const car = sc.model && sc.model.toLowerCase().startsWith(sc.brand.toLowerCase())
+    ? sc.model
+    : [sc.brand, sc.model && !sc.brand.toLowerCase().includes(sc.model.toLowerCase()) ? sc.model : ''].filter(Boolean).join(' ');
+  if (car) lines.push(segment === 'credit_offer' ? `- Əvvəl kredit üçün müraciət etdiyi avtomobil (marka və model): ${car}` : segment === 'trade_in' ? `- Müştərinin hazırkı avtomobili: ${car}` : `- Avtomobil: ${car}`);
+  if (s(d.last_service_date) && !isMazdaFreeService(opts.params)) lines.push(`- Son dəfə servisə gəlib: ${s(d.last_service_date)}`);
+  if (s(d.last_talk) && !isMazdaFreeService(opts.params)) lines.push(`- Əvvəlki danışıq (müştəri ilə son əlaqənin qeydi): ${s(d.last_talk).slice(0, 800)}`);
+  const extra = d.extra && typeof d.extra === 'object' ? (d.extra as Record<string, unknown>) : {};
+  for (const [k, v] of isMazdaFreeService(opts.params) ? [] : Object.entries(extra).slice(0, 10)) {
+    if (s(v)) lines.push(`- ${k}: ${s(v).slice(0, 300)}`);
+  }
+  const outcomes = RESULT_OUTCOMES[segment ?? ''] ?? {};
+  if (Object.keys(outcomes).length) {
+    lines.push(`- NƏTİCƏ: Zəngin sonunda (sağollaşmadan əvvəl) record_campaign_result alətini çağır. outcome bunlardan biri: ${Object.entries(outcomes).map(([k, v]) => `${k} (${v})`).join(', ')}. reason-a müştərinin dediklərini 1-3 cümlə ilə yaz.`);
+  }
+  lines.push(`- SONRA ZƏNG: İndiki vaxt (Bakı): ${bakuIsoNow()}. Müştəri indi danışa bilmədiyini və ya sonra zəng edilməsini istəsə: "Sizə hansı gün, saat neçədə zəng edək?" deyə soruş, yalnız gün desə saatı da soruş. Sonra record_campaign_result alətini outcome=callback və callback_at="YYYY-MM-DD HH:MM" (Bakı vaxtı) ilə çağır, vaxtı müştəriyə təkrarla və sağollaş. Heç bir vaxt demək istəmirsə callback_at="unknown" ver.`);
+  lines.push('- Müştəri ona bir daha zəng edilməməsini istəsə: üzr istə, "sizə bir daha zəng edilməyəcək" de, record_campaign_result alətini outcome=not_interested, do_not_call=true ilə çağır və sağollaş.');
+  if (segment === 'service_return' && isMazdaFreeService(opts.params)) {
+    lines.push(mazdaFreeServiceLines(opts.params, !!opts.canTransfer));
+  } else if (segment === 'service_return') {
+    lines.push(opts.canTransfer
+      ? '- SERVİS NÜMAYƏNDƏSİ: Müştəri təklifə razıdırsa və servisə gəlmək üçün nümayəndə ilə danışmaq istəsə: "Zəhmət olmasa bir neçə saniyə xətdə qalın, sizi servis nümayəndəsinə qoşuram" de və dərhal transfer_to_sales alətini çağır, bundan sonra heç nə demə. Alət uğursuz olsa, nümayəndənin ona tezliklə geri zəng edəcəyini de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır.'
+      : '- SERVİS NÜMAYƏNDƏSİ: Müştəri servisə gəlmək üçün nümayəndə ilə əlaqə istəsə, servis nümayəndəsinin ona tezliklə zəng edəcəyini de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır; reason-a müştərinin uyğun vaxtını yaz.');
+  }
+  if (segment === 'trade_in') {
+    const { company, model, brand, address, hours } = tradeInTerms(opts.params);
+    lines.push([
+      `- TRADE-IN SSENARİSİ (agent təlimatından üstündür, bu ardıcıllıqla danış). Zəng edən: ${company.replace(/(n)?dən$/, '')}. Kampaniya modeli: ${brand} ${model}.`,
+      `  KİMLİK: bu zəngdə sən ${company.replace(/(n)?dən$/, '')}nin əməkdaşısan. Agent təlimatındakı başqa şirkət adını (məs. Arzoom Avto) və "Müştəri Bələdçisi" vəzifəsini çəkmə. "Kimsiniz, hardan zəng edirsiniz?" soruşsalar: "${company} zəng edirəm, ${brand}-nın rəsmi dileriyik" de.`,
+      `  1) Salamlaşmada yalnız özünü təqdim edib vaxtı olub-olmadığını soruşdun. Müştəriyə adı ilə müraciət etmə, həmişə "hörmətli müştəri" de. Model adını Azərbaycan dilinin qaydası ilə şəkilçi qoşaraq təbii tələffüz et.`,
+      `  2) Müştəri "bəli/var/buyurun" desə, təklifi BİR qısa cümlə ilə de və dayan: "${model} sahibləri üçün kampaniyamız var: köhnə ${model}-nızı gətirirsiniz, yenisi ilə əvəz edirik. Maraqlıdırmı?" Krediti hələ demə. Kampaniya şərtlərini, prosesi və detalları əvvəlcədən özün danışma. Müştəri soruşsa ("necədir?", "şərtləri nədir?", "nə qədər?"), sualına ÖZÜN qısa cavab ver, onu bu səbəbə nümayəndəyə qoşma: "Maşınınızı mərkəzimizə gətirirsiniz, mütəxəssislərimiz baxıb qiymətini deyir. Həmin məbləğ yeni ${model}-nın qiymətindən çıxılır, siz yalnız fərqi ödəyirsiniz." Paneldə kampaniya təklifi yazılıbsa, onu da yalnız soruşulanda de. Hər cavab 1-2 cümlə olsun, sonra müştərini dinlə. Qiymət, model, komplektasiya, kredit şərtləri kimi suallarda search_knowledge_base alətindən istifadə edib özün cavab ver.`,
+      opts.canTransfer
+        ? '  3) NÜMAYƏNDƏYƏ YALNIZ MÜŞTƏRİ ÖZÜ İSTƏYƏNDƏ QOŞ: müştəri "qoşun", "nümayəndə ilə danışmaq istəyirəm", "menecerlə danışım" desə və ya maşını dəyişməyə/almağa razı olub "Sizi nümayəndəmizə qoşum?" sualına açıq "bəli" desə. Sual verməsi, maraqlanması və ya "aha", "tamam" deməsi qoşmaq üçün səbəb DEYİL. Belə olanda: "Bir neçə saniyə xətdə qalın, sizi satış nümayəndəmizə qoşuram" de və dərhal transfer_to_sales alətini çağır, sonra heç nə demə. Alət uğursuz olsa, nümayəndənin tezliklə zəng edəcəyini de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır.'
+        : '  3) Müştəri kreditsiz razı olsa (dəyişmək, nağd almaq və ya nümayəndə ilə danışmaq istəsə): maşını nə vaxt gətirə biləcəyini və ya nə vaxt zəng etməyin uyğun olduğunu soruş, nümayəndənin onunla əlaqə saxlayacağını de və record_campaign_result alətini outcome=wants_rep_contact ilə çağır; reason-a maşın haqqında dediklərini (il, yürüş, vəziyyət) və uyğun vaxtı yaz.',
+      `  4) Krediti YALNIZ bundan sonra de: müştəri tərəddüd etsə, pul/qiymət səbəbilə imtina etsə və ya özü kredit soruşsa, "Yeni ${model}-nı kredit şərtləri ilə də almaq mümkündür, fərqi də kreditlə ödəmək olar" de. Kreditlə razı olsa: "Sizə SMS ilə kredit müraciəti linki göndərirəm, linkə daxil olub müraciət edin, 1-2 dəqiqə ərzində cavab gələcək" de və record_campaign_result alətini outcome=agrees_send_link, brand=${brand} ilə çağır.`,
+      '  5) Kreditlə razılaşıb həm də nümayəndə ilə danışmaq istəsə, əvvəl linki göndər (addım 4), sonra nümayəndəyə qoş və ya geri zəng qeyd et (addım 3).',
+      '  SATIŞ ÜSLUBU: sən təcrübəli, özünə güvənən satış əməkdaşısan. Enerjili, inamlı və aydın danış, tərəddüd etmə, "bəlkə", "yəqin ki", "əgər maraqlıdırsa" kimi zəif sözlər işlətmə. Təklifi faydası ilə təqdim et ("bu, sizin üçün sərfəlidir", "yeni maşına ən rahat keçid budur"). Hər cavabdan sonra danışığı növbəti addıma apar: sualla bitir. Nümayəndəni yalnız zəngin sonunda təklif et (NÜMAYƏNDƏ TƏKLİFİ qaydasına bax), özbaşına qoşma. Etiraz gələndə ("düşünərəm", "lazım deyil", "bahadır") dərhal təslim olma: etirazı qəbul et, fayda ilə cavab ver və yenə təklif et. Səs tonun yumşaq, isti və mehriban olsun, gülümsəyərək danışırmış kimi; sərt, kobud, əmredici ton işlətmə. İnamın sözlərində olsun, səsin sərtliyində yox. Xahiş edən yox, təklif edən kimi danış.',
+      `  MÜŞTƏRİDƏ ${model} YOXDURSA ("məndə ${model} yoxdur", "o maşını satmışam"): üzr istə və soruş: "Bağışlayın, görünür məlumatımızda səhv var. Hazırda hansı maşından istifadə edirsiniz?" Başqa maşını varsa: "Həmin maşını da dəyərləndirib yenisi ilə əvəz edə bilərik." Maşını yoxdursa: "Yeni maşın almaq istəsəniz, kreditlə də ala bilərsiniz." Sonra suallarına cavab ver. Maraq yoxdursa, hörmətlə sağollaş.`,
+      `  MAŞIN HAQQINDA HƏR SUAL (qiymət, komplektasiyalar, motor, mühərrik həcmi, güc, sürətlər qutusu, yanacaq sərfi, hibrid, rənglər, avadanlıq): HƏR DƏFƏ search_knowledge_base alətini çağır, məsələn query="${brand} ${model} komplektasiya motor" və ya "${brand} ${model} qiymət", brand="${brand.toLowerCase()}". Gələn məlumatla özün, qısa və konkret cavab ver (komplektasiyaların adını və əsas fərqini, motoru, qiyməti de). "Bu məlumat nümayəndədədir" DEMƏ, əvvəl bazaya bax. Bazada həqiqətən yoxdursa, olanı de və bir cümlə ilə əlavə et ki, qalanını mərkəzdə dəqiqləşdirə bilər.`,
+      address && hours
+        ? `  ÜNVAN VƏ İŞ SAATI: ünvan: ${address}. İş saatları: ${hours}. Soruşanda bunu de.`
+        : `  ÜNVAN VƏ İŞ SAATI: soruşanda search_knowledge_base alətini query="${company.replace(/(n)?dən$/, '')} ünvan iş saatları" ilə çağır və gələn məlumatı de. Bazada yoxdursa, uydurma: "Dəqiq ünvanı və iş saatlarını sizə SMS ilə göndərək" de.`,
+      `  NÜMAYƏNDƏ TƏKLİFİ (bu qayda digər bütün qaydalardan üstündür): söhbət boyu nümayəndəni təklif etmə və onu xatırlatma. Əvvəl müştərinin BÜTÜN suallarına bilik bazasından səlis, tam cavab ver. Cavabların sonunda "sizi qoşum?", "nümayəndəmiz desin" demə. Müştərinin sualları bitəndə soruş: "Başqa sualınız varmı?" Müştəri "yox" deyəndən sonra, ZƏNGİN SONUNDA, BİR dəfə təklif et: "Maşınınızın dəqiq dəyərini hesablamaq və görüş təyin etmək üçün sizi satış nümayəndəmizə qoşum?" Müştəri özü əvvəlcədən "qoşun" desə, gözləmədən qoş. Müştəri "nümayəndə ilə danışmaq istəmirəm" desə, bir daha heç vaxt təklif etmə: suallarına cavab ver, mərkəzə gəlməyə dəvət et.`,
+      `  QİYMƏT SUALI ("neçəyədir?", "yenisinin qiyməti nə qədərdir?"): müştərini bu sualla nümayəndəyə QOŞMA, əvvəl özün cavab ver. "Bir saniyə, dəqiqləşdirirəm" de və search_knowledge_base alətini query="${brand} ${model} qiymət", brand="${brand.toLowerCase()}" ilə çağır. Gələn qiyməti bir qısa cümlə ilə de (məsələn: "Yeni ${model} ... manatdan başlayır"), rəqəmləri sözlə, aydın de. Sonra: "Köhnə maşınınızın dəyərini isə mütəxəssisimiz baxandan sonra deyir, o məbləğ bu qiymətdən çıxılır." və müştərinin cavabını gözlə. Köhnə maşının dəyərini soruşsa: maşın baxılmadan dəqiq demək olmur, nümayəndə ilin və yürüşün əsasında təxmini deyə bilər. Bazada qiymət yoxdursa, rəqəm uydurma: "Dəqiq qiyməti mərkəzdə dəqiqləşdirə bilərsiniz" de.`,
+      '  İLK İMTİNA ("ehtiyac yoxdur", "lazım deyil", "maraqlı deyil", "pulsuz deyilsə istəmirəm"): dərhal sağollaşma. Bir dəfə qısa fayda ilə cavab ver və yumşaq sual ver, məsələn: "Başa düşürəm. Amma köhnə maşını satmaq üçün alıcı axtarmaq, vaxt itirmək lazım olmur, fərqi də istəsəniz kreditlə ödəyə bilərsiniz. Sizi maraqlandıran sual varmı?" Müştəri yenə imtina etsə, hörmətlə qəbul et.',
+      '  MƏQSƏD: əvvəlcə satışa (trade-in) razı salmaq, kredit isə ikinci seçimdir. Tərəddüd etsə, inamla cavablandır və üstünlükləri de. Ən çox iki dəfə israr et; qəti imtina etsə, hörmətlə qəbul et, nəticəni yaz və sağollaş. Qiymət, faiz və ya komissiya rəqəmi uydurma; bilik bazasında yoxdursa, nümayəndənin dəqiqləşdirəcəyini de.',
+    ].join('\n'));
+  }
+  if (segment === 'credit_offer') {
+    const applied = car;
+    lines.push([
+      '- CHURN SSENARİSİ (agent təlimatından üstündür, bu ardıcıllıqla danış):',
+      '  1) "Salam, hörmətli müştəri, sizi Group Motors şirkətindən salamlayıram" de və danışmağa vaxtı olub-olmadığını soruş. Müştəriyə adı ilə müraciət etmə, ad-soyad soruşma; həmişə "hörmətli müştəri" de.',
+      applied
+        ? `  2) Xatırlat: "Siz əvvəl ${applied} üçün kreditlə avtomobil əldə etmək məqsədilə müraciət etmişdiniz."`
+        : '  2) Xatırlat: "Siz əvvəl kreditlə avtomobil əldə etmək üçün müraciət etmişdiniz."',
+      '  3) De: "Hazırda yeni kampaniyamız var və Group Motors-un təqdim etdiyi dörd marka üzrə müraciət edə bilərsiniz: Toyota, BYD, Mazda və Mitsubishi." Paneldə kampaniya təklifi yazılıbsa, onu da qısa əlavə et.',
+      '  4) Soruş: hansı marka maraqlıdır və kredit şərtləri ilə tanış olmaq istəyirmi. Avtomobillər haqqında sualları bilik bazasından cavablandır; faiz və komissiya rəqəmi demə.',
+      '  5) Maraqlıdırsa: "Sizə SMS ilə kredit müraciəti linkini göndərirəm. Linkə daxil olub müraciət edin, cavabı dərhal alacaqsınız" de və record_campaign_result alətini outcome=agrees_send_link və brand=<müştərinin seçdiyi marka: Toyota, BYD, Mazda və ya Mitsubishi> ilə çağır. Marka seçməyibsə, brand-i boş burax. Satış nümayəndəsini özün TƏKLİF ETMƏ.',
+      '  6) Maraqlı deyilsə, səbəbini bir dəfə nəzakətlə soruş, təşəkkür et, nəticəni yaz və sağollaş.',
+      '  SATIŞ NÜMAYƏNDƏSİNƏ QOŞMA (yalnız müştəri özü istəyəndə): müştəri "satış nümayəndəsi ilə danışım", "nümayəndəyə qoşun", "operatorla danışım" desə: "Bir neçə saniyə xətdə qalın, sizi satış nümayəndəmizə qoşuram" de və DƏRHAL transfer_to_sales alətini brand=<müştərinin maraqlandığı marka> ilə çağır, sonra heç nə demə. Link hələ göndərilməyibsə və müştəri maraqlıdırsa, əvvəl record_campaign_result (agrees_send_link) çağır, sonra qoş. "Qoşuram" deyib aləti çağırmamaq QADAĞANDIR.',
+      '  MƏQSƏD: müştərini SMS linki ilə onlayn kredit müraciəti etməyə razı salmaq. Müştəri tərəddüd etsə ("düşünərəm", "indi lazım deyil", "bahadır" və s.), etirazını nəzakətlə cavablandır və üstünlükləri de: müraciət onlayndır və bir neçə dəqiqə çəkir, heç yerə getmək lazım deyil, cavab dərhal gəlir, dörd markadan (Toyota, BYD, Mazda, Mitsubishi) seçmək olar, müraciət etmək heç bir öhdəlik yaratmır, sadəcə şərtləri görəcək. Sonra linki göndərməyi təklif et: "Linki göndərim, şərtlərə baxarsınız, sizə uyğun olmasa heç nə etməyə borclu deyilsiniz." Bunu ən çox iki dəfə et; müştəri qəti imtina etsə, hörmətlə qəbul et, nəticəni yaz və sağollaş. Kobudluq etmə, yalan vəd vermə.',
+    ].join('\n'));
+    lines.push('- MÜRACİƏT LİNKİ: Müştəri təklifə maraq göstərib müraciət etmək istəsə, ona de: "Sizə SMS ilə müraciət linki göndərəcəyik, linkə daxil olub bir neçə dəqiqəyə onlayn müraciət edə bilərsiniz." Sonra record_campaign_result alətini outcome=agrees_send_link ilə çağır. Sənədləri WhatsApp və ya başqa kanalla göndərməyi heç vaxt təklif etmə.');
+  }
+  return lines;
+}
+
+// ---------------------------------------------------------------------------------------
+
+async function segmentOfJob(telephonyJobId: number | null, customerId: number): Promise<{ campaignId: number | null; segment: string | null }> {
+  const [row] = rowsFrom(await db.execute(sql`
+    SELECT c.id, c.segment FROM campaigns c
+    WHERE c.id = coalesce(
+      (SELECT campaign_id FROM telephony_jobs WHERE id = ${telephonyJobId}),
+      (SELECT cc.campaign_id FROM campaign_calls cc WHERE cc.customer_id = ${customerId} ORDER BY cc.updated_at DESC LIMIT 1)
+    )
+    LIMIT 1
+  `));
+  return { campaignId: row ? Number(row.id) : null, segment: row ? String(row.segment ?? '') || null : null };
+}
+
+export async function recordCampaignResult(params: {
+  customerId: number;
+  telephonyJobId: number | null;
+  outcome: string;
+  reason: string;
+  callbackAt?: string | null;
+  doNotCall?: boolean;
+  brand?: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { campaignId, segment } = await segmentOfJob(params.telephonyJobId, params.customerId);
+  const outcomes = RESULT_OUTCOMES[segment ?? ''];
+  if (!outcomes) return { ok: false, error: 'this call is not part of a service or credit-offer campaign' };
+  const label = outcomes[params.outcome];
+  if (!label) return { ok: false, error: `outcome must be one of: ${Object.keys(outcomes).join(', ')}` };
+
+  let callbackAt: Date | null = null;
+  let reason = String(params.reason || '').trim().slice(0, 1500);
+  if (params.outcome === 'callback') {
+    const raw = String(params.callbackAt ?? '').trim();
+    callbackAt = parseBakuTime(raw);
+    if (!callbackAt && raw.toLowerCase() !== 'unknown') {
+      return {
+        ok: false,
+        error: `callback_at is missing or invalid. Ask the customer which day and at what time to call (now in Baku: ${bakuIsoNow()}) and pass "YYYY-MM-DD HH:MM" in Baku time, or "unknown" if they will not say.`,
+      };
+    }
+    reason = [reason, callbackAt ? `Zəng vaxtı: ${bakuText(callbackAt)}` : 'Zəng vaxtı: müştəri dəqiq vaxt deməyib'].filter(Boolean).join('. ');
+  }
+  const wantsSms = (segment === 'credit_offer' || segment === 'trade_in') && params.outcome === 'agrees_send_link';
+  const brand = wantsSms ? linkBrand(params.brand) : null;
+  if (brand) reason = [reason, `Seçdiyi marka: ${brand}`].filter(Boolean).join('. ');
+  await db.execute(sql`
+    INSERT INTO campaign_results (campaign_id, customer_id, telephony_job_id, segment, outcome, outcome_label, reason, callback_at, sms_status, brand)
+    VALUES (${campaignId}, ${params.customerId}, ${params.telephonyJobId}, ${segment}, ${params.outcome}, ${label}, ${reason || null},
+            ${callbackAt ? callbackAt.toISOString() : null}::timestamptz, ${wantsSms ? 'pending' : null}, ${brand})
+  `);
+  await db.execute(sql`
+    UPDATE customers SET pks_status = ${label}, pks_comment = ${reason || null} WHERE id = ${params.customerId}
+  `);
+  if (params.doNotCall) {
+    await db.execute(sql`UPDATE customers SET do_not_call = true WHERE id = ${params.customerId}`);
+    await db.execute(sql`UPDATE campaign_calls SET status = 'cancelled', updated_at = now() WHERE customer_id = ${params.customerId} AND status IN ('pending', 'retrying')`);
+  } else if (params.outcome === 'callback') {
+    await applyResultCallback(params.telephonyJobId);
+  }
+  // A final result closes the customer's place in the campaign, whichever finishes first:
+  // this write or the telephony worker's end-of-call report (which may say "failed" when the
+  // customer hung up first and would otherwise queue a retry).
+  if (campaignId && params.outcome !== 'callback') {
+    await db.execute(sql`
+      UPDATE campaign_calls SET status = 'completed', call_after = NULL, updated_at = now()
+      WHERE campaign_id = ${campaignId} AND customer_id = ${params.customerId} AND status IN ('retrying', 'pending', 'failed')
+    `);
+  }
+  if (wantsSms) void sendPendingApplicationSms().catch((err) => console.error('[campaign-results] sms failed', err));
+  scheduleArzoomAnalyticsPush();
+  return { ok: true };
+}
+
+// Re-dial at the agreed time. No-op while the call is still running ("attempting"); the
+// job completion handler calls it again once the queue entry is closed.
+export async function applyResultCallback(telephonyJobId: number | null): Promise<void> {
+  if (!telephonyJobId) return;
+  const [fb] = rowsFrom(await db.execute(sql`
+    SELECT outcome, callback_at FROM campaign_results WHERE telephony_job_id = ${telephonyJobId} ORDER BY id DESC LIMIT 1
+  `));
+  if (!fb || fb.outcome !== 'callback') return;
+  const rows = rowsFrom(await db.execute(sql`
+    UPDATE campaign_calls cc
+    SET status = 'retrying', attempt_number = 0,
+        call_after = coalesce(${fb.callback_at ? new Date(String(fb.callback_at)).toISOString() : null}::timestamptz,
+                              now() + make_interval(hours => c.retry_interval_hours)),
+        updated_at = now()
+    FROM campaigns c, telephony_jobs tj, customers cu
+    WHERE tj.id = ${telephonyJobId}
+      AND cc.customer_id = tj.customer_id AND cc.campaign_id = tj.campaign_id
+      AND c.id = cc.campaign_id AND cu.id = cc.customer_id AND cu.do_not_call = false
+      AND cc.status IN ('completed', 'failed', 'retrying')
+    RETURNING cc.campaign_id
+  `));
+  for (const row of rows) {
+    await db.execute(sql`UPDATE campaigns SET status = 'active', updated_at = now() WHERE id = ${Number(row.campaign_id)} AND status = 'completed'`);
+  }
+}
+
+// Safety net when the bot hung up without recording a result.
+export async function ensureCampaignResultFromTranscript(params: {
+  customerId: number;
+  telephonyJobId: number | null;
+  startedAt: Date;
+  transcript: string | null;
+}): Promise<void> {
+  const transcript = String(params.transcript || '').trim();
+  // The customer never spoke (voicemail, silence, picked up and dropped): no result, so the
+  // unanswered-call retry still applies.
+  if (!/^C:\s*\S/m.test(transcript)) return;
+  const [existing] = rowsFrom(await db.execute(sql`
+    SELECT 1 FROM campaign_results WHERE customer_id = ${params.customerId}
+      AND (telephony_job_id = ${params.telephonyJobId} OR created_at >= ${params.startedAt.toISOString()}::timestamptz)
+    LIMIT 1
+  `));
+  if (existing) return;
+  const { segment } = await segmentOfJob(params.telephonyJobId, params.customerId);
+  const outcomes = RESULT_OUTCOMES[segment ?? ''];
+  if (!outcomes) return;
+  let outcome = 'other';
+  let reason = '';
+  let doNotCall = false;
+  let callbackAt: string | null = null;
+  const key = String(process.env.GEMINI_API_KEY || '').trim();
+  if (key) {
+    try {
+      const model = textModel(process.env.POST_CALL_SUMMARY_MODEL);
+      const ai = new GoogleGenAI({ apiKey: key });
+      const when = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Baku', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(params.startedAt);
+      const prompt = `Bu, telefon zənginin transkriptidir (A: bot, C: müştəri). Zəng vaxtı (Bakı): ${when}.
+YALNIZ JSON qaytar: {"outcome": "...", "reason": "...", "do_not_call": false, "callback_at": null}
+outcome bunlardan biri: ${Object.entries(outcomes).map(([k, v]) => `${k} (${v})`).join(', ')}.
+reason: Azərbaycan dilində 1-3 cümlə, müştəri nə dedi. Müştəri danışmayıbsa outcome "other", reason boş.
+do_not_call: müştəri açıq şəkildə bir daha zəng edilməməsini istəyibsə true.
+callback_at: outcome "callback" olanda deyilən gün və saat "YYYY-MM-DD HH:MM" (Bakı vaxtı), deyilməyibsə "unknown", başqa hallarda null.
+
+Transkript:
+${transcript.slice(-8000)}`;
+      const response = await ai.models.generateContent({
+        model,
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        config: { temperature: 0, responseMimeType: 'application/json' },
+      });
+      await recordAiTokenUsage({ model, operation: 'campaign_result', usageMetadata: (response as { usageMetadata?: unknown }).usageMetadata as never }).catch(() => undefined);
+      const parsed = JSON.parse(String(response.text || '{}').replace(/^```json|```$/g, '').trim()) as { outcome?: string; reason?: string; do_not_call?: boolean; callback_at?: string | null };
+      if (parsed.outcome && parsed.outcome in outcomes) outcome = parsed.outcome;
+      reason = String(parsed.reason || '').trim().slice(0, 1000);
+      doNotCall = parsed.do_not_call === true;
+      callbackAt = parsed.callback_at ? String(parsed.callback_at) : null;
+    } catch (err) {
+      console.error('[campaign-results] transcript classification failed', err);
+    }
+  }
+  if (outcome === 'callback' && !parseBakuTime(callbackAt)) callbackAt = 'unknown';
+  await recordCampaignResult({
+    customerId: params.customerId,
+    telephonyJobId: params.telephonyJobId,
+    outcome,
+    reason: reason || 'Bot zəng zamanı nəticəni qeyd etməyib.',
+    callbackAt,
+    doNotCall,
+  });
+}
+
+// ---------------------------------------------------------------------------------------
+// SMS with the ARZOOM leasing application link, sent by ARZOOM (robocall has no SMS
+// provider). Set ARZOOM_SMS_LINK_PATH once ARZOOM exposes the endpoint; until then the
+// requests wait in campaign_results with sms_status = 'pending'.
+
+let sending: Promise<void> | null = null;
+
+export function sendPendingApplicationSms(): Promise<void> {
+  if (sending) return sending;
+  sending = (async () => {
+    const base = String(process.env.ARZOOM_API_URL || '').trim();
+    const token = String(process.env.ARZOOM_API_TOKEN || process.env.ARZOOM_INTEGRATION_TOKEN || '').trim();
+    const path = String(process.env.ARZOOM_SMS_LINK_PATH || '/api/integrations/robocall/send-application-link').trim();
+    if (!base || !token) return;
+    const origin = new URL(base).origin;
+    const rows = rowsFrom(await db.execute(sql`
+      SELECT r.id, cu.phone, r.brand AS chosen, cp.segment_params->>'brand' AS campaign_brand, cu.import_data->>'brand' AS applied, cu.import_data->>'model' AS model
+      FROM campaign_results r JOIN customers cu ON cu.id = r.customer_id
+      LEFT JOIN campaigns cp ON cp.id = r.campaign_id
+      WHERE r.sms_status = 'pending' ORDER BY r.id LIMIT 20
+    `));
+    for (const row of rows) {
+      // One link per customer, ever: a later "yes" on another call is not sent again.
+      const [already] = rowsFrom(await db.execute(sql`
+        SELECT 1 FROM campaign_results r2
+        WHERE r2.customer_id = (SELECT customer_id FROM campaign_results WHERE id = ${Number(row.id)})
+          AND r2.id <> ${Number(row.id)} AND r2.sms_status = 'sent'
+        LIMIT 1
+      `));
+      if (already) {
+        await db.execute(sql`UPDATE campaign_results SET sms_status = 'duplicate', sms_error = 'link artıq göndərilib' WHERE id = ${Number(row.id)}`);
+        continue;
+      }
+      try {
+        const res = await fetch(`${origin}${path.startsWith('/') ? path : `/${path}`}`, {
+          method: 'POST',
+          headers: { 'X-Integration-Token': token, 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ phone: String(row.phone || '').replace(/\D/g, ''), brand: linkBrand(row.chosen) ?? brandOfModel(row.applied) ?? brandOfModel(row.model) ?? linkBrand(row.campaign_brand) ?? undefined, source: 'robocall' }),
+          signal: AbortSignal.timeout(15_000),
+        });
+        const body = (await res.json().catch(() => ({}))) as { duplicate?: boolean; error?: string };
+        // 429 duplicate: this number already got the link in the last 24 h.
+        // 400/401: will never succeed. 429 (daily cap), 502, 503: retried later.
+        const final = res.ok ? 'sent' : res.status === 429 && body.duplicate ? 'duplicate' : [400, 401, 404].includes(res.status) ? 'failed' : null;
+        if (!final) throw new Error(`HTTP ${res.status}${body.error ? ` ${String(body.error).slice(0, 120)}` : ''}`);
+        await db.execute(sql`UPDATE campaign_results SET sms_status = ${final}, sms_error = ${res.ok ? null : `HTTP ${res.status}`} WHERE id = ${Number(row.id)}`);
+      } catch (err) {
+        await db.execute(sql`UPDATE campaign_results SET sms_error = ${String((err as Error)?.message || err).slice(0, 300)} WHERE id = ${Number(row.id)}`);
+      }
+    }
+  })().finally(() => {
+    sending = null;
+  });
+  return sending;
+}
+
+export function startApplicationSmsRetry(): void {
+  setInterval(() => void sendPendingApplicationSms().catch(() => undefined), 60_000).unref?.();
+}
+
+// Segment and service-rep extensions for a call to an imported customer.
+export async function excelCallContext(telephonyJobId: number | null, customerId: number): Promise<{ segment: string | null; transferExtensions: string[]; params: Record<string, unknown> | null }> {
+  const { campaignId, segment } = await segmentOfJob(telephonyJobId, customerId);
+  let transferExtensions: string[] = [];
+  let params: Record<string, unknown> | null = null;
+  if (campaignId) {
+    const [row] = rowsFrom(await db.execute(sql`SELECT segment_params FROM campaigns WHERE id = ${campaignId}`));
+    const raw = row?.segment_params;
+    params = (typeof raw === 'string' ? JSON.parse(raw) : raw) as Record<string, unknown> | null;
+    if (segment === 'service_return' || segment === 'trade_in') {
+      // An internal extension/queue (2-6 digits) or an outside phone number (e.g. the Mazda service
+      // coordinator's mobile 0512258758), which is dialled out through the customer's trunk.
+      transferExtensions = String(params?.repExtensions || '').split(/[\s,;]+/).map((x) => x.trim().replace(/^\+/, '')).filter((x) => /^\d{2,6}$/.test(x) || /^\d{9,15}$/.test(x)).slice(0, 20);
+    }
+  }
+  return { segment, transferExtensions, params };
+}

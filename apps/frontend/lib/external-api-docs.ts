@@ -6,7 +6,7 @@ export const EXTERNAL_API_DOCS_MD = `# External Call-Trigger API
 
 Lets a third-party backend (e.g. a customer's mobile-app server) trigger a single
 ad-hoc outbound call — the bot reminding a consumer about a missing step, or offering
-a product — without going through Robocall's campaign system. One call per request,
+a product — without going through ArzoomCall's campaign system. One call per request,
 triggered on demand.
 
 **This is a server-to-server API.** Call it from your backend, never from the mobile
@@ -14,12 +14,12 @@ app itself — the API key is a secret and must not ship inside a mobile client.
 
 ## Base URL
 
-Ask Robocall ops for the base URL for your environment. All paths below are relative
+Ask ArzoomCall ops for the base URL for your environment. All paths below are relative
 to it, e.g. \`{baseUrl}/api/external/v1/calls\`.
 
 ## Authentication
 
-\`Authorization: Bearer <api_key>\` on every request. Keys are provisioned by Robocall
+\`Authorization: Bearer <api_key>\` on every request. Keys are provisioned by ArzoomCall
 ops — you can't self-serve one. The raw key is shown exactly once at creation time;
 if it's lost, ops has to issue a new one (the server only ever stores its SHA-256
 hash).
@@ -35,9 +35,9 @@ asynchronously; poll \`GET /calls/:id\` or listen for the webhook for the outcom
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| \`externalConsumerId\` | string | yes | Your own user/consumer id. Used to find-or-create the Robocall customer record (idempotent — the same id always maps to the same customer). |
+| \`externalConsumerId\` | string | yes | Your own user/consumer id. Used to find-or-create the ArzoomCall customer record (idempotent — the same id always maps to the same customer). |
 | \`phone\` | string | yes | Azerbaijani number. Accepts \`+994XXXXXXXXX\`, \`0XXXXXXXXX\`, or bare \`XXXXXXXXX\`. Anything else is used as-is and will likely fail to dial — send E.164 when possible. |
-| \`templateKey\` | string | yes | Which script the bot uses. Assigned by Robocall ops when your instruction templates are set up (e.g. \`"missing-steps-reminder"\`, \`"product-offer"\`) — ask ops for your valid keys. |
+| \`templateKey\` | string | yes | Which script the bot uses. Assigned by ArzoomCall ops when your instruction templates are set up (e.g. \`"missing-steps-reminder"\`, \`"product-offer"\`) — ask ops for your valid keys. |
 | \`consentGiven\` | boolean | yes | Must be literally \`true\`. Your app must have captured the consumer's consent to receive an automated call before sending this. |
 | \`name\` | string | yes | Consumer's first name. |
 | \`surname\` | string | yes | Consumer's last name. |
@@ -80,7 +80,7 @@ Replaying an already-used \`idempotencyKey\` (within 24h) returns \`200\` instea
 
 ### Dynamic context codes
 
-\`dynamicContext\` is a code, not free text — deliberately. Robocall's calls speak in a
+\`dynamicContext\` is a code, not free text — deliberately. ArzoomCall's calls speak in a
 specific language and tone; letting an external caller inject arbitrary text straight
 into that live prompt risked the wrong language, wrong tone, or unvalidated content
 coming out of the bot's mouth mid-call. Instead:
@@ -88,7 +88,7 @@ coming out of the bot's mouth mid-call. Instead:
 1. Ops registers a code and its actual phrase (e.g. code \`current_address\`, phrase
    "Müştəridən hazırkı ünvanını təsdiqləməsini xahiş et...") in advance.
 2. You send one code, or an array of codes, in \`dynamicContext\`.
-3. Robocall resolves each one to its registered phrase at request time and joins them
+3. ArzoomCall resolves each one to its registered phrase at request time and joins them
    with newlines — one phrase per line, in the order you sent them — into the text
    substituted into the chosen template's \`{DYNAMIC_CONTEXT}\` placeholder.
 4. If any code in the list is unrecognized or deactivated, the whole request is
@@ -132,7 +132,7 @@ existed.
 
 ## Outcome webhook
 
-If \`callbackUrl\` (or your account's default) is set, Robocall POSTs once the call
+If \`callbackUrl\` (or your account's default) is set, ArzoomCall POSTs once the call
 reaches a terminal state (\`ended\` or \`failed\`):
 
 \`\`\`json
@@ -193,7 +193,7 @@ consent was genuinely obtained.
 
 ## Getting set up
 
-Ask Robocall ops for:
+Ask ArzoomCall ops for:
 1. An API key + webhook secret — shown once, store them securely (e.g. a secrets
    manager), not in source control.
 2. At least one \`templateKey\` — the script(s) your calls should use.

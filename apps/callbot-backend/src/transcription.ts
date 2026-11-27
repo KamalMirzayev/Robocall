@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { textModel } from './text-model.js';
 import { GoogleGenAI } from '@google/genai';
 import { recordAiTokenUsage } from './ai-usage.js';
 
@@ -9,7 +10,7 @@ type TranscriptContext = {
   fallbackTranscript?: string | null;
 };
 
-const postCallTranscriptModel = process.env.POST_CALL_TRANSCRIPT_MODEL || 'gemini-2.5-flash';
+const postCallTranscriptModel = textModel(process.env.POST_CALL_TRANSCRIPT_MODEL);
 const postCallTranscriptTimeoutMs = Number(process.env.POST_CALL_TRANSCRIPT_TIMEOUT_MS || 30000);
 
 function normalizeTranscript(text: string) {

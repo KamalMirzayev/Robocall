@@ -6,6 +6,24 @@ import { NextRequest, NextResponse } from 'next/server';
  * Handles session cookies for authentication persistence
  */
 
+// Tells the backend who the real client is (rate limits, audit) and that the request came
+// through this public proxy, so it is never treated as a local telephony-worker call.
+function proxyHeaders(request: NextRequest): Record<string, string> {
+  const fwd = request.headers.get('x-forwarded-for');
+  const ip = (fwd ? fwd.split(',')[0] : request.headers.get('x-real-ip') || request.ip || 'unknown').trim();
+  return { 'X-Forwarded-For': ip || 'unknown', 'X-Robocall-Proxy': '1' };
+}
+
+// Rejects path tricks such as "..", encoded slashes or backslashes in a segment.
+function safePath(segments: string[]): string {
+  for (const seg of segments) {
+    if (!seg || seg === '.' || seg === '..' || /[/\\]/.test(seg) || seg.includes('%')) {
+      throw new Error('invalid path');
+    }
+  }
+  return segments.map(encodeURIComponent).join('/');
+}
+
 function forwardCookies(response: Response, res: NextResponse): void {
   const setCookieHeaders = response.headers.getSetCookie();
   setCookieHeaders.forEach(cookie => {
@@ -61,7 +79,7 @@ export async function GET(
   { params }: { params: { path: string[] } }
 ) {
   try {
-    const path = params.path.join('/');
+    const path = safePath(params.path);
     const query = request.nextUrl.search;
     const backendUrl = `${process.env.NEXT_PUBLIC_CALLBOT_API}/api/${path}${query}`;
 
@@ -70,6 +88,7 @@ export async function GET(
       headers: {
         'Content-Type': 'application/json',
         Cookie: request.headers.get('cookie') || '',
+        ...proxyHeaders(request),
       },
     });
 
@@ -88,7 +107,7 @@ export async function POST(
   { params }: { params: { path: string[] } }
 ) {
   try {
-    const path = params.path.join('/');
+    const path = safePath(params.path);
     const backendUrl = `${process.env.NEXT_PUBLIC_CALLBOT_API}/api/${path}`;
     
     let body: any = undefined;
@@ -106,6 +125,7 @@ export async function POST(
       headers: {
         'Content-Type': 'application/json',
         Cookie: request.headers.get('cookie') || '',
+        ...proxyHeaders(request),
       },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -125,7 +145,7 @@ export async function PUT(
   { params }: { params: { path: string[] } }
 ) {
   try {
-    const path = params.path.join('/');
+    const path = safePath(params.path);
     const backendUrl = `${process.env.NEXT_PUBLIC_CALLBOT_API}/api/${path}`;
     
     let body: any = undefined;
@@ -143,6 +163,7 @@ export async function PUT(
       headers: {
         'Content-Type': 'application/json',
         Cookie: request.headers.get('cookie') || '',
+        ...proxyHeaders(request),
       },
       body: body ? JSON.stringify(body) : undefined,
     });
@@ -162,7 +183,7 @@ export async function DELETE(
   { params }: { params: { path: string[] } }
 ) {
   try {
-    const path = params.path.join('/');
+    const path = safePath(params.path);
     const backendUrl = `${process.env.NEXT_PUBLIC_CALLBOT_API}/api/${path}`;
 
     const response = await fetch(backendUrl, {
@@ -170,6 +191,7 @@ export async function DELETE(
       headers: {
         'Content-Type': 'application/json',
         Cookie: request.headers.get('cookie') || '',
+        ...proxyHeaders(request),
       },
     });
 

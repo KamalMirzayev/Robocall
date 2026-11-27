@@ -6,6 +6,8 @@ import { currentApiClient, type ApiClient } from '../api-auth.js';
 import { createTelephonyJob } from './telephony.js';
 import { resolveOrCreateExternalCustomer } from '../external-customers.js';
 import { normalizePhone } from '../phone-utils.js';
+import { createReadStream } from 'node:fs';
+import { recordingFileInfo } from '../recording.js';
 
 export const externalCallsRouter = Router();
 
@@ -278,3 +280,121 @@ externalCallsRouter.get('/calls/:id', async (req: Request, res) => {
 
   res.json({ callId: telephonyJobId, ...row, status: externalStatus });
 });
+
+// ARZOOM's "Yenidən zəng et": puts an ARZOOM application's customer back into the queue of
+// every application-status campaign it belongs to, so the scheduler calls again right away.
+// Applications ArzoomCall never calls (in review, rejected, re-offer pending, deleted) are refused.
+externalCallsRouter.post('/arzoom/requeue', async (req: Request, res) => {
+  try {
+    const applicationId = String(req.body?.application_id ?? '').trim();
+    if (!applicationId) {
+      res.status(400).json({ error: 'application_id is required' });
+      return;
+    }
+    const [customer] = rowsOf(await db.execute(sql`
+      SELECT id, application_status, do_not_call FROM customers
+      WHERE source_system = 'arzoom' AND source_record_key = ${applicationId}
+      LIMIT 1
+    `));
+    if (!customer) {
+      res.status(404).json({ error: 'application not found' });
+      return;
+    }
+    if (customer.do_not_call === true) {
+      res.status(409).json({ error: 'customer asked not to be called again' });
+      return;
+    }
+    const status = String(customer.application_status ?? '');
+    if (['review', 'rejected', 'reoffer', 'deleted'].includes(status)) {
+      res.status(409).json({ error: `application status "${status}" is not called` });
+      return;
+    }
+    const busy = rowsOf(await db.execute(sql`
+      SELECT 1 FROM telephony_jobs WHERE customer_id = ${customer.id as number} AND status IN ('pending', 'answered') LIMIT 1
+    `));
+    if (busy.length) {
+      res.json({ ok: true, queued: 0, note: 'a call to this customer is already in progress' });
+      return;
+    }
+    const queued = rowsOf(await db.execute(sql`
+      UPDATE campaign_calls cc
+      SET status = 'pending', attempt_number = 0, call_after = NULL, updated_at = now()
+      FROM campaigns c
+      WHERE c.id = cc.campaign_id AND c.segment = 'application_status'
+        AND c.status IN ('active', 'paused', 'completed')
+        AND cc.customer_id = ${customer.id as number}
+        AND cc.status <> 'attempting'
+      RETURNING cc.campaign_id
+    `));
+    if (!queued.length) {
+      res.status(409).json({ error: 'customer is not in any application-status campaign' });
+      return;
+    }
+    for (const row of queued) {
+      await db.execute(sql`UPDATE campaigns SET status = 'active', updated_at = now() WHERE id = ${row.campaign_id as number} AND status = 'completed'`);
+    }
+    res.json({ ok: true, queued: queued.length });
+  } catch (err) {
+    console.error('[external/arzoom/requeue]', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Call recording for ARZOOM's player: {id} is the call id from the analytics snapshot's
+// recent_calls (the telephony job id). Only calls to ARZOOM customers are served. Supports
+// Range requests so the player can seek.
+externalCallsRouter.get('/arzoom/recordings/:id', async (req: Request, res) => {
+  try {
+    const jobId = Number(req.params.id);
+    if (!Number.isInteger(jobId) || jobId <= 0) {
+      res.status(400).json({ error: 'invalid call id' });
+      return;
+    }
+    const [owned] = rowsOf(await db.execute(sql`
+      SELECT 1 FROM telephony_jobs tj JOIN customers c ON c.id = tj.customer_id
+      WHERE tj.id = ${jobId} AND c.source_system = 'arzoom' LIMIT 1
+    `));
+    const file = owned ? await recordingFileInfo(jobId) : null;
+    if (!file) {
+      res.status(404).json({ error: 'recording not found' });
+      return;
+    }
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    let start = 0;
+    let end = file.size - 1;
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range || ''));
+    if (range && (range[1] || range[2])) {
+      if (range[1]) {
+        start = Number(range[1]);
+        if (range[2]) end = Math.min(end, Number(range[2]));
+      } else {
+        start = Math.max(0, file.size - Number(range[2]));
+      }
+      if (start > end || start >= file.size) {
+        res.status(416).setHeader('Content-Range', `bytes */${file.size}`).end();
+        return;
+      }
+      res.status(206).setHeader('Content-Range', `bytes ${start}-${end}/${file.size}`);
+    }
+    res.setHeader('Content-Length', String(end - start + 1));
+    const stream = createReadStream(file.filePath, { start, end });
+    stream.on('error', (err) => {
+      console.error('[external/arzoom/recordings]', err);
+      if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
+      else res.destroy();
+    });
+    res.on('close', () => stream.destroy());
+    stream.pipe(res);
+  } catch (err) {
+    console.error('[external/arzoom/recordings]', err);
+    if (!res.headersSent) res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+function rowsOf(result: unknown): Record<string, unknown>[] {
+  if (Array.isArray(result)) return result as Record<string, unknown>[];
+  const maybeRows = (result as { rows?: Record<string, unknown>[] }).rows;
+  return Array.isArray(maybeRows) ? maybeRows : [];
+}

@@ -1,4 +1,28 @@
 import 'dotenv/config';
+import { geminiCreditsDepleted } from './gemini-credit.js';
+import fs from 'node:fs';
+
+// Pause new dialing (calls in progress go on): a file, written by deploy/update.sh while it
+// waits for live calls to end, or by hand for a planned break. Empty = until removed;
+// otherwise an ISO time after which dialing resumes on its own.
+const PAUSE_FILE = process.env.DIALING_PAUSE_FILE || '/opt/robocall/.dialing-paused';
+
+function dialingPause(): string | null {
+  let text: string;
+  try {
+    text = fs.readFileSync(PAUSE_FILE, 'utf8').trim();
+  } catch {
+    return null;
+  }
+  if (!text) return 'until resumed';
+  const until = Date.parse(text);
+  if (!Number.isFinite(until)) return 'until resumed';
+  if (until <= Date.now()) {
+    try { fs.unlinkSync(PAUSE_FILE); } catch { /* not ours to remove */ }
+    return null;
+  }
+  return `until ${new Date(until).toISOString()}`;
+}
 import { sql, eq, and, lt, gte } from 'drizzle-orm';
 import { db } from './db/index.js';
 import { campaigns, campaignCalls, customers, agents, telephonyJobs } from './db/schema.js';
@@ -28,6 +52,7 @@ interface CampaignRow extends DbRow {
   trunkIds: string | null;
   runStartDate: string | Date | null;
   runEndDate: string | Date | null;
+  priority: number;
 }
 
 interface CampaignCallRow extends DbRow {
@@ -135,7 +160,7 @@ function isWithinDateRange(runStartDate: string | Date | null, runEndDate: strin
 /**
  * Check if enough time has passed since the last attempt based on retryIntervalHours.
  */
-function shouldRetry(createdAt: string | Date, attemptNumber: number, retryIntervalHours: number): boolean {
+export function shouldRetry(createdAt: string | Date, attemptNumber: number, retryIntervalHours: number): boolean {
   if (attemptNumber === 0) {
     // First attempt, always allowed
     return true;
@@ -215,6 +240,15 @@ export async function campaignSchedulerTick() {
   try {
     console.log(`[Campaign Scheduler] Tick at ${new Date().toISOString()}`);
     await reapStaleJobs();
+    const pause = dialingPause();
+    if (pause) {
+      console.log(`[Campaign Scheduler] Dialing paused (${pause}); no new calls`);
+      return;
+    }
+    if (geminiCreditsDepleted()) {
+      console.warn('[Campaign Scheduler] Gemini credits are depleted; not dialing until they are back');
+      return;
+    }
 
     // Fetch all active campaigns
     const campaignRows = rowsFrom(await db.execute(sql`
@@ -223,13 +257,49 @@ export async function campaignSchedulerTick() {
              run_window_start as "runWindowStart", run_window_end as "runWindowEnd",
              run_weekdays as "runWeekdays", skip_next_day_after_success as "skipNextDayAfterSuccess",
              trunk_id as "trunkId", trunk_ids as "trunkIds",
-             run_start_date as "runStartDate", run_end_date as "runEndDate"
+             run_start_date as "runStartDate", run_end_date as "runEndDate",
+             coalesce(priority, 0) as "priority"
       FROM campaigns
       WHERE status = 'active'
+      ORDER BY coalesce(priority, 0) DESC, id
     `)) as CampaignRow[];
     
     console.log(`[Campaign Scheduler] Found ${campaignRows.length} active campaigns`);
     
+    // Campaigns that will dial this tick, per trunk: a shared trunk's lines are split
+    // between them, so one campaign cannot take every line of a multi-line trunk.
+    const trunkOf = (c: CampaignRow): string[] => (c.trunkIds
+      ? c.trunkIds.split(',').map((t) => t.trim()).filter(Boolean)
+      : c.trunkId ? [c.trunkId] : []);
+    const campaignsPerTrunk = new Map<string, number>();
+    const dueCampaigns: Array<{ priority: number; trunks: string[] }> = [];
+    for (const c of campaignRows) {
+      if (!isWithinRunWindow(c.runWindowStart, c.runWindowEnd) || !isValidRunDay(c.runWeekdays) || !isWithinDateRange(c.runStartDate, c.runEndDate)) continue;
+      const [due] = rowsFrom(await db.execute(sql`
+        SELECT 1 FROM campaign_calls
+        WHERE campaign_id = ${c.id} AND status IN ('pending', 'retrying', 'attempting')
+          AND (call_after IS NULL OR call_after <= now())
+        LIMIT 1
+      `));
+      if (!due) continue;
+      dueCampaigns.push({ priority: Number(c.priority) || 0, trunks: trunkOf(c) });
+    }
+    // Priority: a campaign waits on every line a higher-priority campaign with calls due uses
+    // (all lines when either is on automatic trunk choice), e.g. ARZOOM credit results first.
+    const blockedFor = (c: CampaignRow): { all: boolean; trunks: Set<string> } => {
+      const mine = trunkOf(c);
+      const higher = dueCampaigns.filter((d) => d.priority > (Number(c.priority) || 0));
+      const all = higher.some((d) => !d.trunks.length || !mine.length || mine.every((t) => d.trunks.includes(t)));
+      return { all, trunks: new Set(higher.flatMap((d) => d.trunks)) };
+    };
+    for (const d of dueCampaigns) {
+      for (const t of d.trunks) {
+        // Only the top-priority campaigns on a trunk share its lines.
+        const top = Math.max(...dueCampaigns.filter((x) => x.trunks.includes(t)).map((x) => x.priority));
+        if (d.priority === top) campaignsPerTrunk.set(t, (campaignsPerTrunk.get(t) ?? 0) + 1);
+      }
+    }
+
     for (const campaign of campaignRows) {
       console.log(`[Campaign Scheduler] Campaign ${campaign.id}: checking...`, {
         name: campaign.name,
@@ -256,6 +326,12 @@ export async function campaignSchedulerTick() {
         continue;
       }
 
+      const blocked = blockedFor(campaign);
+      if (blocked.all) {
+        console.log(`[Campaign Scheduler] Campaign ${campaign.id} waits: a higher-priority campaign has calls due`);
+        continue;
+      }
+
       console.log(`[Campaign Scheduler] Processing campaign ${campaign.id}: ${campaign.name}`);
 
       // Resolve trunk IDs: use trunk_ids if set, fall back to single trunk_id,
@@ -265,6 +341,7 @@ export async function campaignSchedulerTick() {
         : campaign.trunkId
           ? [campaign.trunkId]
           : [];
+      const usableTrunks = assignedTrunks.filter((t) => !blocked.trunks.has(t));
 
       // Fetch pending campaign calls that haven't reached max attempts
       const callRows = rowsFrom(await db.execute(sql`
@@ -274,6 +351,7 @@ export async function campaignSchedulerTick() {
         WHERE campaign_id = ${campaign.id}
           AND status IN ('pending', 'retrying')
           AND attempt_number < ${campaign.maxAttempts}
+          AND (call_after IS NULL OR call_after <= now())
         ORDER BY created_at ASC
         LIMIT 50
       `)) as CampaignCallRow[];
@@ -285,24 +363,41 @@ export async function campaignSchedulerTick() {
       // Multi-trunk mode: create one job per available trunk per tick
       if (assignedTrunks.length > 0) {
         // Get trunks currently busy (have active telephony jobs)
-        const busyTrunkRows = rowsFrom(await db.execute(sql`
-          SELECT DISTINCT trunk_id FROM telephony_jobs
-          WHERE trunk_id IS NOT NULL
-            AND status IN ('pending', 'answered')
+        // Free slots per trunk: its capacity (trunk_capacity, default 1) minus active jobs.
+        const slotRows = rowsFrom(await db.execute(sql`
+          SELECT x.trunk_id,
+                 coalesce((SELECT max_calls FROM trunk_capacity cap WHERE cap.trunk_id = x.trunk_id), 1) AS cap,
+                 (SELECT count(*) FROM telephony_jobs j
+                  WHERE j.trunk_id = x.trunk_id
+                    AND j.status IN ('pending', 'claimed', 'dialing', 'answered')
+                    AND j.created_at > now() - interval '3 hours') AS busy,
+                 (SELECT count(*) FROM telephony_jobs j
+                  WHERE j.trunk_id = x.trunk_id AND j.campaign_id = ${campaign.id}
+                    AND j.status IN ('pending', 'claimed', 'dialing', 'answered')
+                    AND j.created_at > now() - interval '3 hours') AS mine
+          FROM unnest(ARRAY[${sql.join(assignedTrunks.map((t) => sql`${t}`), sql`, `)}]::text[]) AS x(trunk_id)
         `));
-        const busyTrunks = new Set(busyTrunkRows.map((r) => String(r.trunk_id)));
+        const freeSlots = new Map(slotRows.map((r) => {
+          const cap = Number(r.cap);
+          const share = Math.max(1, Math.floor(cap / Math.max(1, campaignsPerTrunk.get(String(r.trunk_id)) ?? 1)));
+          return [String(r.trunk_id), Math.max(0, Math.min(cap - Number(r.busy), share - Number(r.mine)))];
+        }));
+        const placedCalls = new Set<number>();
 
         let jobCount = 0;
-        for (const trunkId of assignedTrunks) {
-          if (busyTrunks.has(trunkId)) {
+        for (const trunkId of usableTrunks) {
+          let slots = freeSlots.get(trunkId) ?? 0;
+          if (slots <= 0) {
             console.log(`[Campaign Scheduler] Trunk ${trunkId} busy, skipping`);
             continue;
           }
 
-          // Find next eligible call for this trunk
+          // Fill this trunk's free slots with the next eligible calls
           let callPlaced = false;
           for (const call of callRows) {
-            if (!shouldRetry(call.createdAt, call.attemptNumber, campaign.retryIntervalHours)) continue;
+            if (slots <= 0) break;
+            if (placedCalls.has(call.id)) continue;
+            // Retry spacing is enforced by call_after (set when an attempt goes unanswered).
 
             // Check this specific customer doesn't already have an active job
             const customerBusy = rowsFrom(await db.execute(sql`
@@ -314,10 +409,14 @@ export async function campaignSchedulerTick() {
             if (customerBusy.length > 0) continue;
 
             const customerRows = rowsFrom(await db.execute(sql`
-              SELECT id, phone, name FROM customers WHERE id = ${call.customerId} LIMIT 1
+              SELECT id, phone, name, do_not_call AS "doNotCall" FROM customers WHERE id = ${call.customerId} LIMIT 1
             `)) as CustomerRow[];
             const customer = customerRows[0];
             if (!customer) continue;
+            if ((customer as { doNotCall?: boolean }).doNotCall) {
+              await db.execute(sql`UPDATE campaign_calls SET status = 'cancelled', updated_at = now() WHERE id = ${call.id}`);
+              continue;
+            }
 
             const phone = normalizePhone(customer.phone);
             if (!phone) {
@@ -354,10 +453,11 @@ export async function campaignSchedulerTick() {
               );
               jobCount++;
               callPlaced = true;
+              placedCalls.add(call.id);
+              slots -= 1;
             } catch (err) {
               console.error(`[Campaign Scheduler] Error creating job for call ${call.id}:`, err);
             }
-            break; // one call per trunk
           }
           if (!callPlaced) {
             console.log(`[Campaign Scheduler] No eligible calls for trunk ${trunkId}`);
@@ -382,13 +482,17 @@ export async function campaignSchedulerTick() {
         }
 
         for (const call of callRows) {
-          if (!shouldRetry(call.createdAt, call.attemptNumber, campaign.retryIntervalHours)) continue;
+          // Retry spacing is enforced by call_after (set when an attempt goes unanswered).
 
           const customerRows = rowsFrom(await db.execute(sql`
-            SELECT id, phone, name FROM customers WHERE id = ${call.customerId} LIMIT 1
+            SELECT id, phone, name, do_not_call AS "doNotCall" FROM customers WHERE id = ${call.customerId} LIMIT 1
           `)) as CustomerRow[];
           const customer = customerRows[0];
           if (!customer) continue;
+          if ((customer as { doNotCall?: boolean }).doNotCall) {
+            await db.execute(sql`UPDATE campaign_calls SET status = 'cancelled', updated_at = now() WHERE id = ${call.id}`);
+            continue;
+          }
 
           const phone = normalizePhone(customer.phone);
           if (!phone) {
