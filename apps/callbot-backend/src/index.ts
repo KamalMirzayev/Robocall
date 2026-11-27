@@ -32,6 +32,7 @@ import { partnerKbStatus, startPartnerKbRefresher } from './partner-kb.js';
 import { loadSettings } from './settings.js';
 import { settingsRouter } from './routes/settings.js';
 import { getCallAudit, runCallAudit, startCallAuditScheduler } from './call-audit.js';
+import { startTransferFailDigestScheduler } from './transfer-fail.js';
 import { ensureCampaignSegmentSchema, segmentContext } from './campaign-segments.js';
 import { ensureArzoomSchema, startArzoomSync } from './arzoom-sync.js';
 import { ensureSalesTransferSchema, startSalesTransferApp } from './sales-transfer.js';
@@ -281,4 +282,5 @@ server.listen(PORT, () => {
   startGeminiCreditWatch();
   startApplicationSmsRetry();
   startCallAuditScheduler();
+  startTransferFailDigestScheduler();
 });

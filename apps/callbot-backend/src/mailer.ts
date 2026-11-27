@@ -72,6 +72,8 @@ export async function notifyFailedTransferByMail(p: { customerId: number; teleph
       WHERE tj.id = ${p.telephonyJobId}
     `));
     if (!row) return;
+    const { wasMailed, markMailed } = await import('./transfer-fail.js');
+    if (await wasMailed(p.telephonyJobId)) return;
     const transcript = String(p.transcript || '');
     const transfers = (Array.isArray(row.transfers) ? row.transfers : []) as Array<{ status: string; brand: string | null; reason: string | null }>;
     if (transfers.some((t) => t.status === 'answered')) return;
@@ -115,6 +117,7 @@ export async function notifyFailedTransferByMail(p: { customerId: number; teleph
 <pre style="white-space:pre-wrap;font-family:inherit;font-size:13px;background:#f6f8fa;padding:10px;border-radius:6px">${esc(transcript.slice(0, 8000))}</pre>
 <p style="color:#666;font-size:12px">ArzoomCall avtomatik məktubu.</p></div>`;
     await sendMail({ to, subject: `${campaign}: ${name} nümayəndə ilə əlaqə gözləyir`, html });
+    await markMailed([p.telephonyJobId]);
     console.log(`[mail] job ${p.telephonyJobId}: failed-transfer e-mail sent (${to.length} recipient)`);
   } catch (err) {
     console.error(`[mail] job ${p.telephonyJobId ?? '-'}: failed-transfer e-mail failed`, (err as Error).message);
