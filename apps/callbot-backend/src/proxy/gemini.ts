@@ -473,6 +473,23 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
     || linkBrand(excelCtx?.params?.brand)
     || linkBrand((customer as { importData?: { brand?: unknown } | null }).importData?.brand);
   const isChurn = () => isExcel && excelCtx?.segment === 'credit_offer';
+  let agreedRecorded = false;
+  const recordAgreedNotConnected = async (why: string) => {
+    if (agreedRecorded) return;
+    agreedRecorded = true;
+    const note = `Müştəri nümayəndə ilə danışmağa razı oldu, amma xəttə qoşulmadı (${String(why || 'cavab verilmədi').slice(0, 200)}). Satış nümayəndəsi müştəriyə geri zəng etməlidir.`;
+    try {
+      if (gm) {
+        gm.outcome = 'transferred';
+        if (isExcel && excelCtx?.segment === 'service_return') void gm.escalateService(`Robocall servis kampaniyası: ${note}\n${gmSummary()}`);
+        else void gm.handoff(isExcel && excelCtx?.segment === 'trade_in' ? 'trade_in' : 'purchase', `Robocall zəngi: ${note}\n${gmSummary()}`);
+      }
+      if (isExcel) await recordCampaignResult({ customerId: customer.id, telephonyJobId, outcome: 'transferred_to_rep', reason: note, brand: chosenBrand || null });
+      else await recordArzoomFeedback({ customerId: customer.id, telephonyJobId, outcome: 'transferred_to_sales', reason: note });
+    } catch (err) {
+      console.warn(`Agreed-but-not-connected result for job ${telephonyJobId ?? 'none'} failed: ${(err as Error).message}`);
+    }
+  };
   const transferExtensions = () => (isExcel
     ? (isChurn() ? salesExtensionsFor(churnBrand()) : excelCtx?.transferExtensions ?? [])
     : pinnedReps.length ? pinnedReps : salesExtensionsFor(brand));
@@ -698,6 +715,9 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           console.warn(`Sales transfer failed for telephony job ${telephonyJobId ?? 'none'}: ${reason}`);
           transferState = 'idle';
           transcriptLines.push('[Satış təmsilçisinə qoşmaq alınmadı]');
+          // The customer agreed: count it as handed to sales although no rep picked up, so it reaches
+          // sales (ARZOOM status, Group Motors CRM, the campaign owners' e-mail) for a call back.
+          void recordAgreedNotConnected(reason);
           if (sessionClosed || !session) {
             rawSend({ type: 'end_call', reason: 'transfer_failed' });
             return;
@@ -705,7 +725,7 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
           try {
             session.sendClientContent({
               turns: isExcel
-                ? '[Sistem] Nümayəndələr hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, nümayəndənin ona tezliklə geri zəng edəcəyini de, record_campaign_result alətini outcome=wants_rep_contact ilə çağır, sonra qısa sağollaş və end_call çağır.'
+                ? '[Sistem] Nümayəndələr hazırda cavab vermir. Müştərinin razılığı satışa ötürüldü, nəticə artıq qeyd olunub: record_campaign_result və ya başqa nəticə aləti ÇAĞIRMA. Müştəridən gözlətdiyin üçün üzr istə, nümayəndənin ona tezliklə geri zəng edəcəyini de, qısa sağollaş və end_call çağır.'
                 : '[Sistem] Satış təmsilçiləri hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, filiala yaxınlaşa və ya *5665 nömrəsinə zəng edə biləcəyini, ya da təmsilçinin ona tezliklə geri zəng edəcəyini de. Sonra qısa sağollaş və end_call çağır.',
               turnComplete: true,
             });
@@ -731,10 +751,11 @@ export async function handleGeminiProxy(clientWs: WebSocket, customer: Customer,
             console.warn(`Sales queue dropped ${queueRedials + 1} times, giving up for job ${telephonyJobId ?? 'none'}`);
             transferState = 'idle';
             transcriptLines.push('[Satış təmsilçisinə qoşmaq alınmadı]');
+            void recordAgreedNotConnected('növbə cavab vermədi');
             if (sessionClosed || !session) { rawSend({ type: 'end_call', reason: 'transfer_failed' }); return; }
             try {
               session.sendClientContent({
-                turns: '[Sistem] Nümayəndələr hazırda cavab vermir. Müştəridən gözlətdiyin üçün üzr istə, nümayəndənin ona tezliklə geri zəng edəcəyini de, record_campaign_result alətini outcome=wants_rep_contact ilə çağır, sonra qısa sağollaş və end_call çağır.',
+                turns: '[Sistem] Nümayəndələr hazırda cavab vermir. Müştərinin razılığı satışa ötürüldü, nəticə artıq qeyd olunub: record_campaign_result və ya başqa nəticə aləti ÇAĞIRMA. Müştəridən gözlətdiyin üçün üzr istə, nümayəndənin ona tezliklə geri zəng edəcəyini de, qısa sağollaş və end_call çağır.',
                 turnComplete: true,
               });
             } catch { rawSend({ type: 'end_call', reason: 'transfer_failed' }); }
